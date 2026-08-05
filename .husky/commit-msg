@@ -1,0 +1,26 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Enforce Conventional Commits format
+# Pattern: type(scope): description
+# Examples: feat: add login, fix(api): resolve cors error
+
+commit_msg=$(cat "$1")
+conventional_pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .{1,100}$"
+
+if ! echo "$commit_msg" | grep -qE "$conventional_pattern"; then
+  echo ""
+  echo "❌ Invalid commit message format!"
+  echo ""
+  echo "   Your message: $commit_msg"
+  echo ""
+  echo "   Required format: type(scope): description"
+  echo ""
+  echo "   Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo "   Examples:"
+  echo "     feat: add user authentication"
+  echo "     fix(api): resolve cors configuration"
+  echo "     chore(deps): upgrade prisma to v6"
+  echo ""
+  exit 1
+fi

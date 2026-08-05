@@ -1,0 +1,26 @@
+// =============================================================================
+// ForgeMind — Prisma Schema
+// =============================================================================
+// Sprint 0: Schema placeholder — tables will be added in future sprints.
+// Configure DATABASE_URL and DIRECT_URL in .env before running migrations.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Placeholder model (required for Prisma to generate a valid client) ──────
+// This will be replaced with real schema in Sprint 2 (Authentication).
+
+model HealthCheck {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  @@map("_health_checks")
+}

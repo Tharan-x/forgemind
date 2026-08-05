@@ -1,0 +1,5 @@
+# TURBO_TELEMETRY_DISABLED=1
+# Add to your shell profile or CI to opt out of Turborepo telemetry
+
+TURBO_TELEMETRY_DISABLED=1
+NEXT_TELEMETRY_DISABLED=1

@@ -1,0 +1,38 @@
+# =============================================================================
+# ForgeMind — .dockerignore
+# =============================================================================
+
+# Node modules (rebuilt in Docker)
+**/node_modules
+**/.pnpm-store
+
+# Build outputs
+**/.next
+**/dist
+**/.turbo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Dev tooling
+**/.eslintcache
+**/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docs (not needed in image)
+docs/
+*.md
+LICENSE
+CHANGELOG.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md

@@ -75,3 +75,12 @@ docker-compose.override.yml
 .parcel-cache/
 tmp/
 temp/
+
+# Prisma
+apps/api/prisma/generated/
+
+# pnpm
+.pnpm-debug.log*
+
+# Vercel
+.vercel

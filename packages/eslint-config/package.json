@@ -1,0 +1,17 @@
+{
+  "name": "@forgemind/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared ESLint configurations for the ForgeMind monorepo",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0"
+  },
+  "peerDependencies": {
+    "eslint": ">=8.0.0"
+  }
+}

@@ -1,0 +1,97 @@
+version: '3.9'
+
+# =============================================================================
+# ForgeMind — Docker Compose
+# Development environment: web, api, postgres, redis (future)
+# =============================================================================
+
+services:
+  # ── API (Express + Prisma) ─────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: builder        # Use builder stage for development (has tsx)
+    container_name: forgemind-api
+    restart: unless-stopped
+    ports:
+      - '${API_PORT:-4000}:4000'
+    environment:
+      NODE_ENV: development
+      API_PORT: 4000
+      API_HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL:-}
+      DIRECT_URL: ${DIRECT_URL:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+    volumes:
+      # Mount source for hot-reload in development
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages:/app/packages
+    networks:
+      - forgemind-network
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4000/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Web (Next.js) ──────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      target: builder        # Use builder stage for dev
+    container_name: forgemind-web
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./packages:/app/packages
+    networks:
+      - forgemind-network
+    depends_on:
+      - api
+
+  # ── PostgreSQL (local dev — mirrors Supabase) ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: forgemind-postgres
+    restart: unless-stopped
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-forgemind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forgemind_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-forgemind}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - forgemind-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-forgemind}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ── Volumes ────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: forgemind_postgres_data
+
+# ── Networks ───────────────────────────────────────────────────────────────────
+networks:
+  forgemind-network:
+    name: forgemind-network
+    driver: bridge
