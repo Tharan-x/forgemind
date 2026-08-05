@@ -133,3 +133,4 @@ We welcome contributions from developers and maintainers! Please review our guid
 - [ ] **v0.4.0 — Repository Intelligence**: Code parsing, AST symbol extraction, vector embeddings, and graph indexing.
 - [ ] **v0.5.0 — AI Assistant**: Contextual chat engine, semantic Q&A, and interactive architectural diagram generation.
 - [ ] **v1.0.0 — Initial Stable Release**: Production-ready platform release with full enterprise capabilities.
+
