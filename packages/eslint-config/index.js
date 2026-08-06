@@ -1,49 +1,58 @@
-/** @type {import("eslint").Linter.Config} */
-module.exports = {
-  env: {
-    es2022: true,
-    node: true,
-  },
-  parser: '@typescript-eslint/parser',
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-  },
-  plugins: ['@typescript-eslint', 'import'],
-  extends: [
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-    'plugin:import/recommended',
-    'plugin:import/typescript',
-    'prettier',
-  ],
-  rules: {
-    // TypeScript
-    '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
-    '@typescript-eslint/no-explicit-any': 'warn',
-    '@typescript-eslint/no-non-null-assertion': 'warn',
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
+import importPlugin from 'eslint-plugin-import';
+import prettierConfig from 'eslint-config-prettier';
 
-    // Imports
-    'import/order': [
-      'error',
-      {
-        groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-        'newlines-between': 'always',
-        alphabetize: { order: 'asc', caseInsensitive: true },
+/** @type {import("eslint").Linter.FlatConfig[]} */
+const baseConfig = [
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      import: importPlugin,
+    },
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
       },
-    ],
-    'import/no-duplicates': 'error',
+    },
+    rules: {
+      // TypeScript-ESLint recommended rules (manually included for flat config compatibility)
+      ...tsPlugin.configs['recommended'].rules,
 
-    // General
-    'no-console': 'warn',
-    'prefer-const': 'error',
-    eqeqeq: ['error', 'always'],
-  },
-  settings: {
-    'import/resolver': {
-      typescript: { alwaysTryTypes: true },
-      node: true,
+      // TypeScript
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+
+      // Imports
+      'import/no-duplicates': 'error',
+
+      // General
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      eqeqeq: ['error', 'always'],
+    },
+    settings: {
+      'import/resolver': {
+        typescript: { alwaysTryTypes: true },
+        node: true,
+      },
     },
   },
-};
+  {
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+    rules: {
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      eqeqeq: ['error', 'always'],
+    },
+  },
+  // Prettier must be last to disable conflicting formatting rules
+  prettierConfig,
+];
+
+export default baseConfig;

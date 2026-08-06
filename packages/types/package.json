@@ -13,14 +13,14 @@
   },
   "scripts": {
     "type-check": "tsc --noEmit",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "clean": "rimraf dist"
   },
   "devDependencies": {
     "@forgemind/eslint-config": "workspace:*",
     "@forgemind/typescript-config": "workspace:*",
-    "eslint": "^8.57.1",
+    "eslint": "^9.0.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.2"
   }
