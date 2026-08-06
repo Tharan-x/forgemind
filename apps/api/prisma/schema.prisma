@@ -1,8 +1,5 @@
 // =============================================================================
-// ForgeMind — Prisma Schema
-// =============================================================================
-// Sprint 0: Schema placeholder — tables will be added in future sprints.
-// Configure DATABASE_URL and DIRECT_URL in .env before running migrations.
+// ForgeMind — Prisma Schema (Sprint 2 Phase 1: Database Foundation)
 // =============================================================================
 
 generator client {
@@ -15,12 +12,107 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ─── Placeholder model (required for Prisma to generate a valid client) ──────
-// This will be replaced with real schema in Sprint 2 (Authentication).
+// ─── 1. Users Model ───────────────────────────────────────────────────────────
 
-model HealthCheck {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @unique
+  name      String?
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@map("_health_checks")
+  repositories      Repository[]       @relation("RepositoryOwner")
+  repositoryMembers RepositoryMember[]
+  chatSessions      ChatSession[]
+
+  @@map("users")
+}
+
+// ─── 2. Repositories Model ────────────────────────────────────────────────────
+
+model Repository {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId       String   @map("owner_id") @db.Uuid
+  name          String
+  fullName      String   @map("full_name")
+  githubUrl     String   @map("github_url")
+  defaultBranch String   @default("main") @map("default_branch")
+  isPrivate     Boolean  @default(false) @map("is_private")
+  status        String   @default("active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  owner        User               @relation("RepositoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members      RepositoryMember[]
+  analysisJobs AnalysisJob[]
+  chatSessions ChatSession[]
+
+  @@map("repositories")
+}
+
+// ─── 3. Repository Members Model ──────────────────────────────────────────────
+
+model RepositoryMember {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  role         String   @default("member")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, userId])
+  @@map("repository_members")
+}
+
+// ─── 4. Analysis Jobs Model ───────────────────────────────────────────────────
+
+model AnalysisJob {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId String    @map("repository_id") @db.Uuid
+  status       String    @default("pending")
+  commitHash   String?   @map("commit_hash")
+  error        String?
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@map("analysis_jobs")
+}
+
+// ─── 5. Chat Sessions Model ───────────────────────────────────────────────────
+
+model ChatSession {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  title        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  repository Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   ChatMessage[]
+
+  @@map("chat_sessions")
+}
+
+// ─── 6. Chat Messages Model ───────────────────────────────────────────────────
+
+model ChatMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  sender    String
+  content   String   @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
 }

@@ -59,13 +59,64 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-// ─── User (placeholder for future auth sprint) ───────────────────────────────
+// ─── Database Models Types ────────────────────────────────────────────────────
 
-export interface UserProfile {
+export interface User {
   id: string;
   email: string;
   name: string | null;
   avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Repository {
+  id: string;
+  ownerId: string;
+  name: string;
+  fullName: string;
+  githubUrl: string;
+  defaultBranch: string;
+  isPrivate: boolean;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RepositoryMember {
+  id: string;
+  repositoryId: string;
+  userId: string;
+  role: string;
+  createdAt: string;
+}
+
+export interface AnalysisJob {
+  id: string;
+  repositoryId: string;
+  status: string;
+  commitHash: string | null;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatSession {
+  id: string;
+  repositoryId: string;
+  userId: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  sender: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
 }
