@@ -1,44 +1,26 @@
-import type { Metadata } from 'next';
+'use client';
+
+// =============================================================================
+// ForgeMind Web — Landing Page
+// =============================================================================
+
+import Link from 'next/link';
 
 import { APP_NAME, APP_VERSION } from '@forgemind/shared';
 import { Button } from '@forgemind/ui';
 
-// ─── Metadata ─────────────────────────────────────────────────────────────────
-
-export const metadata: Metadata = {
-  title: `${APP_NAME} — Sprint 0`,
-  description:
-    'AI-Powered GitHub Repository Intelligence & Developer Onboarding SaaS Platform. Sprint 0: Monorepo infrastructure foundation.',
-};
-
-// ─── Sprint 0 Status Items ────────────────────────────────────────────────────
-
-const statusItems = [
-  { label: 'Next.js 15 + React 19', status: 'ready' },
-  { label: 'TypeScript (strict mode)', status: 'ready' },
-  { label: 'TailwindCSS v4', status: 'ready' },
-  { label: 'Turborepo pipeline', status: 'ready' },
-  { label: 'pnpm workspaces', status: 'ready' },
-  { label: '@forgemind/ui', status: 'ready' },
-  { label: '@forgemind/shared', status: 'ready' },
-  { label: '@forgemind/types', status: 'ready' },
-  { label: 'Express API (port 4000)', status: 'ready' },
-  { label: 'Prisma ORM', status: 'ready' },
-  { label: 'Docker + Compose', status: 'ready' },
-  { label: 'ESLint + Prettier', status: 'ready' },
-  { label: 'Husky + lint-staged', status: 'ready' },
-] as const;
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
+import { useAuth } from '@/context/AuthContext';
 
 export default function Home() {
+  const { user, loading } = useAuth();
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-8">
       {/* Header */}
       <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 text-sm text-zinc-400 mb-6">
+        <div className="inline-flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-1.5 text-sm text-zinc-400 mb-6">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Sprint 0 — Infrastructure Ready
+          Sprint 2 Phase 2A — Authentication Foundation Ready
         </div>
 
         <h1 className="text-5xl font-bold bg-gradient-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent mb-4">
@@ -52,45 +34,52 @@ export default function Home() {
         <p className="text-zinc-600 text-sm mt-2">v{APP_VERSION}</p>
       </div>
 
-      {/* Status Grid */}
-      <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8">
-        <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-4">
-          Monorepo Stack — All Systems Operational
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {statusItems.map((item) => (
-            <div
-              key={item.label}
-              className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-4 py-2.5"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-              <span className="text-sm text-zinc-300">{item.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Auth Actions CTA */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl">
+        <h2 className="text-xl font-bold text-white">Get Started</h2>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          Sign in or create an account to access protected workspace intelligence and project
+          management.
+        </p>
 
-      {/* CTA Buttons — uses @forgemind/ui Button component */}
-      <div className="flex gap-3 flex-wrap justify-center">
-        <Button variant="default" className="bg-white text-zinc-950 hover:bg-zinc-200" asChild>
-          <a href="http://localhost:4000/api/v1/health" target="_blank" rel="noreferrer">
-            API Health Check →
-          </a>
-        </Button>
-        <Button
-          variant="outline"
-          className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-          asChild
-        >
-          <a href="https://github.com/your-org/forgemind" target="_blank" rel="noreferrer">
-            View Repository
-          </a>
-        </Button>
+        {loading ? (
+          <div className="py-4 text-xs text-zinc-500 animate-pulse">Checking authentication...</div>
+        ) : user ? (
+          <div className="space-y-3">
+            <p className="text-xs text-emerald-400 font-medium">
+              Signed in as <span className="text-white font-semibold">{user.email}</span>
+            </p>
+            <Button
+              variant="default"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold h-11 text-sm transition-colors"
+              asChild
+            >
+              <Link href="/dashboard">Go to Dashboard →</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="default"
+              className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold h-11 text-sm transition-colors"
+              asChild
+            >
+              <Link href="/login">Sign In</Link>
+            </Button>
+            <Button
+              variant="outline"
+              className="border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 h-11 text-sm transition-colors"
+              asChild
+            >
+              <Link href="/register">Sign Up</Link>
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
       <p className="text-zinc-700 text-xs mt-12">
-        Sprint 0 complete. Authentication, Dashboard, and AI Chat coming in future sprints.
+        Sprint 2 Phase 2A Authentication Foundation complete.
       </p>
     </main>
   );

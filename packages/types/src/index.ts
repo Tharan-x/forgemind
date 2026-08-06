@@ -59,6 +59,24 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+// ─── Auth & User Types ────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Database Models Types ────────────────────────────────────────────────────
 
 export interface User {
