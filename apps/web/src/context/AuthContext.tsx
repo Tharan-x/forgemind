@@ -14,6 +14,7 @@ import {
   signInWithGithub,
   resetPasswordForEmail,
   updatePassword,
+  updateProfile as updateProfileApi,
 } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
@@ -27,6 +28,7 @@ export interface AuthContextType {
   loginWithGithub: () => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (newPassword: string) => Promise<void>;
+  updateProfile: (name?: string, avatarUrl?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       });
 
-    // 2. Subscribe to auth state changes (persist/restore session)
+    // 2. Subscribe to auth state changes (restore, refresh, or expire session)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -89,6 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await updatePassword(newPassword);
   };
 
+  const updateProfile = async (name?: string, avatarUrl?: string) => {
+    const data = await updateProfileApi(name, avatarUrl);
+    if (data.user) {
+      setUser(data.user);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -101,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithGithub,
         forgotPassword,
         resetPassword,
+        updateProfile,
       }}
     >
       {children}

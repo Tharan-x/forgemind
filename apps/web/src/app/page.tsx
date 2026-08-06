@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { APP_NAME, APP_VERSION } from '@forgemind/shared';
 import { Button } from '@forgemind/ui';
 
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Home() {
@@ -20,7 +21,7 @@ export default function Home() {
       <div className="text-center mb-12">
         <div className="inline-flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-1.5 text-sm text-zinc-400 mb-6">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Sprint 2 Phase 2A — Authentication Foundation Ready
+          Sprint 2 Phase 2B — Dashboard &amp; Account Experience Ready
         </div>
 
         <h1 className="text-5xl font-bold bg-gradient-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent mb-4">
@@ -28,7 +29,7 @@ export default function Home() {
         </h1>
 
         <p className="text-zinc-400 text-lg max-w-xl">
-          AI-Powered GitHub Repository Intelligence &amp; Developer Onboarding Platform
+          AI-Powered GitHub Repository Intelligence &amp; Developer Onboarding SaaS Platform
         </p>
 
         <p className="text-zinc-600 text-sm mt-2">v{APP_VERSION}</p>
@@ -36,19 +37,22 @@ export default function Home() {
 
       {/* Auth Actions CTA */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl">
-        <h2 className="text-xl font-bold text-white">Get Started</h2>
+        <h2 className="text-xl font-bold text-white">{user ? 'Welcome Back!' : 'Get Started'}</h2>
         <p className="text-xs text-zinc-400 leading-relaxed">
-          Sign in or create an account to access protected workspace intelligence and project
-          management.
+          {user
+            ? 'Access your authenticated dashboard, repository management, and account settings.'
+            : 'Sign in or create an account to access protected workspace intelligence and project management.'}
         </p>
 
         {loading ? (
-          <div className="py-4 text-xs text-zinc-500 animate-pulse">Checking authentication...</div>
+          <div className="py-4">
+            <LoadingSpinner size="sm" label="Checking session..." />
+          </div>
         ) : user ? (
           <div className="space-y-3">
-            <p className="text-xs text-emerald-400 font-medium">
-              Signed in as <span className="text-white font-semibold">{user.email}</span>
-            </p>
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-300">
+              Signed in as <span className="text-emerald-400 font-semibold">{user.email}</span>
+            </div>
             <Button
               variant="default"
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold h-11 text-sm transition-colors"
@@ -79,7 +83,7 @@ export default function Home() {
 
       {/* Footer */}
       <p className="text-zinc-700 text-xs mt-12">
-        Sprint 2 Phase 2A Authentication Foundation complete.
+        Sprint 2 Phase 2B Dashboard and Account Experience complete.
       </p>
     </main>
   );

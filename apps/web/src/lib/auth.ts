@@ -74,11 +74,31 @@ export async function resetPasswordForEmail(email: string) {
 }
 
 /**
- * Update password (used on reset password page).
+ * Update password.
  */
 export async function updatePassword(newPassword: string) {
   const { data, error } = await supabase.auth.updateUser({
     password: newPassword,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Update display name and avatar URL in user metadata.
+ */
+export async function updateProfile(name?: string, avatarUrl?: string) {
+  const metadataUpdates: Record<string, string> = {};
+  if (name !== undefined) {
+    metadataUpdates['name'] = name;
+    metadataUpdates['full_name'] = name;
+  }
+  if (avatarUrl !== undefined) {
+    metadataUpdates['avatar_url'] = avatarUrl;
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    data: metadataUpdates,
   });
   if (error) throw error;
   return data;

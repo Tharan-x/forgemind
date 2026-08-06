@@ -1,28 +1,20 @@
 'use client';
 
 // =============================================================================
-// ForgeMind Web — Dashboard Page (Sprint 2 Phase 2A)
+// ForgeMind Web — Dashboard Page (Sprint 2 Phase 2B)
 // =============================================================================
 
-import React, { useState } from 'react';
+import Link from 'next/link';
+import React from 'react';
 
 import { Button } from '@forgemind/ui';
 
-import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ProtectedLayout } from '@/components/dashboard/ProtectedLayout';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAuth } from '@/context/AuthContext';
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  const handleLogout = async () => {
-    try {
-      setLoggingOut(true);
-      await logout();
-    } catch {
-      setLoggingOut(false);
-    }
-  };
+  const { user } = useAuth();
 
   const name =
     (user?.user_metadata?.['name'] as string | undefined) ||
@@ -31,124 +23,143 @@ export default function DashboardPage() {
     'User';
 
   const avatarUrl = user?.user_metadata?.['avatar_url'] as string | undefined;
+  const provider = user?.app_metadata?.provider || 'Email & Password';
+  const isEmailVerified = Boolean(user?.email_confirmed_at);
+  const createdAtFormatted = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : 'N/A';
 
   return (
-    <ProtectedRoute requireAuth={true}>
-      <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
-        {/* Topbar */}
-        <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-zinc-950 text-sm">
-              FM
+    <ProtectedLayout>
+      <div className="space-y-8">
+        {/* Welcome Header */}
+        <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <UserAvatar name={name} email={user?.email} avatarUrl={avatarUrl} size="lg" />
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-2xl font-bold text-white">Welcome back, {name}!</h1>
+                <span className="text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-0.5 rounded-full font-medium">
+                  Sprint 2 Phase 2B Active
+                </span>
+              </div>
+              <p className="text-zinc-400 text-sm">{user?.email}</p>
             </div>
-            <span className="font-semibold text-lg tracking-tight">ForgeMind</span>
-            <span className="text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-0.5 rounded-full font-medium">
-              Sprint 2 Phase 2A
-            </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-1.5">
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrl} alt={name} className="w-6 h-6 rounded-full object-cover" />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-300 flex items-center justify-center text-xs font-semibold">
-                  {name.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <span className="text-xs text-zinc-300 font-medium">{user?.email}</span>
+          <Button
+            variant="default"
+            className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-10 px-5 transition-colors"
+            asChild
+          >
+            <Link href="/dashboard/settings">Manage Account →</Link>
+          </Button>
+        </div>
+
+        {/* User Information Metrics (Task 2) */}
+        <div>
+          <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">
+            Authenticated Profile Summary
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Account Name */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-1">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Full Name
+              </span>
+              <p className="text-base font-bold text-white truncate">{name}</p>
+              <p className="text-xs text-zinc-500">Public display name</p>
             </div>
 
-            {/* Logout Button */}
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs h-9 px-3.5"
-            >
-              {loggingOut ? 'Signing Out...' : 'Sign Out'}
-            </Button>
-          </div>
-        </header>
-
-        {/* Dashboard Main Content */}
-        <main className="flex-1 p-8 max-w-6xl w-full mx-auto space-y-8">
-          {/* Welcome Banner */}
-          <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-semibold text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-                Authentication Foundation Active
+            {/* 2. Authentication Provider */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-1">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Auth Provider
               </span>
-              <span className="text-xs text-zinc-500">User ID: {user?.id}</span>
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome back, {name}!</h1>
-            <p className="text-zinc-400 text-sm max-w-2xl">
-              Your authentication session is active and secure. Supabase Auth, JWT verification, and
-              database profile synchronization are operational.
-            </p>
-          </div>
-
-          {/* User Profile Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-2">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Account Email
-              </span>
-              <p className="text-lg font-medium text-white truncate">{user?.email}</p>
-              <p className="text-xs text-emerald-400 font-medium">✓ Verified &amp; Authenticated</p>
+              <p className="text-base font-bold text-white capitalize">{provider}</p>
+              <p className="text-xs text-zinc-500">Supabase Auth Session</p>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-2">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Authentication Provider
+            {/* 3. Email Verification */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-1">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Verification
               </span>
-              <p className="text-lg font-medium text-white capitalize">
-                {user?.app_metadata?.provider || 'Email & Password'}
+              <p
+                className={`text-base font-bold ${
+                  isEmailVerified ? 'text-emerald-400' : 'text-amber-400'
+                }`}
+              >
+                {isEmailVerified ? '✓ Verified' : '⚠ Pending'}
               </p>
-              <p className="text-xs text-zinc-400">Session restored on refresh</p>
+              <p className="text-xs text-zinc-500">Email confirmation status</p>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-2">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Security Status
+            {/* 4. Registration Date */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-1">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Member Since
               </span>
-              <p className="text-lg font-medium text-white">Protected Route</p>
-              <p className="text-xs text-emerald-400">✓ JWT verified by API backend</p>
+              <p className="text-base font-bold text-white truncate">{createdAtFormatted}</p>
+              <p className="text-xs text-zinc-500">Account creation date</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Dashboard Sections Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Quick Actions Card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <h2 className="text-base font-bold text-white">Quick Actions</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <Link
+                href="/dashboard/settings"
+                className="flex flex-col gap-1 p-4 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-colors"
+              >
+                <span className="text-lg">⚙️</span>
+                <span className="text-sm font-semibold text-zinc-200">Account Settings</span>
+                <span className="text-xs text-zinc-500">Update profile &amp; security</span>
+              </Link>
+
+              <Link
+                href="/dashboard/repositories"
+                className="flex flex-col gap-1 p-4 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-colors"
+              >
+                <span className="text-lg">📁</span>
+                <span className="text-sm font-semibold text-zinc-200">Repositories</span>
+                <span className="text-xs text-zinc-500">View connected codebases</span>
+              </Link>
             </div>
           </div>
 
-          {/* Next Steps Card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-            <h2 className="text-base font-semibold text-white mb-4">Sprint 2 Roadmap</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-start gap-3 bg-zinc-800/50 rounded-xl p-4 border border-zinc-800">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0" />
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-200">
-                    Phase 2A — Auth Foundation
-                  </h3>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Email auth, GitHub OAuth, JWT middleware, session persistence.
-                  </p>
+          {/* System Status Card */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <h2 className="text-base font-bold text-white">System Status</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-medium text-zinc-300">Supabase Auth Session</span>
                 </div>
+                <span className="text-xs text-emerald-400 font-semibold">Active</span>
               </div>
 
-              <div className="flex items-start gap-3 bg-zinc-800/30 rounded-xl p-4 border border-zinc-800/60 opacity-60">
-                <span className="w-2.5 h-2.5 rounded-full bg-zinc-600 mt-1.5 flex-shrink-0" />
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-400">
-                    Phase 2B — Repository Foundation
-                  </h3>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    Repository connection, PAT encryption, workspace dashboard.
-                  </p>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-950 border border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-medium text-zinc-300">Prisma Database Sync</span>
                 </div>
+                <span className="text-xs text-emerald-400 font-semibold">Synced</span>
               </div>
             </div>
           </div>
-        </main>
+        </div>
       </div>
-    </ProtectedRoute>
+    </ProtectedLayout>
   );
 }
