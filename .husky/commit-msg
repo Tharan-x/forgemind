@@ -1,6 +1,3 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
 # Enforce Conventional Commits format
 # Pattern: type(scope): description
 # Examples: feat: add login, fix(api): resolve cors error
