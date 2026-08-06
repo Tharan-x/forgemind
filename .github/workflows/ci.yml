@@ -17,7 +17,7 @@ concurrency:
 
 env:
   PNPM_VERSION: '9.15.9'
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
 
 jobs:
   # ── Lint & Format Check ────────────────────────────────────────────────────

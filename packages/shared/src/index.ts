@@ -9,10 +9,7 @@ import type { ApiResponse, ApiError, ResponseMeta } from '@forgemind/types';
 /**
  * Build a successful API response envelope.
  */
-export function successResponse<T>(
-  data: T,
-  meta?: Partial<ResponseMeta>,
-): ApiResponse<T> {
+export function successResponse<T>(data: T, meta?: Partial<ResponseMeta>): ApiResponse<T> {
   return {
     success: true,
     data,

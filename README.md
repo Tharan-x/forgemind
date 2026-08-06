@@ -14,11 +14,11 @@
 
 ### Prerequisites
 
-| Tool | Minimum Version |
-|------|----------------|
-| Node.js | 20.x |
-| pnpm | 9.x |
-| Docker | 24.x (optional) |
+| Tool    | Minimum Version |
+| ------- | --------------- |
+| Node.js | 20.x            |
+| pnpm    | 9.x             |
+| Docker  | 24.x (optional) |
 
 ### Developer Setup
 
@@ -38,6 +38,7 @@ pnpm dev
 ```
 
 Services will be available at:
+
 - **Web** → http://localhost:3000
 - **API** → http://localhost:4000/api/v1
 - **Health** → http://localhost:4000/api/v1/health
@@ -77,24 +78,28 @@ forgemind/                          ← Turborepo monorepo root
 ## 🛠️ Tech Stack
 
 ### Frontend (`apps/web`)
+
 - **Next.js 15** — App Router, TypeScript, standalone output for Docker
 - **React 19** — Latest stable with strict mode
 - **TailwindCSS v4** — Utility-first styling with `@theme` token system
 - **shadcn/ui** — Component library pattern via `@forgemind/ui`
 
 ### Backend (`apps/api`)
+
 - **Express 4** — REST API with TypeScript
 - **Prisma 6** — Type-safe database ORM
 - **Supabase** — PostgreSQL database (Supabase-hosted)
 - **Zod** — Runtime schema validation
 
 ### Infrastructure
+
 - **Docker** — Multi-stage production builds (non-root user)
 - **Docker Compose** — Local dev stack (web + api + postgres)
 - **Turborepo** — Build pipeline with intelligent caching
 - **pnpm 9** — Efficient monorepo package management
 
 ### Code Quality
+
 - **ESLint** — TypeScript-aware linting with import ordering
 - **Prettier** — Opinionated formatting
 - **Husky** — Git hooks
@@ -106,27 +111,27 @@ forgemind/                          ← Turborepo monorepo root
 
 ### Root (run from `d:/forgemind/`)
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start all apps in development mode |
-| `pnpm build` | Build all packages and apps via Turbo |
-| `pnpm lint` | Lint all packages |
-| `pnpm lint:fix` | Auto-fix lint errors |
-| `pnpm format` | Format all files with Prettier |
-| `pnpm format:check` | Check formatting without writing |
-| `pnpm type-check` | TypeScript type-check all packages |
-| `pnpm clean` | Remove all build artifacts |
-| `node scripts/setup.js` | First-time developer setup |
+| Command                 | Description                           |
+| ----------------------- | ------------------------------------- |
+| `pnpm dev`              | Start all apps in development mode    |
+| `pnpm build`            | Build all packages and apps via Turbo |
+| `pnpm lint`             | Lint all packages                     |
+| `pnpm lint:fix`         | Auto-fix lint errors                  |
+| `pnpm format`           | Format all files with Prettier        |
+| `pnpm format:check`     | Check formatting without writing      |
+| `pnpm type-check`       | TypeScript type-check all packages    |
+| `pnpm clean`            | Remove all build artifacts            |
+| `node scripts/setup.js` | First-time developer setup            |
 
 ### API only (run from `apps/api/`)
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start API with tsx watch (hot reload) |
-| `pnpm build` | Compile TypeScript to `dist/` |
-| `pnpm db:generate` | Generate Prisma client |
-| `pnpm db:migrate` | Run Prisma migrations (dev) |
-| `pnpm db:studio` | Open Prisma Studio |
+| Command            | Description                           |
+| ------------------ | ------------------------------------- |
+| `pnpm dev`         | Start API with tsx watch (hot reload) |
+| `pnpm build`       | Compile TypeScript to `dist/`         |
+| `pnpm db:generate` | Generate Prisma client                |
+| `pnpm db:migrate`  | Run Prisma migrations (dev)           |
+| `pnpm db:studio`   | Open Prisma Studio                    |
 
 ---
 
@@ -140,14 +145,14 @@ cp .env.example .env
 
 Key variables:
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | Supabase pooler connection string |
-| `DIRECT_URL` | Supabase direct connection (for migrations) |
-| `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_ANON_KEY` | Public Supabase key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Secret server-side Supabase key |
-| `NEXT_PUBLIC_API_URL` | API base URL for the frontend |
+| Variable                    | Description                                 |
+| --------------------------- | ------------------------------------------- |
+| `DATABASE_URL`              | Supabase pooler connection string           |
+| `DIRECT_URL`                | Supabase direct connection (for migrations) |
+| `SUPABASE_URL`              | Your Supabase project URL                   |
+| `SUPABASE_ANON_KEY`         | Public Supabase key                         |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret server-side Supabase key             |
+| `NEXT_PUBLIC_API_URL`       | API base URL for the frontend               |
 
 ---
 
@@ -174,6 +179,7 @@ docker build -f docker/web.Dockerfile -t forgemind-web .
 ## 🎯 Problem Statement
 
 Developer onboarding to large, legacy, or multi-repository codebases is slow, fragmented, and costly:
+
 - **High Onboarding Overhead**: New engineers spend weeks manually tracing code flow and hunting for context.
 - **Stale Documentation**: Internal wikis and READMEs decay quickly, leading to misleading architectural assumptions.
 - **Knowledge Silos**: Critical architectural context remains trapped in the heads of a few senior developers.
@@ -206,6 +212,7 @@ Developer onboarding to large, legacy, or multi-repository codebases is slow, fr
 ## 🏷️ Semantic Versioning
 
 ForgeMind strictly adheres to [Semantic Versioning 2.0.0](https://semver.org/):
+
 - **MAJOR (`X.0.0`)**: Incompatible API or structural breaking changes
 - **MINOR (`0.X.0`)**: Backwards-compatible new feature additions
 - **PATCH (`0.0.X`)**: Backwards-compatible bug fixes
@@ -227,5 +234,6 @@ ForgeMind strictly adheres to [Semantic Versioning 2.0.0](https://semver.org/):
 ## 🤝 Contributing
 
 We welcome contributions! Please review:
+
 - [CONTRIBUTING.md](./CONTRIBUTING.md) for environment setup and submission standards
 - [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) for community guidelines

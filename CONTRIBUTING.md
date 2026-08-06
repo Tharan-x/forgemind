@@ -13,13 +13,16 @@ All contributors are expected to uphold our [Code of Conduct](file:///d:/forgemi
 ## 🛠️ How to Contribute
 
 ### 1. Reporting Bugs
+
 - Search existing issues to ensure the bug hasn't been reported.
 - Open a new issue with a clear title, reproduction steps, expected behavior, and system environment details.
 
 ### 2. Suggesting Features
+
 - Open a feature request issue explaining the proposal, use case, and potential value to users.
 
 ### 3. Submitting Pull Requests (PRs)
+
 1. **Fork & Clone**: Fork the repository and clone your fork locally.
 2. **Branching**: Create a feature branch off `main`:
    ```bash
@@ -41,6 +44,7 @@ All contributors are expected to uphold our [Code of Conduct](file:///d:/forgemi
 ## 🔍 Pull Request Checklist
 
 Before marking your PR as ready for review:
+
 - [ ] Code adheres to `.editorconfig`, `.prettierrc`, and `.eslintrc` standards.
 - [ ] Documentation has been updated to reflect architectural or behavioral changes.
 - [ ] Commit history is clean and uses Conventional Commits format.

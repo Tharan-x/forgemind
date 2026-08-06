@@ -72,16 +72,16 @@ export default function Home() {
 
       {/* CTA Buttons — uses @forgemind/ui Button component */}
       <div className="flex gap-3 flex-wrap justify-center">
-        <Button
-          variant="default"
-          className="bg-white text-zinc-950 hover:bg-zinc-200"
-          asChild
-        >
+        <Button variant="default" className="bg-white text-zinc-950 hover:bg-zinc-200" asChild>
           <a href="http://localhost:4000/api/v1/health" target="_blank" rel="noreferrer">
             API Health Check →
           </a>
         </Button>
-        <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800" asChild>
+        <Button
+          variant="outline"
+          className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          asChild
+        >
           <a href="https://github.com/your-org/forgemind" target="_blank" rel="noreferrer">
             View Repository
           </a>

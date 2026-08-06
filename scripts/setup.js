@@ -20,11 +20,21 @@ const CYAN = '\x1b[36m';
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 
-function log(msg) { console.log(`${CYAN}[setup]${RESET} ${msg}`); }
-function success(msg) { console.log(`${GREEN}✔${RESET} ${msg}`); }
-function warn(msg) { console.log(`${YELLOW}⚠${RESET} ${msg}`); }
-function error(msg) { console.log(`${RED}✘${RESET} ${msg}`); }
-function section(msg) { console.log(`\n${BOLD}${CYAN}── ${msg} ${'─'.repeat(40 - msg.length)}${RESET}`); }
+function log(msg) {
+  console.log(`${CYAN}[setup]${RESET} ${msg}`);
+}
+function success(msg) {
+  console.log(`${GREEN}✔${RESET} ${msg}`);
+}
+function warn(msg) {
+  console.log(`${YELLOW}⚠${RESET} ${msg}`);
+}
+function error(msg) {
+  console.log(`${RED}✘${RESET} ${msg}`);
+}
+function section(msg) {
+  console.log(`\n${BOLD}${CYAN}── ${msg} ${'─'.repeat(40 - msg.length)}${RESET}`);
+}
 
 // ── Check Node.js version ─────────────────────────────────────────────────────
 section('Checking Node.js');

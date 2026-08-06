@@ -18,8 +18,7 @@ export const metadata: Metadata = {
     default: 'ForgeMind',
     template: '%s | ForgeMind',
   },
-  description:
-    'AI-Powered GitHub Repository Intelligence & Developer Onboarding SaaS Platform',
+  description: 'AI-Powered GitHub Repository Intelligence & Developer Onboarding SaaS Platform',
   metadataBase: new URL(process.env['NEXT_PUBLIC_APP_URL'] ?? 'http://localhost:3000'),
 };
 
@@ -30,9 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
-      </body>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
     </html>
   );
 }

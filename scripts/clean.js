@@ -37,9 +37,10 @@ const targets = [
   'packages/shared/dist',
   'packages/types/dist',
   // TS build info
-  ...['apps/web', 'apps/api', 'packages/ui', 'packages/shared', 'packages/types'].flatMap(
-    (dir) => [`${dir}/tsconfig.tsbuildinfo`, `${dir}/*.tsbuildinfo`],
-  ),
+  ...['apps/web', 'apps/api', 'packages/ui', 'packages/shared', 'packages/types'].flatMap((dir) => [
+    `${dir}/tsconfig.tsbuildinfo`,
+    `${dir}/*.tsbuildinfo`,
+  ]),
 ];
 
 console.log('\n🧹 Cleaning ForgeMind build artifacts...\n');

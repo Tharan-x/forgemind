@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Sprint 1 planned: Authentication (Supabase Auth + RBAC)
 
 ---
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] — Sprint 0: Engineering Foundation
 
 ### Added
+
 - **Monorepo structure** via Turborepo + pnpm workspaces
 - **`apps/web`** — Next.js 15 application with React 19, TailwindCSS v4, App Router
 - **`apps/api`** — Express 4 API with TypeScript, Helmet, CORS, Morgan logging
@@ -40,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.1] — Repository Initialized
 
 ### Added
+
 - Baseline repository structure
 - Documentation placeholders (README, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG)
 - Root configuration (.gitignore, .editorconfig, .eslintrc, .prettierrc)

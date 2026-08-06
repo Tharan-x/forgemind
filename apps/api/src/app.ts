@@ -45,12 +45,8 @@ export function createApp(): express.Application {
 
   // ── Global error handler ─────────────────────────────────────────────────
   app.use(
-    (
-      err: Error,
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction,
-    ) => {
+    (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      // eslint-disable-next-line no-console
       console.error('[Error]', err.message, err.stack);
       res.status(500).json({
         success: false,

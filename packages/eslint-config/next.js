@@ -20,7 +20,7 @@ const nextConfig = [
       ...reactPlugin.configs.recommended.rules,
       ...reactHooksPlugin.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off', // Not needed with React 17+ JSX transform
-      'react/prop-types': 'off',         // TypeScript handles this
+      'react/prop-types': 'off', // TypeScript handles this
     },
     settings: {
       react: { version: 'detect' },

@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 const app = createApp();
 
 app.listen(env.PORT, env.HOST, () => {
+  // eslint-disable-next-line no-console
   console.log(`
   ╔══════════════════════════════════════╗
   ║          ForgeMind API               ║
