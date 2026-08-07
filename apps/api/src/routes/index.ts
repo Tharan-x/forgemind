@@ -24,4 +24,4 @@ router.get('/', (_req, res) => {
   });
 });
 
-export { router };
+export { router, repositoryRouter };
