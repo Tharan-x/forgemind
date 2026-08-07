@@ -3,3 +3,4 @@
 // =============================================================================
 
 export * from './repository.service.js';
+export * from './repository-sync.service.js';
