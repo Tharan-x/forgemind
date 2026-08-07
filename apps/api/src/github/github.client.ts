@@ -1,0 +1,127 @@
+// =============================================================================
+// ForgeMind API — GitHub API Client
+// =============================================================================
+
+export interface GithubUser {
+  id: number;
+  login: string;
+  name: string | null;
+  email: string | null;
+  avatar_url: string;
+  html_url: string;
+}
+
+export interface GithubRepository {
+  id: number;
+  name: string;
+  full_name: string;
+  owner: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    html_url: string;
+  };
+  private: boolean;
+  html_url: string;
+  description: string | null;
+  fork: boolean;
+  url: string;
+  default_branch: string;
+  stargazers_count: number;
+  forks_count: number;
+  open_issues_count: number;
+  language: string | null;
+  updated_at: string;
+  created_at: string;
+  pushed_at: string;
+}
+
+export interface GithubBranch {
+  name: string;
+  commit: {
+    sha: string;
+    url: string;
+  };
+  protected: boolean;
+}
+
+export interface GithubClient {
+  getAuthenticatedUser(): Promise<GithubUser>;
+  listRepositories(): Promise<GithubRepository[]>;
+  getRepository(owner: string, repo: string): Promise<GithubRepository>;
+  listBranches(owner: string, repo: string): Promise<GithubBranch[]>;
+  getDefaultBranch(owner: string, repo: string): Promise<string>;
+}
+
+const GITHUB_BASE_URL = 'https://api.github.com';
+
+/**
+ * Creates a reusable GitHub REST API client using fetch.
+ *
+ * @param token Optional GitHub personal access token or OAuth token.
+ */
+export function createGithubClient(token?: string): GithubClient {
+  /**
+   * Centralized private helper to send HTTP requests to GitHub REST API.
+   */
+  async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const url = endpoint.startsWith('http')
+      ? endpoint
+      : `${GITHUB_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'ForgeMind',
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (token) {
+      headers['Authorization'] =
+        token.startsWith('Bearer ') || token.startsWith('token ') ? token : `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API ${response.status}: ${response.statusText}`);
+    }
+
+    return (await response.json()) as T;
+  }
+
+  async function getAuthenticatedUser(): Promise<GithubUser> {
+    return request<GithubUser>('/user');
+  }
+
+  async function listRepositories(): Promise<GithubRepository[]> {
+    return request<GithubRepository[]>('/user/repos?sort=updated&per_page=100&type=owner');
+  }
+
+  async function getRepository(owner: string, repo: string): Promise<GithubRepository> {
+    return request<GithubRepository>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    );
+  }
+
+  async function listBranches(owner: string, repo: string): Promise<GithubBranch[]> {
+    return request<GithubBranch[]>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`,
+    );
+  }
+
+  async function getDefaultBranch(owner: string, repo: string): Promise<string> {
+    const repository = await getRepository(owner, repo);
+    return repository.default_branch;
+  }
+
+  return {
+    getAuthenticatedUser,
+    listRepositories,
+    getRepository,
+    listBranches,
+    getDefaultBranch,
+  };
+}
