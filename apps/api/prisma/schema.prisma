@@ -22,7 +22,7 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  repositories      Repository[]       @relation("RepositoryOwner")
+  repositories      Repository[]
   repositoryMembers RepositoryMember[]
   chatSessions      ChatSession[]
 
@@ -33,17 +33,22 @@ model User {
 
 model Repository {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerId       String   @map("owner_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  githubId      Int      @unique @map("github_id")
   name          String
   fullName      String   @map("full_name")
-  githubUrl     String   @map("github_url")
+  owner         String
+  private       Boolean  @default(false)
   defaultBranch String   @default("main") @map("default_branch")
-  isPrivate     Boolean  @default(false) @map("is_private")
-  status        String   @default("active")
+  language      String?
+  description   String?
+  stars         Int      @default(0)
+  forks         Int      @default(0)
+  htmlUrl       String   @map("html_url")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  owner        User               @relation("RepositoryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   members      RepositoryMember[]
   analysisJobs AnalysisJob[]
   chatSessions ChatSession[]

@@ -90,13 +90,18 @@ export interface User {
 
 export interface Repository {
   id: string;
-  ownerId: string;
+  userId: string;
+  githubId: number;
   name: string;
   fullName: string;
-  githubUrl: string;
+  owner: string;
+  private: boolean;
   defaultBranch: string;
-  isPrivate: boolean;
-  status: string;
+  language?: string | null;
+  description?: string | null;
+  stars: number;
+  forks: number;
+  htmlUrl: string;
   createdAt: string;
   updatedAt: string;
 }
