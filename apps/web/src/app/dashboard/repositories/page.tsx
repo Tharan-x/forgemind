@@ -71,9 +71,16 @@ export default function RepositoriesPage() {
             variant="default"
             onClick={handleSync}
             disabled={syncing || loading}
-            className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-10 px-5 transition-colors self-start sm:self-auto"
+            className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-10 px-5 transition-colors flex items-center gap-2 self-start sm:self-auto"
           >
-            {syncing ? 'Syncing...' : 'Sync Repositories'}
+            {syncing ? (
+              <>
+                <LoadingSpinner size="sm" />
+                <span>Syncing...</span>
+              </>
+            ) : (
+              <span>Sync Repositories</span>
+            )}
           </Button>
         </div>
 
@@ -139,9 +146,16 @@ export default function RepositoriesPage() {
               variant="default"
               onClick={handleSync}
               disabled={syncing}
-              className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-10 px-5 transition-colors"
+              className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-10 px-5 transition-colors inline-flex items-center gap-2"
             >
-              {syncing ? 'Syncing...' : 'Sync Repositories Now'}
+              {syncing ? (
+                <>
+                  <LoadingSpinner size="sm" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <span>Sync Repositories Now</span>
+              )}
             </Button>
           </div>
         )}
