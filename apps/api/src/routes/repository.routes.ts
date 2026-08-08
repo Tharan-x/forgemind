@@ -11,6 +11,11 @@ import {
   getRepository,
   deleteRepository,
 } from '../controllers/repository.controller.js';
+import {
+  triggerAnalysis,
+  getLatestAnalysis,
+  getAnalysisHistory,
+} from '../controllers/analysis.controller.js';
 
 const router: RouterType = Router();
 
@@ -37,5 +42,23 @@ router.get('/:id', requireAuth, getRepository);
  * Deletes a repository record by its database UUID.
  */
 router.delete('/:id', requireAuth, deleteRepository);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/analyze
+ * Triggers repository acquisition and analysis job execution.
+ */
+router.post('/:repositoryId/analyze', requireAuth, triggerAnalysis);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/analysis
+ * Returns the latest analysis job for the given repository.
+ */
+router.get('/:repositoryId/analysis', requireAuth, getLatestAnalysis);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/analysis/history
+ * Returns analysis job history for the given repository.
+ */
+router.get('/:repositoryId/analysis/history', requireAuth, getAnalysisHistory);
 
 export { router as repositoryRouter };

@@ -45,12 +45,45 @@ export interface GithubBranch {
   protected: boolean;
 }
 
+export interface GithubCommit {
+  sha: string;
+  commit: {
+    message: string;
+    author?: {
+      name: string;
+      email: string;
+      date: string;
+    };
+  };
+}
+
+export interface GithubTreeResponse {
+  sha: string;
+  url: string;
+  tree: Array<{
+    path: string;
+    mode: string;
+    type: 'blob' | 'tree' | string;
+    sha: string;
+    size?: number;
+    url?: string;
+  }>;
+  truncated: boolean;
+}
+
 export interface GithubClient {
   getAuthenticatedUser(): Promise<GithubUser>;
   listRepositories(): Promise<GithubRepository[]>;
   getRepository(owner: string, repo: string): Promise<GithubRepository>;
   listBranches(owner: string, repo: string): Promise<GithubBranch[]>;
   getDefaultBranch(owner: string, repo: string): Promise<string>;
+  getCommit(owner: string, repo: string, ref?: string): Promise<GithubCommit>;
+  getTree(
+    owner: string,
+    repo: string,
+    treeSha: string,
+    recursive?: boolean,
+  ): Promise<GithubTreeResponse>;
 }
 
 const GITHUB_BASE_URL = 'https://api.github.com';
@@ -117,11 +150,31 @@ export function createGithubClient(token?: string): GithubClient {
     return repository.default_branch;
   }
 
+  async function getCommit(owner: string, repo: string, ref = 'HEAD'): Promise<GithubCommit> {
+    return request<GithubCommit>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(ref)}`,
+    );
+  }
+
+  async function getTree(
+    owner: string,
+    repo: string,
+    treeSha: string,
+    recursive = true,
+  ): Promise<GithubTreeResponse> {
+    const query = recursive ? '?recursive=1' : '';
+    return request<GithubTreeResponse>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(treeSha)}${query}`,
+    );
+  }
+
   return {
     getAuthenticatedUser,
     listRepositories,
     getRepository,
     listBranches,
     getDefaultBranch,
+    getCommit,
+    getTree,
   };
 }

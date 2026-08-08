@@ -114,16 +114,34 @@ export interface RepositoryMember {
   createdAt: string;
 }
 
+export type AnalysisJobStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+
 export interface AnalysisJob {
   id: string;
   repositoryId: string;
-  status: string;
+  status: AnalysisJobStatus | string;
   commitHash: string | null;
   error: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GithubTreeItem {
+  path: string;
+  mode: string;
+  type: 'blob' | 'tree' | string;
+  sha: string;
+  size?: number;
+  url?: string;
+}
+
+export interface RepositoryAcquisitionResult {
+  job: AnalysisJob;
+  commitHash: string;
+  fileCount: number;
+  totalSizeBytes: number;
 }
 
 export interface ChatSession {
