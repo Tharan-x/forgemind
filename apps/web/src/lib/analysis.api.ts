@@ -2,7 +2,13 @@
 // ForgeMind Web — Repository Analysis API Client
 // =============================================================================
 
-import type { AnalysisJob, RepositoryAcquisitionResult, RepositoryFile } from '@forgemind/types';
+import type {
+  AnalysisJob,
+  FileDependency,
+  RepositoryAcquisitionResult,
+  RepositoryFile,
+  RepositorySymbol,
+} from '@forgemind/types';
 
 import { supabase } from './supabase';
 
@@ -102,4 +108,49 @@ export async function getRepositoryFiles(
     `/repositories/${encodeURIComponent(repositoryId)}/files${query}`,
   );
   return { files: data.files, total: data.total };
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/symbols
+ *
+ * Returns extracted code symbols for the given repository.
+ */
+export async function getRepositorySymbols(
+  repositoryId: string,
+  options?: { kind?: string; query?: string; limit?: number; offset?: number },
+): Promise<{ symbols: RepositorySymbol[]; total: number }> {
+  const params = new URLSearchParams();
+  if (options?.kind) params.set('kind', options.kind);
+  if (options?.query) params.set('query', options.query);
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.offset) params.set('offset', String(options.offset));
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const data = await request<{ success: boolean; symbols: RepositorySymbol[]; total: number }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/symbols${query}`,
+  );
+  return { symbols: data.symbols, total: data.total };
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/dependencies
+ *
+ * Returns extracted file dependencies for the given repository.
+ */
+export async function getRepositoryDependencies(
+  repositoryId: string,
+  options?: { isExternal?: boolean; limit?: number; offset?: number },
+): Promise<{ dependencies: FileDependency[]; total: number }> {
+  const params = new URLSearchParams();
+  if (options?.isExternal !== undefined) params.set('isExternal', String(options.isExternal));
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.offset) params.set('offset', String(options.offset));
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const data = await request<{
+    success: boolean;
+    dependencies: FileDependency[];
+    total: number;
+  }>(`/repositories/${encodeURIComponent(repositoryId)}/dependencies${query}`);
+  return { dependencies: data.dependencies, total: data.total };
 }

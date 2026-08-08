@@ -52,6 +52,8 @@ model Repository {
   members      RepositoryMember[]
   analysisJobs AnalysisJob[]
   files        RepositoryFile[]
+  symbols      RepositorySymbol[]
+  dependencies FileDependency[]
   chatSessions ChatSession[]
 
   @@map("repositories")
@@ -138,8 +140,52 @@ model RepositoryFile {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  repository   Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  symbols      RepositorySymbol[]
+  dependencies FileDependency[]
 
   @@unique([repositoryId, path])
   @@map("repository_files")
+}
+
+// ─── 8. Repository Symbols Model ──────────────────────────────────────────────
+
+model RepositorySymbol {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  fileId       String   @map("file_id") @db.Uuid
+  name         String
+  kind         String
+  filePath     String   @map("file_path")
+  startLine    Int?     @map("start_line")
+  endLine      Int?     @map("end_line")
+  exported     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  repository Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  file       RepositoryFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([fileId])
+  @@map("repository_symbols")
+}
+
+// ─── 9. File Dependencies Model ───────────────────────────────────────────────
+
+model FileDependency {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId    String   @map("repository_id") @db.Uuid
+  sourceFileId    String   @map("source_file_id") @db.Uuid
+  sourcePath      String   @map("source_path")
+  targetPath      String   @map("target_path")
+  isExternal      Boolean  @default(false) @map("is_external")
+  importedSymbols String[] @default([]) @map("imported_symbols")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  repository Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sourceFile RepositoryFile @relation(fields: [sourceFileId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId])
+  @@index([sourceFileId])
+  @@map("file_dependencies")
 }

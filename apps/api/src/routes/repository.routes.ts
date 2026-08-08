@@ -16,6 +16,8 @@ import {
   getLatestAnalysis,
   getAnalysisHistory,
   getRepositoryFiles,
+  getSymbols,
+  getDependencies,
 } from '../controllers/analysis.controller.js';
 
 const router: RouterType = Router();
@@ -67,5 +69,17 @@ router.get('/:repositoryId/analysis/history', requireAuth, getAnalysisHistory);
  * Returns indexed files for the given repository.
  */
 router.get('/:repositoryId/files', requireAuth, getRepositoryFiles);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/symbols
+ * Returns extracted code symbols for the given repository.
+ */
+router.get('/:repositoryId/symbols', requireAuth, getSymbols);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/dependencies
+ * Returns extracted file import dependencies for the given repository.
+ */
+router.get('/:repositoryId/dependencies', requireAuth, getDependencies);
 
 export { router as repositoryRouter };

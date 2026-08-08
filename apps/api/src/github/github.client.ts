@@ -71,6 +71,16 @@ export interface GithubTreeResponse {
   truncated: boolean;
 }
 
+export interface GithubFileContentResponse {
+  type: string;
+  encoding?: string;
+  size: number;
+  name: string;
+  path: string;
+  content?: string;
+  sha: string;
+}
+
 export interface GithubClient {
   getAuthenticatedUser(): Promise<GithubUser>;
   listRepositories(): Promise<GithubRepository[]>;
@@ -84,6 +94,7 @@ export interface GithubClient {
     treeSha: string,
     recursive?: boolean,
   ): Promise<GithubTreeResponse>;
+  getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<string>;
 }
 
 const GITHUB_BASE_URL = 'https://api.github.com';
@@ -168,6 +179,26 @@ export function createGithubClient(token?: string): GithubClient {
     );
   }
 
+  async function getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref = 'HEAD',
+  ): Promise<string> {
+    const encodedPath = path
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    const res = await request<GithubFileContentResponse>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`,
+    );
+
+    if (res.content && res.encoding === 'base64') {
+      return Buffer.from(res.content.replace(/\n/g, ''), 'base64').toString('utf-8');
+    }
+    return '';
+  }
+
   return {
     getAuthenticatedUser,
     listRepositories,
@@ -176,5 +207,6 @@ export function createGithubClient(token?: string): GithubClient {
     getDefaultBranch,
     getCommit,
     getTree,
+    getFileContent,
   };
 }

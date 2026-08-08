@@ -158,12 +158,43 @@ export interface IndexingResult {
   languageDistribution: Record<string, number>;
 }
 
+export interface RepositorySymbol {
+  id: string;
+  repositoryId: string;
+  fileId: string;
+  name: string;
+  kind: string;
+  filePath: string;
+  startLine: number | null;
+  endLine: number | null;
+  exported: boolean;
+  createdAt: string;
+}
+
+export interface FileDependency {
+  id: string;
+  repositoryId: string;
+  sourceFileId: string;
+  sourcePath: string;
+  targetPath: string;
+  isExternal: boolean;
+  importedSymbols: string[];
+  createdAt: string;
+}
+
+export interface ExtractionResult {
+  filesParsed: number;
+  totalSymbolsExtracted: number;
+  totalDependenciesExtracted: number;
+}
+
 export interface RepositoryAcquisitionResult {
   job: AnalysisJob;
   commitHash: string;
   fileCount: number;
   totalSizeBytes: number;
   indexing?: IndexingResult;
+  extraction?: ExtractionResult;
 }
 
 export interface ChatSession {

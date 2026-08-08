@@ -11,6 +11,8 @@ import {
   findAnalysisJobsByRepository,
   findRepositoryById,
   findRepositoryFiles,
+  findRepositorySymbols,
+  findRepositoryDependencies,
 } from '../services/index.js';
 
 interface AuthenticatedUserWithToken {
@@ -216,6 +218,108 @@ export async function getRepositoryFiles(req: AuthenticatedRequest, res: Respons
     const result = await findRepositoryFiles(repositoryId, { language, limit, offset });
 
     res.status(200).json({ success: true, files: result.files, total: result.total });
+  } catch {
+    sendInternalError(res);
+  }
+}
+
+/**
+ * GET /repositories/:repositoryId/symbols
+ *
+ * Returns extracted code symbols for the specified repository.
+ */
+export async function getSymbols(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const repo = await findRepositoryById(repositoryId);
+
+    if (!repo) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Repository not found.' },
+      });
+      return;
+    }
+
+    if (repo.userId !== user.id) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied.' },
+      });
+      return;
+    }
+
+    const kind = typeof req.query['kind'] === 'string' ? req.query['kind'] : undefined;
+    const query = typeof req.query['query'] === 'string' ? req.query['query'] : undefined;
+    const limit =
+      typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
+    const offset =
+      typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+
+    const result = await findRepositorySymbols(repositoryId, { kind, query, limit, offset });
+
+    res.status(200).json({ success: true, symbols: result.symbols, total: result.total });
+  } catch {
+    sendInternalError(res);
+  }
+}
+
+/**
+ * GET /repositories/:repositoryId/dependencies
+ *
+ * Returns extracted file import dependencies for the specified repository.
+ */
+export async function getDependencies(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const repo = await findRepositoryById(repositoryId);
+
+    if (!repo) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Repository not found.' },
+      });
+      return;
+    }
+
+    if (repo.userId !== user.id) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied.' },
+      });
+      return;
+    }
+
+    const isExternal =
+      typeof req.query['isExternal'] === 'string' ? req.query['isExternal'] === 'true' : undefined;
+    const limit =
+      typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
+    const offset =
+      typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+
+    const result = await findRepositoryDependencies(repositoryId, { isExternal, limit, offset });
+
+    res.status(200).json({ success: true, dependencies: result.dependencies, total: result.total });
   } catch {
     sendInternalError(res);
   }

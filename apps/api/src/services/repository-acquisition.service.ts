@@ -4,13 +4,14 @@
 
 import type { AnalysisJob } from '@prisma/client';
 
-import type { IndexingResult } from '@forgemind/types';
+import type { ExtractionResult, IndexingResult } from '@forgemind/types';
 
 import { createGithubClient } from '../github/index.js';
 
 import { createAnalysisJob, updateAnalysisJobStatus } from './analysis-job.service.js';
 import { findRepositoryById } from './repository.service.js';
-import { indexRepositoryTree } from './tree-indexing.service.js';
+import { extractAndIndexFileSymbols } from './symbol-extraction.service.js';
+import { findRepositoryFiles, indexRepositoryTree } from './tree-indexing.service.js';
 
 export interface AcquisitionSummary {
   job: AnalysisJob;
@@ -18,6 +19,7 @@ export interface AcquisitionSummary {
   fileCount: number;
   totalSizeBytes: number;
   indexing?: IndexingResult;
+  extraction?: ExtractionResult;
 }
 
 /**
@@ -29,7 +31,8 @@ export interface AcquisitionSummary {
  * 3. Transitions status to 'in_progress' and sets startedAt timestamp.
  * 4. Queries GitHub REST API for latest commit and repository git tree file items.
  * 5. Indexes repository tree metadata (files, language classification, ignore filtering).
- * 6. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
+ * 6. Performs AST symbol & dependency extraction on primary code files.
+ * 7. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
  *
  * @param repositoryId The database UUID of the repository.
  * @param userId The database UUID of the authenticated user requesting analysis.
@@ -76,12 +79,48 @@ export async function triggerRepositoryAnalysis(
     // 5. Indexing: Parse file metadata, ignore rules, and language classification
     const indexing = await indexRepositoryTree(repositoryId, treeItems);
 
+    // 6. Extraction: Fetch content & extract AST symbols & dependencies for code files
+    const { files: indexedFiles } = await findRepositoryFiles(repositoryId, { limit: 100 });
+    const codeFiles = indexedFiles.filter(
+      (f) => f.type === 'file' && f.language && (f.size ?? 0) < 100000,
+    );
+
+    let totalSymbolsExtracted = 0;
+    let totalDependenciesExtracted = 0;
+    let filesParsed = 0;
+
+    for (const file of codeFiles.slice(0, 50)) {
+      try {
+        const content = await github.getFileContent(repo.owner, repo.name, file.path, commitHash);
+        if (content) {
+          const res = await extractAndIndexFileSymbols(
+            repositoryId,
+            file.id,
+            file.path,
+            content,
+            file.language,
+          );
+          totalSymbolsExtracted += res.symbolCount;
+          totalDependenciesExtracted += res.dependencyCount;
+          filesParsed += 1;
+        }
+      } catch {
+        // Skip individual file fetch failures without failing entire job
+      }
+    }
+
+    const extraction: ExtractionResult = {
+      filesParsed,
+      totalSymbolsExtracted,
+      totalDependenciesExtracted,
+    };
+
     // Calculate basic tree file statistics
     const blobs = treeItems.filter((item) => item.type === 'blob');
     const fileCount = indexing.filesIndexed;
     const totalSizeBytes = blobs.reduce((sum, item) => sum + (item.size || 0), 0);
 
-    // 6. Mark job as completed
+    // 7. Mark job as completed
     const finishedAt = new Date();
     const completedJob = await updateAnalysisJobStatus(job.id, {
       status: 'completed',
@@ -101,6 +140,7 @@ export async function triggerRepositoryAnalysis(
       fileCount,
       totalSizeBytes,
       indexing,
+      extraction,
     };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown acquisition error';
