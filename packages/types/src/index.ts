@@ -137,11 +137,33 @@ export interface GithubTreeItem {
   url?: string;
 }
 
+export interface RepositoryFile {
+  id: string;
+  repositoryId: string;
+  path: string;
+  name: string;
+  extension: string | null;
+  language: string | null;
+  type: string;
+  size: number | null;
+  sha: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IndexingResult {
+  totalItemsProcessed: number;
+  filesIndexed: number;
+  ignoredItems: number;
+  languageDistribution: Record<string, number>;
+}
+
 export interface RepositoryAcquisitionResult {
   job: AnalysisJob;
   commitHash: string;
   fileCount: number;
   totalSizeBytes: number;
+  indexing?: IndexingResult;
 }
 
 export interface ChatSession {

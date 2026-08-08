@@ -2,7 +2,7 @@
 // ForgeMind Web — Repository Analysis API Client
 // =============================================================================
 
-import type { AnalysisJob, RepositoryAcquisitionResult } from '@forgemind/types';
+import type { AnalysisJob, RepositoryAcquisitionResult, RepositoryFile } from '@forgemind/types';
 
 import { supabase } from './supabase';
 
@@ -81,4 +81,25 @@ export async function getAnalysisHistory(repositoryId: string): Promise<Analysis
     `/repositories/${encodeURIComponent(repositoryId)}/analysis/history`,
   );
   return data.jobs;
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/files
+ *
+ * Returns indexed files for the given repository.
+ */
+export async function getRepositoryFiles(
+  repositoryId: string,
+  options?: { language?: string; limit?: number; offset?: number },
+): Promise<{ files: RepositoryFile[]; total: number }> {
+  const params = new URLSearchParams();
+  if (options?.language) params.set('language', options.language);
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.offset) params.set('offset', String(options.offset));
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const data = await request<{ success: boolean; files: RepositoryFile[]; total: number }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/files${query}`,
+  );
+  return { files: data.files, total: data.total };
 }

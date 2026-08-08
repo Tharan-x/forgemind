@@ -4,16 +4,20 @@
 
 import type { AnalysisJob } from '@prisma/client';
 
+import type { IndexingResult } from '@forgemind/types';
+
 import { createGithubClient } from '../github/index.js';
 
 import { createAnalysisJob, updateAnalysisJobStatus } from './analysis-job.service.js';
 import { findRepositoryById } from './repository.service.js';
+import { indexRepositoryTree } from './tree-indexing.service.js';
 
 export interface AcquisitionSummary {
   job: AnalysisJob;
   commitHash: string;
   fileCount: number;
   totalSizeBytes: number;
+  indexing?: IndexingResult;
 }
 
 /**
@@ -24,7 +28,8 @@ export interface AcquisitionSummary {
  * 2. Creates an AnalysisJob in 'pending' status.
  * 3. Transitions status to 'in_progress' and sets startedAt timestamp.
  * 4. Queries GitHub REST API for latest commit and repository git tree file items.
- * 5. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
+ * 5. Indexes repository tree metadata (files, language classification, ignore filtering).
+ * 6. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
  *
  * @param repositoryId The database UUID of the repository.
  * @param userId The database UUID of the authenticated user requesting analysis.
@@ -68,12 +73,15 @@ export async function triggerRepositoryAnalysis(
     const treeResponse = await github.getTree(repo.owner, repo.name, commitHash, true);
     const treeItems = treeResponse.tree || [];
 
+    // 5. Indexing: Parse file metadata, ignore rules, and language classification
+    const indexing = await indexRepositoryTree(repositoryId, treeItems);
+
     // Calculate basic tree file statistics
     const blobs = treeItems.filter((item) => item.type === 'blob');
-    const fileCount = blobs.length;
+    const fileCount = indexing.filesIndexed;
     const totalSizeBytes = blobs.reduce((sum, item) => sum + (item.size || 0), 0);
 
-    // 5. Mark job as completed
+    // 6. Mark job as completed
     const finishedAt = new Date();
     const completedJob = await updateAnalysisJobStatus(job.id, {
       status: 'completed',
@@ -92,6 +100,7 @@ export async function triggerRepositoryAnalysis(
       commitHash,
       fileCount,
       totalSizeBytes,
+      indexing,
     };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown acquisition error';

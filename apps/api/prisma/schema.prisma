@@ -51,6 +51,7 @@ model Repository {
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   members      RepositoryMember[]
   analysisJobs AnalysisJob[]
+  files        RepositoryFile[]
   chatSessions ChatSession[]
 
   @@map("repositories")
@@ -120,4 +121,25 @@ model ChatMessage {
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@map("chat_messages")
+}
+
+// ─── 7. Repository Files Model ────────────────────────────────────────────────
+
+model RepositoryFile {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  path         String
+  name         String
+  extension    String?
+  language     String?
+  type         String   @default("file")
+  size         Int?
+  sha          String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, path])
+  @@map("repository_files")
 }

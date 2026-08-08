@@ -10,6 +10,7 @@ import {
   findLatestAnalysisJobByRepository,
   findAnalysisJobsByRepository,
   findRepositoryById,
+  findRepositoryFiles,
 } from '../services/index.js';
 
 interface AuthenticatedUserWithToken {
@@ -165,6 +166,56 @@ export async function getAnalysisHistory(req: AuthenticatedRequest, res: Respons
     const jobs = await findAnalysisJobsByRepository(repositoryId);
 
     res.status(200).json({ success: true, jobs });
+  } catch {
+    sendInternalError(res);
+  }
+}
+
+/**
+ * GET /repositories/:repositoryId/files
+ *
+ * Returns indexed files for the specified repository.
+ */
+export async function getRepositoryFiles(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const repo = await findRepositoryById(repositoryId);
+
+    if (!repo) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Repository not found.' },
+      });
+      return;
+    }
+
+    if (repo.userId !== user.id) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied.' },
+      });
+      return;
+    }
+
+    const language = typeof req.query['language'] === 'string' ? req.query['language'] : undefined;
+    const limit =
+      typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
+    const offset =
+      typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+
+    const result = await findRepositoryFiles(repositoryId, { language, limit, offset });
+
+    res.status(200).json({ success: true, files: result.files, total: result.total });
   } catch {
     sendInternalError(res);
   }

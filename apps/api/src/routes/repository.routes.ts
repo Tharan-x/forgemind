@@ -15,6 +15,7 @@ import {
   triggerAnalysis,
   getLatestAnalysis,
   getAnalysisHistory,
+  getRepositoryFiles,
 } from '../controllers/analysis.controller.js';
 
 const router: RouterType = Router();
@@ -60,5 +61,11 @@ router.get('/:repositoryId/analysis', requireAuth, getLatestAnalysis);
  * Returns analysis job history for the given repository.
  */
 router.get('/:repositoryId/analysis/history', requireAuth, getAnalysisHistory);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/files
+ * Returns indexed files for the given repository.
+ */
+router.get('/:repositoryId/files', requireAuth, getRepositoryFiles);
 
 export { router as repositoryRouter };
