@@ -26,13 +26,13 @@ const navItems: NavItem[] = [
     name: 'Repositories',
     href: '/dashboard/repositories',
     icon: '📁',
-    enabled: false,
+    enabled: true,
   },
   {
     name: 'Analysis History',
     href: '/dashboard/history',
     icon: '⚡',
-    enabled: false,
+    enabled: true,
   },
   {
     name: 'Settings',

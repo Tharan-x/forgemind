@@ -4,6 +4,7 @@
 // ForgeMind Web — Repositories Page
 // =============================================================================
 
+import Link from 'next/link';
 import React, { useEffect, useState, useCallback } from 'react';
 
 import { Button } from '@forgemind/ui';
@@ -191,28 +192,31 @@ export default function RepositoriesPage() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400 pt-3 border-t border-zinc-800/80">
-                  {repo.language && (
-                    <span className="flex items-center gap-1.5 font-medium text-zinc-300">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
-                      {repo.language}
+                <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-400 pt-3 border-t border-zinc-800/80">
+                  <div className="flex items-center gap-4">
+                    {repo.language && (
+                      <span className="flex items-center gap-1.5 font-medium text-zinc-300">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
+                        {repo.language}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <span>★</span>
+                      <span>{repo.stars}</span>
                     </span>
-                  )}
-                  <span className="flex items-center gap-1">
-                    <span>★</span>
-                    <span>{repo.stars}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span>⌥</span>
-                    <span>{repo.forks}</span>
-                  </span>
-                  <span className="flex items-center gap-1 text-zinc-500">
-                    <span>⎇</span>
-                    <span>{repo.defaultBranch}</span>
-                  </span>
-                  <span className="ml-auto text-[11px] text-zinc-500">
-                    Updated {new Date(repo.updatedAt).toLocaleDateString()}
-                  </span>
+                    <span className="flex items-center gap-1">
+                      <span>⌥</span>
+                      <span>{repo.forks}</span>
+                    </span>
+                  </div>
+
+                  <Link
+                    href={`/dashboard/repositories/${repo.id}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg"
+                  >
+                    <span>Explore Intelligence</span>
+                    <span>→</span>
+                  </Link>
                 </div>
               </div>
             ))}
