@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env from the monorepo root (two levels up from apps/api/src)
-config({ path: path.resolve(__dirname, '../../../.env') });
+// Load .env from the monorepo root (three levels up from apps/api/src/config)
+config({ path: path.resolve(__dirname, '../../.env') });
 
 function optionalEnv(key: string, fallback: string): string {
   return process.env[key] ?? fallback;

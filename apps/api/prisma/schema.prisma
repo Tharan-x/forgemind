@@ -25,8 +25,26 @@ model User {
   repositories      Repository[]
   repositoryMembers RepositoryMember[]
   chatSessions      ChatSession[]
+  githubCredential  UserGitHubCredential?
 
   @@map("users")
+}
+
+// ─── 1b. User GitHub Credential Model ───────────────────────────────────────
+
+model UserGitHubCredential {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @unique @map("user_id") @db.Uuid
+  encryptedToken  String   @map("encrypted_token")
+  githubUsername  String?  @map("github_username")
+  githubAvatarUrl String?  @map("github_avatar_url")
+  scopes          String[] @default([])
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_github_credentials")
 }
 
 // ─── 2. Repositories Model ────────────────────────────────────────────────────

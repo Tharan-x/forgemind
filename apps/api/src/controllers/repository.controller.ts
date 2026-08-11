@@ -10,6 +10,7 @@ import {
   findRepositoriesByUser,
   findRepositoryById,
   deleteRepository as deleteRepoService,
+  getDecryptedGitHubToken,
 } from '../services/index.js';
 
 // ─── Extended Request Types ───────────────────────────────────────────────────
@@ -50,7 +51,7 @@ function sendInternalError(res: Response, message = 'An unexpected error occurre
  * POST /repositories/sync
  *
  * Triggers a full GitHub → database repository synchronisation for the
- * authenticated user. Requires a GitHub token on req.user.githubToken.
+ * authenticated user. Retrieves the stored GitHub credential server-side.
  */
 export async function syncRepositories(req: RepositoryRequest, res: Response): Promise<void> {
   try {
@@ -64,18 +65,21 @@ export async function syncRepositories(req: RepositoryRequest, res: Response): P
       return;
     }
 
-    if (!user.githubToken) {
+    const githubToken = user.githubToken || (await getDecryptedGitHubToken(user.id));
+
+    if (!githubToken) {
       res.status(400).json({
         success: false,
         error: {
           code: 'MISSING_GITHUB_TOKEN',
-          message: 'GitHub token is required to sync repositories.',
+          message:
+            'GitHub token is required to sync repositories. Please connect your GitHub account in Settings.',
         },
       });
       return;
     }
 
-    const result = await syncReposService(user.id, user.githubToken);
+    const result = await syncReposService(user.id, githubToken);
 
     res.status(200).json({ success: true, result });
   } catch (err) {

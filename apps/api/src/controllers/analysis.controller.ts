@@ -13,6 +13,7 @@ import {
   findRepositoryFiles,
   findRepositorySymbols,
   findRepositoryDependencies,
+  getDecryptedGitHubToken,
 } from '../services/index.js';
 
 interface AuthenticatedUserWithToken {
@@ -55,12 +56,15 @@ export async function triggerAnalysis(req: AnalysisRequest, res: Response): Prom
       return;
     }
 
-    if (!user.githubToken) {
+    const githubToken = user.githubToken || (await getDecryptedGitHubToken(user.id));
+
+    if (!githubToken) {
       res.status(400).json({
         success: false,
         error: {
           code: 'MISSING_GITHUB_TOKEN',
-          message: 'GitHub token is required to analyze a repository.',
+          message:
+            'GitHub token is required to analyze a repository. Please connect your GitHub account in Settings.',
         },
       });
       return;
@@ -76,7 +80,7 @@ export async function triggerAnalysis(req: AnalysisRequest, res: Response): Prom
       return;
     }
 
-    const result = await triggerRepositoryAnalysis(repositoryId, user.id, user.githubToken);
+    const result = await triggerRepositoryAnalysis(repositoryId, user.id, githubToken);
 
     res.status(200).json({ success: true, result });
   } catch (err) {
