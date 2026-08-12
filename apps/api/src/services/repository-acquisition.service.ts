@@ -4,11 +4,13 @@
 
 import type { AnalysisJob } from '@prisma/client';
 
-import type { ExtractionResult, IndexingResult } from '@forgemind/types';
+import type { ExtractionResult, IndexingResult, VectorIndexingResult } from '@forgemind/types';
 
 import { createGithubClient } from '../github/index.js';
 
 import { createAnalysisJob, updateAnalysisJobStatus } from './analysis-job.service.js';
+import { processAndStoreFileChunks } from './chunk-embedding.service.js';
+import { getEmbeddingProvider } from './embeddings/factory.js';
 import { findRepositoryById } from './repository.service.js';
 import { extractAndIndexFileSymbols } from './symbol-extraction.service.js';
 import { findRepositoryFiles, indexRepositoryTree } from './tree-indexing.service.js';
@@ -20,6 +22,7 @@ export interface AcquisitionSummary {
   totalSizeBytes: number;
   indexing?: IndexingResult;
   extraction?: ExtractionResult;
+  vectorIndexing?: VectorIndexingResult;
 }
 
 /**
@@ -32,7 +35,8 @@ export interface AcquisitionSummary {
  * 4. Queries GitHub REST API for latest commit and repository git tree file items.
  * 5. Indexes repository tree metadata (files, language classification, ignore filtering).
  * 6. Performs AST symbol & dependency extraction on primary code files.
- * 7. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
+ * 7. Performs code chunking & vector embedding generation for code files.
+ * 8. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
  *
  * @param repositoryId The database UUID of the repository.
  * @param userId The database UUID of the authenticated user requesting analysis.
@@ -79,7 +83,7 @@ export async function triggerRepositoryAnalysis(
     // 5. Indexing: Parse file metadata, ignore rules, and language classification
     const indexing = await indexRepositoryTree(repositoryId, treeItems);
 
-    // 6. Extraction: Fetch content & extract AST symbols & dependencies for code files
+    // 6. Extraction & Vector Embedding Pipeline
     const { files: indexedFiles } = await findRepositoryFiles(repositoryId, { limit: 100 });
     const codeFiles = indexedFiles.filter(
       (f) => f.type === 'file' && f.language && (f.size ?? 0) < 100000,
@@ -89,10 +93,16 @@ export async function triggerRepositoryAnalysis(
     let totalDependenciesExtracted = 0;
     let filesParsed = 0;
 
+    let filesChunked = 0;
+    let totalChunksCreated = 0;
+    let totalChunksEmbedded = 0;
+    let chunksSkippedUnchanged = 0;
+
     for (const file of codeFiles.slice(0, 50)) {
       try {
         const content = await github.getFileContent(repo.owner, repo.name, file.path, commitHash);
         if (content) {
+          // 6a. AST Symbol & Dependency Extraction
           const res = await extractAndIndexFileSymbols(
             repositoryId,
             file.id,
@@ -103,6 +113,24 @@ export async function triggerRepositoryAnalysis(
           totalSymbolsExtracted += res.symbolCount;
           totalDependenciesExtracted += res.dependencyCount;
           filesParsed += 1;
+
+          // 6b. Code Chunking & Vector Embeddings Generation
+          const chunkRes = await processAndStoreFileChunks(
+            repositoryId,
+            file.id,
+            file.path,
+            content,
+            file.language,
+            [],
+            file.size,
+          );
+
+          if (chunkRes.chunksCreated > 0) {
+            filesChunked += 1;
+            totalChunksCreated += chunkRes.chunksCreated;
+            totalChunksEmbedded += chunkRes.embeddingsGenerated;
+            chunksSkippedUnchanged += chunkRes.chunksSkipped;
+          }
         }
       } catch {
         // Skip individual file fetch failures without failing entire job
@@ -113,6 +141,15 @@ export async function triggerRepositoryAnalysis(
       filesParsed,
       totalSymbolsExtracted,
       totalDependenciesExtracted,
+    };
+
+    const provider = getEmbeddingProvider();
+    const vectorIndexing: VectorIndexingResult = {
+      filesChunked,
+      totalChunksCreated,
+      totalChunksEmbedded,
+      chunksSkippedUnchanged,
+      providerUsed: provider.name,
     };
 
     // Calculate basic tree file statistics
@@ -141,6 +178,7 @@ export async function triggerRepositoryAnalysis(
       totalSizeBytes,
       indexing,
       extraction,
+      vectorIndexing,
     };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown acquisition error';

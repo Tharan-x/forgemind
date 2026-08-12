@@ -13,6 +13,7 @@
     "type-check": "turbo run type-check",
     "clean": "turbo run clean",
     "test": "turbo run test",
+    "db:generate": "pnpm --filter @forgemind/api db:generate",
     "prepare": "husky"
   },
   "devDependencies": {

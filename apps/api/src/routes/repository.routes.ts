@@ -18,7 +18,11 @@ import {
   getRepositoryFiles,
   getSymbols,
   getDependencies,
-} from '../controllers/analysis.controller.js';
+  getRepositoryChunks,
+  searchSemanticCode,
+  getVectorStatus,
+  chatRepositoryRAG,
+} from '../controllers/index.js';
 
 const router: RouterType = Router();
 
@@ -81,5 +85,29 @@ router.get('/:repositoryId/symbols', requireAuth, getSymbols);
  * Returns extracted file import dependencies for the given repository.
  */
 router.get('/:repositoryId/dependencies', requireAuth, getDependencies);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/chunks
+ * Returns indexed code chunks for the given repository.
+ */
+router.get('/:repositoryId/chunks', requireAuth, getRepositoryChunks);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/search/semantic
+ * Executes a vector semantic search over repository code chunks.
+ */
+router.post('/:repositoryId/search/semantic', requireAuth, searchSemanticCode);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/vector-status
+ * Returns vector pipeline status and coverage metrics for the given repository.
+ */
+router.get('/:repositoryId/vector-status', requireAuth, getVectorStatus);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/chat
+ * Executes a Retrieval-Augmented Generation (RAG) query over the repository codebase.
+ */
+router.post('/:repositoryId/chat', requireAuth, chatRepositoryRAG);
 
 export { router as repositoryRouter };

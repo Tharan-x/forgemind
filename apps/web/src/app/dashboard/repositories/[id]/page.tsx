@@ -11,6 +11,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import type {
   AnalysisJob,
   FileDependency,
+  RAGSourceCitation,
   RepositoryFile,
   RepositorySymbol,
 } from '@forgemind/types';
@@ -27,9 +28,10 @@ import {
   getRepositorySymbols,
   triggerRepositoryAnalysis,
 } from '@/lib/analysis.api';
+import { queryRepositoryRAG } from '@/lib/rag.api';
 import { getRepository, type Repository } from '@/lib/repository.api';
 
-type TabType = 'overview' | 'files' | 'symbols' | 'dependencies';
+type TabType = 'overview' | 'files' | 'symbols' | 'dependencies' | 'chat';
 
 export default function RepositoryDetailPage() {
   const params = useParams();
@@ -65,7 +67,52 @@ export default function RepositoryDetailPage() {
   const [depSearch, setDepSearch] = useState<string>('');
   const [depFilter, setDepFilter] = useState<'all' | 'internal' | 'external'>('all');
 
+  // AI Code Assistant Tab State
+  const [chatQuery, setChatQuery] = useState<string>('');
+  const [chatLoading, setChatLoading] = useState<boolean>(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<
+    Array<{
+      id: string;
+      query: string;
+      answer: string;
+      sources: RAGSourceCitation[];
+      providerUsed: string;
+      timestamp: Date;
+    }>
+  >([]);
+
   const { addToast } = useToast();
+
+  const handleSendRAGQuery = async (queryToRun?: string) => {
+    const q = (queryToRun || chatQuery).trim();
+    if (!q || !repositoryId) return;
+
+    setChatLoading(true);
+    setChatError(null);
+    if (!queryToRun) setChatQuery('');
+
+    try {
+      const res = await queryRepositoryRAG(repositoryId, q);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: String(Date.now()),
+          query: q,
+          answer: res.answer,
+          sources: res.sources,
+          providerUsed: res.providerUsed,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to retrieve codebase answer.';
+      setChatError(msg);
+      addToast(msg, 'error');
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   // Load Repository Metadata and Latest Analysis Job
   const fetchRepoData = useCallback(async () => {
@@ -362,6 +409,7 @@ export default function RepositoryDetailPage() {
             {(
               [
                 { id: 'overview', label: 'Overview', icon: '📊' },
+                { id: 'chat', label: 'AI Assistant', icon: '🤖' },
                 { id: 'files', label: 'Indexed Files', icon: '📁', count: totalFiles },
                 { id: 'symbols', label: 'AST Symbols', icon: '🧩', count: totalSymbols },
                 { id: 'dependencies', label: 'Dependencies', icon: '🔗', count: totalDependencies },
@@ -753,6 +801,199 @@ export default function RepositoryDetailPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 5: AI CODE ASSISTANT (RAG) */}
+        {activeTab === 'chat' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                    🤖
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Repository AI Assistant</h2>
+                    <p className="text-xs text-zinc-400">
+                      Ask questions about this codebase. Answers are synthesized using pgvector
+                      semantic context retrieval.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset Suggestion Pills */}
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mr-1">
+                  Suggested:
+                </span>
+                {[
+                  'Where is authentication handled?',
+                  'How does repository acquisition work?',
+                  'What database models are defined?',
+                  'Show me the AST parser implementation',
+                ].map((promptText) => (
+                  <button
+                    key={promptText}
+                    onClick={() => handleSendRAGQuery(promptText)}
+                    disabled={chatLoading}
+                    className="text-xs bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 hover:border-emerald-500/40 text-zinc-300 hover:text-emerald-300 px-3 py-1 rounded-full transition-colors font-medium"
+                  >
+                    {promptText}
+                  </button>
+                ))}
+              </div>
+
+              {/* Chat Input Bar */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendRAGQuery();
+                }}
+                className="flex items-center gap-3 pt-2"
+              >
+                <input
+                  type="text"
+                  placeholder="Ask a question about this repository codebase..."
+                  value={chatQuery}
+                  onChange={(e) => setChatQuery(e.target.value)}
+                  disabled={chatLoading}
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 flex-1 shadow-inner"
+                />
+
+                <Button
+                  type="submit"
+                  disabled={chatLoading || !chatQuery.trim()}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs h-10 px-5 shrink-0 transition-all shadow-md flex items-center gap-2"
+                >
+                  {chatLoading ? (
+                    <>
+                      <LoadingSpinner size="sm" />
+                      <span>Synthesizing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Ask AI</span>
+                      <span>→</span>
+                    </>
+                  )}
+                </Button>
+              </form>
+            </div>
+
+            {/* Error Message */}
+            {chatError && (
+              <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-4 text-xs text-red-300 flex items-center gap-2">
+                <span>⚠</span>
+                <span>{chatError}</span>
+              </div>
+            )}
+
+            {/* Loading Indicator */}
+            {chatLoading && (
+              <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 text-center space-y-3">
+                <LoadingSpinner
+                  size="md"
+                  label="Searching vector embeddings & generating answer..."
+                />
+              </div>
+            )}
+
+            {/* Messages Stream */}
+            {chatMessages.length === 0 && !chatLoading ? (
+              <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-10 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center mx-auto text-2xl">
+                  💬
+                </div>
+                <h3 className="text-sm font-bold text-zinc-300">No questions asked yet</h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  Type a question above or click a suggested prompt to explore codebase
+                  intelligence.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xl"
+                  >
+                    {/* User Question */}
+                    <div className="flex items-start gap-3 border-b border-zinc-800 pb-4">
+                      <span className="text-base bg-zinc-800 p-2 rounded-xl text-zinc-300">👤</span>
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                          Question
+                        </span>
+                        <p className="text-sm font-semibold text-white">{msg.query}</p>
+                      </div>
+                    </div>
+
+                    {/* AI Answer */}
+                    <div className="flex items-start gap-3">
+                      <span className="text-base bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-xl text-emerald-400">
+                        🤖
+                      </span>
+                      <div className="space-y-3 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                            ForgeMind AI Answer
+                          </span>
+                          <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded font-mono">
+                            {msg.providerUsed}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4">
+                          {msg.answer}
+                        </div>
+
+                        {/* Source Citations */}
+                        {msg.sources.length > 0 && (
+                          <div className="pt-2 space-y-2">
+                            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                              Source Citations ({msg.sources.length})
+                            </span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {msg.sources.map((src, idx) => (
+                                <div
+                                  key={idx}
+                                  className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs space-y-1.5"
+                                >
+                                  <div className="flex items-center justify-between font-mono text-[11px]">
+                                    <span className="font-bold text-emerald-300 truncate max-w-[200px]">
+                                      {src.filePath}
+                                    </span>
+                                    <span className="text-zinc-500">
+                                      L{src.startLine}–L{src.endLine}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    {src.symbolName ? (
+                                      <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded">
+                                        {src.symbolKind}: {src.symbolName}
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-600">Code Chunk</span>
+                                    )}
+
+                                    <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-mono">
+                                      {(src.score * 100).toFixed(0)}% match
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

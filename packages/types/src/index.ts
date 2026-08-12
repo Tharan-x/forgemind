@@ -188,6 +188,14 @@ export interface ExtractionResult {
   totalDependenciesExtracted: number;
 }
 
+export interface VectorIndexingResult {
+  filesChunked: number;
+  totalChunksCreated: number;
+  totalChunksEmbedded: number;
+  chunksSkippedUnchanged: number;
+  providerUsed: string;
+}
+
 export interface RepositoryAcquisitionResult {
   job: AnalysisJob;
   commitHash: string;
@@ -195,6 +203,98 @@ export interface RepositoryAcquisitionResult {
   totalSizeBytes: number;
   indexing?: IndexingResult;
   extraction?: ExtractionResult;
+  vectorIndexing?: VectorIndexingResult;
+}
+
+// ─── Vector Embeddings & Code Chunks ──────────────────────────────────────────
+
+export interface CodeChunkMetadata {
+  symbolName?: string;
+  symbolKind?: string;
+  headerContext?: string;
+  checksum?: string;
+  language?: string;
+  filePath?: string;
+  [key: string]: unknown;
+}
+
+export interface CodeChunk {
+  id: string;
+  repositoryId: string;
+  fileId: string;
+  chunkIndex: number;
+  content: string;
+  filePath: string;
+  language: string | null;
+  startLine: number;
+  endLine: number;
+  tokenCount: number;
+  linesCount: number;
+  checksum: string;
+  metadata: CodeChunkMetadata | null;
+  createdAt: string;
+}
+
+export interface VectorSearchResult {
+  id: string;
+  repositoryId: string;
+  fileId: string;
+  chunkIndex: number;
+  content: string;
+  filePath: string;
+  language: string | null;
+  startLine: number;
+  endLine: number;
+  tokenCount: number;
+  linesCount: number;
+  similarity: number;
+  metadata: CodeChunkMetadata | null;
+}
+
+export interface VectorPipelineStatus {
+  repositoryId: string;
+  totalChunks: number;
+  embeddedChunks: number;
+  indexedFiles: number;
+  provider: string;
+}
+
+// ─── RAG Context Retrieval & Chat Engine ───────────────────────────────────────
+
+export interface RAGSourceCitation {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  score: number;
+  symbolName?: string;
+  symbolKind?: string;
+  language?: string | null;
+  content?: string;
+}
+
+export interface RAGQueryRequest {
+  query: string;
+  topK?: number;
+  conversationId?: string;
+}
+
+export interface RAGQueryResponse {
+  answer: string;
+  sources: RAGSourceCitation[];
+  repositoryId: string;
+  query: string;
+  providerUsed: string;
+}
+
+export interface RetrievedContextChunk {
+  id: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  content: string;
+  language: string | null;
+  similarity: number;
+  metadata: CodeChunkMetadata | null;
 }
 
 export interface ChatSession {

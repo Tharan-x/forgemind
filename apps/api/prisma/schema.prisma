@@ -72,6 +72,7 @@ model Repository {
   files        RepositoryFile[]
   symbols      RepositorySymbol[]
   dependencies FileDependency[]
+  chunks       CodeChunk[]
   chatSessions ChatSession[]
 
   @@map("repositories")
@@ -161,6 +162,7 @@ model RepositoryFile {
   repository   Repository         @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   symbols      RepositorySymbol[]
   dependencies FileDependency[]
+  chunks       CodeChunk[]
 
   @@unique([repositoryId, path])
   @@map("repository_files")
@@ -207,3 +209,33 @@ model FileDependency {
   @@index([sourceFileId])
   @@map("file_dependencies")
 }
+
+// ─── 10. Code Chunks Model ───────────────────────────────────────────────────
+
+model CodeChunk {
+  id           String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId String                       @map("repository_id") @db.Uuid
+  fileId       String                       @map("file_id") @db.Uuid
+  chunkIndex   Int                          @map("chunk_index")
+  content      String                       @db.Text
+  filePath     String                       @map("file_path")
+  language     String?
+  startLine    Int                          @map("start_line")
+  endLine      Int                          @map("end_line")
+  tokenCount   Int                          @default(0) @map("token_count")
+  linesCount   Int                          @default(0) @map("lines_count")
+  checksum     String                       @map("checksum")
+  metadata     Json?                        @map("metadata")
+  embedding    Unsupported("vector(1536)")? @map("embedding")
+  createdAt    DateTime                     @default(now()) @map("created_at")
+
+  repository Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  file       RepositoryFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, chunkIndex])
+  @@index([repositoryId])
+  @@index([fileId])
+  @@index([checksum])
+  @@map("code_chunks")
+}
+
