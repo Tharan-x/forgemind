@@ -10,6 +10,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 
 import type {
   AnalysisJob,
+  ChatMessage,
   FileDependency,
   RAGSourceCitation,
   RepositoryFile,
@@ -28,7 +29,11 @@ import {
   getRepositorySymbols,
   triggerRepositoryAnalysis,
 } from '@/lib/analysis.api';
-import { queryRepositoryRAG } from '@/lib/rag.api';
+import {
+  queryRepositoryRAG,
+  getRepositoryChatHistory,
+  clearRepositoryChatHistory,
+} from '@/lib/rag.api';
 import { getRepository, type Repository } from '@/lib/repository.api';
 
 type TabType = 'overview' | 'files' | 'symbols' | 'dependencies' | 'chat';
@@ -70,7 +75,11 @@ export default function RepositoryDetailPage() {
   // AI Code Assistant Tab State
   const [chatQuery, setChatQuery] = useState<string>('');
   const [chatLoading, setChatLoading] = useState<boolean>(false);
+  const [chatHistoryLoading, setChatHistoryLoading] = useState<boolean>(false);
+  const [chatClearing, setChatClearing] = useState<boolean>(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  // Reconstructed message thread from DB history + in-session queries
+  const [chatDbMessages, setChatDbMessages] = useState<ChatMessage[]>([]);
   const [chatMessages, setChatMessages] = useState<
     Array<{
       id: string;
@@ -81,8 +90,23 @@ export default function RepositoryDetailPage() {
       timestamp: Date;
     }>
   >([]);
+  const [chatLastQuery, setChatLastQuery] = useState<string>('');
 
   const { addToast } = useToast();
+
+  // Load persisted chat history from DB for this repository
+  const loadChatHistory = useCallback(async () => {
+    if (!repositoryId) return;
+    setChatHistoryLoading(true);
+    try {
+      const { messages } = await getRepositoryChatHistory(repositoryId);
+      setChatDbMessages(messages);
+    } catch {
+      // Non-fatal: history load failures are swallowed silently
+    } finally {
+      setChatHistoryLoading(false);
+    }
+  }, [repositoryId]);
 
   const handleSendRAGQuery = async (queryToRun?: string) => {
     const q = (queryToRun || chatQuery).trim();
@@ -90,7 +114,8 @@ export default function RepositoryDetailPage() {
 
     setChatLoading(true);
     setChatError(null);
-    if (!queryToRun) setChatQuery('');
+    setChatLastQuery(q);
+    setChatQuery('');
 
     try {
       const res = await queryRepositoryRAG(repositoryId, q);
@@ -105,12 +130,38 @@ export default function RepositoryDetailPage() {
           timestamp: new Date(),
         },
       ]);
+      // Reload DB history so persisted messages stay in sync
+      await loadChatHistory();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to retrieve codebase answer.';
       setChatError(msg);
       addToast(msg, 'error');
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const handleRetryLastQuery = () => {
+    if (chatLastQuery) {
+      void handleSendRAGQuery(chatLastQuery);
+    }
+  };
+
+  const handleClearConversation = async () => {
+    if (!repositoryId) return;
+    setChatClearing(true);
+    try {
+      await clearRepositoryChatHistory(repositoryId);
+      setChatMessages([]);
+      setChatDbMessages([]);
+      setChatError(null);
+      setChatLastQuery('');
+      addToast('Conversation cleared.', 'success');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to clear conversation.';
+      addToast(msg, 'error');
+    } finally {
+      setChatClearing(false);
     }
   };
 
@@ -207,8 +258,10 @@ export default function RepositoryDetailPage() {
       fetchFiles();
       fetchSymbols();
       fetchDependencies();
+    } else if (activeTab === 'chat') {
+      loadChatHistory();
     }
-  }, [activeTab, fetchFiles, fetchSymbols, fetchDependencies]);
+  }, [activeTab, fetchFiles, fetchSymbols, fetchDependencies, loadChatHistory]);
 
   // Handle Trigger Repository Analysis
   const handleTriggerAnalysis = async () => {
@@ -806,126 +859,260 @@ export default function RepositoryDetailPage() {
           </div>
         )}
 
-        {/* TAB 5: AI CODE ASSISTANT (RAG) */}
+        {/* TAB: AI CODE ASSISTANT (RAG) */}
         {activeTab === 'chat' && (
-          <div className="space-y-6">
-            <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+          <div className="space-y-5">
+            {/* Header Card */}
+            <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 shrink-0 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
                     🤖
                   </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Repository AI Assistant</h2>
-                    <p className="text-xs text-zinc-400">
-                      Ask questions about this codebase. Answers are synthesized using pgvector
-                      semantic context retrieval.
+                  <div className="space-y-0.5">
+                    <h2 className="text-base font-bold text-white leading-tight">
+                      Repository AI Assistant
+                    </h2>
+                    <p className="text-xs text-zinc-400 leading-snug">
+                      Grounded answers from{' '}
+                      <span className="text-emerald-400 font-semibold">{repository.fullName}</span>{' '}
+                      via pgvector semantic retrieval
                     </p>
+                    {jobStatus !== 'completed' && (
+                      <p className="text-[11px] text-amber-400/80 bg-amber-400/5 border border-amber-400/20 rounded-lg px-2.5 py-1 mt-1.5 inline-block">
+                        ⚠ Repository has not been analyzed yet — run AST Analysis first for best
+                        results.
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                {/* Clear conversation button */}
+                {(chatMessages.length > 0 || chatDbMessages.length > 0) && (
+                  <button
+                    onClick={() => void handleClearConversation()}
+                    disabled={chatClearing}
+                    className="text-[11px] text-zinc-400 hover:text-red-400 border border-zinc-700/60 hover:border-red-500/40 bg-zinc-900 hover:bg-red-950/20 px-3 py-1.5 rounded-xl transition-colors font-medium flex items-center gap-1.5 shrink-0"
+                  >
+                    {chatClearing ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>Clearing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🗑</span>
+                        <span>Clear conversation</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
-              {/* Preset Suggestion Pills */}
-              <div className="flex flex-wrap items-center gap-2 pt-2">
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mr-1">
-                  Suggested:
+              {/* Suggested Questions */}
+              <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-zinc-800/60 mt-4">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                  Try asking:
                 </span>
                 {[
                   'Where is authentication handled?',
-                  'How does repository acquisition work?',
-                  'What database models are defined?',
-                  'Show me the AST parser implementation',
+                  'Explain the repository architecture',
+                  'How does GitHub synchronization work?',
+                  'Where is the database connection configured?',
+                  'Find the code responsible for repository analysis',
+                  'What dependencies does this service use?',
                 ].map((promptText) => (
                   <button
                     key={promptText}
-                    onClick={() => handleSendRAGQuery(promptText)}
+                    onClick={() => void handleSendRAGQuery(promptText)}
                     disabled={chatLoading}
-                    className="text-xs bg-zinc-800/80 hover:bg-zinc-800 border border-zinc-700/60 hover:border-emerald-500/40 text-zinc-300 hover:text-emerald-300 px-3 py-1 rounded-full transition-colors font-medium"
+                    className="text-[11px] bg-zinc-800/70 hover:bg-zinc-800 border border-zinc-700/50 hover:border-emerald-500/40 text-zinc-300 hover:text-emerald-300 px-2.5 py-1 rounded-full transition-colors font-medium disabled:opacity-40"
                   >
                     {promptText}
                   </button>
                 ))}
               </div>
 
-              {/* Chat Input Bar */}
+              {/* Input Bar */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  handleSendRAGQuery();
+                  void handleSendRAGQuery();
                 }}
-                className="flex items-center gap-3 pt-2"
+                className="flex items-center gap-2.5 mt-4"
               >
                 <input
+                  id="chat-input"
                   type="text"
-                  placeholder="Ask a question about this repository codebase..."
+                  placeholder="Ask a question about this codebase..."
                   value={chatQuery}
                   onChange={(e) => setChatQuery(e.target.value)}
                   disabled={chatLoading}
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 flex-1 shadow-inner"
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 flex-1 shadow-inner transition-colors"
                 />
-
                 <Button
                   type="submit"
                   disabled={chatLoading || !chatQuery.trim()}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs h-10 px-5 shrink-0 transition-all shadow-md flex items-center gap-2"
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-zinc-950 font-bold text-xs h-10 px-5 shrink-0 transition-all shadow-md flex items-center gap-1.5"
                 >
                   {chatLoading ? (
                     <>
                       <LoadingSpinner size="sm" />
-                      <span>Synthesizing...</span>
+                      <span>Thinking...</span>
                     </>
                   ) : (
                     <>
                       <span>Ask AI</span>
-                      <span>→</span>
+                      <span aria-hidden>→</span>
                     </>
                   )}
                 </Button>
               </form>
             </div>
 
-            {/* Error Message */}
+            {/* Error Banner */}
             {chatError && (
-              <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-4 text-xs text-red-300 flex items-center gap-2">
-                <span>⚠</span>
-                <span>{chatError}</span>
+              <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2 text-xs text-red-300">
+                  <span className="text-base leading-none">⚠</span>
+                  <span className="leading-relaxed">{chatError}</span>
+                </div>
+                {chatLastQuery && (
+                  <button
+                    onClick={handleRetryLastQuery}
+                    disabled={chatLoading}
+                    className="text-[11px] font-semibold text-red-400 hover:text-red-300 border border-red-700/50 hover:border-red-600 px-3 py-1 rounded-lg transition-colors shrink-0 whitespace-nowrap"
+                  >
+                    ↺ Retry
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Loading Indicator */}
+            {/* History loading spinner */}
+            {chatHistoryLoading && (
+              <div className="flex items-center justify-center gap-2 py-4 text-zinc-500 text-xs">
+                <LoadingSpinner size="sm" />
+                <span>Loading conversation history...</span>
+              </div>
+            )}
+
+            {/* Answer synthesis loading */}
             {chatLoading && (
-              <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 text-center space-y-3">
+              <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-7 text-center">
                 <LoadingSpinner
                   size="md"
-                  label="Searching vector embeddings & generating answer..."
+                  label="Searching vector embeddings & synthesizing grounded answer..."
                 />
               </div>
             )}
 
-            {/* Messages Stream */}
-            {chatMessages.length === 0 && !chatLoading ? (
-              <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-10 text-center space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center mx-auto text-2xl">
-                  💬
+            {/* Empty State */}
+            {chatMessages.length === 0 &&
+              chatDbMessages.length === 0 &&
+              !chatLoading &&
+              !chatHistoryLoading && (
+                <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-10 text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center mx-auto text-3xl">
+                    💬
+                  </div>
+                  <h3 className="text-sm font-bold text-zinc-300">No questions asked yet</h3>
+                  <p className="text-xs text-zinc-500 max-w-xs mx-auto leading-relaxed">
+                    {jobStatus === 'completed'
+                      ? 'Ask a question above or click a suggested prompt to explore codebase intelligence.'
+                      : 'Run AST Analysis first to index this repository, then ask questions here.'}
+                  </p>
+                  {jobStatus !== 'completed' && (
+                    <Button
+                      onClick={handleTriggerAnalysis}
+                      disabled={analyzing}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs h-9 px-4 mt-2"
+                    >
+                      {analyzing ? 'Analyzing...' : '⚡ Run AST Analysis'}
+                    </Button>
+                  )}
                 </div>
-                <h3 className="text-sm font-bold text-zinc-300">No questions asked yet</h3>
-                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                  Type a question above or click a suggested prompt to explore codebase
-                  intelligence.
-                </p>
+              )}
+
+            {/* Persisted DB History (shown when no in-session messages yet) */}
+            {chatMessages.length === 0 && chatDbMessages.length > 0 && !chatLoading && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Previous session history
+                  </span>
+                  <div className="flex-1 h-px bg-zinc-800" />
+                </div>
+                <div className="space-y-3">
+                  {/* Pair up user/assistant messages from DB */}
+                  {chatDbMessages
+                    .reduce<
+                      Array<{
+                        user: (typeof chatDbMessages)[0];
+                        assistant?: (typeof chatDbMessages)[0];
+                      }>
+                    >((pairs, msg) => {
+                      if (msg.sender === 'user') {
+                        pairs.push({ user: msg });
+                      } else if (msg.sender === 'assistant' && pairs.length > 0) {
+                        const last = pairs[pairs.length - 1];
+                        if (last && !last.assistant) {
+                          last.assistant = msg;
+                        }
+                      }
+                      return pairs;
+                    }, [])
+                    .map((pair, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-zinc-900/50 border border-zinc-800/60 rounded-2xl p-5 space-y-3 opacity-80"
+                      >
+                        <div className="flex items-start gap-2.5 border-b border-zinc-800/60 pb-3">
+                          <span className="text-sm bg-zinc-800 p-1.5 rounded-lg text-zinc-400">
+                            👤
+                          </span>
+                          <p className="text-xs font-semibold text-zinc-300 pt-0.5">
+                            {pair.user.content}
+                          </p>
+                        </div>
+                        {pair.assistant && (
+                          <div className="flex items-start gap-2.5">
+                            <span className="text-sm bg-emerald-500/10 border border-emerald-500/20 p-1.5 rounded-lg text-emerald-500">
+                              🤖
+                            </span>
+                            <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed pt-0.5">
+                              {pair.assistant.content}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2 px-1">
+                  <div className="flex-1 h-px bg-zinc-800" />
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Current session
+                  </span>
+                  <div className="flex-1 h-px bg-zinc-800" />
+                </div>
               </div>
-            ) : (
-              <div className="space-y-6">
+            )}
+
+            {/* Current Session Messages */}
+            {chatMessages.length > 0 && (
+              <div className="space-y-5">
                 {chatMessages.map((msg) => (
                   <div
                     key={msg.id}
-                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xl"
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-lg"
                   >
                     {/* User Question */}
-                    <div className="flex items-start gap-3 border-b border-zinc-800 pb-4">
-                      <span className="text-base bg-zinc-800 p-2 rounded-xl text-zinc-300">👤</span>
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    <div className="flex items-start gap-3 border-b border-zinc-800/60 pb-3.5">
+                      <span className="text-base bg-zinc-800 p-2 rounded-xl text-zinc-300 shrink-0">
+                        👤
+                      </span>
+                      <div className="space-y-0.5 pt-0.5">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
                           Question
                         </span>
                         <p className="text-sm font-semibold text-white">{msg.query}</p>
@@ -934,54 +1121,67 @@ export default function RepositoryDetailPage() {
 
                     {/* AI Answer */}
                     <div className="flex items-start gap-3">
-                      <span className="text-base bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-xl text-emerald-400">
+                      <span className="text-base bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-xl text-emerald-400 shrink-0">
                         🤖
                       </span>
-                      <div className="space-y-3 flex-1">
-                        <div className="flex items-center justify-between">
+                      <div className="space-y-3 flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
                             ForgeMind AI Answer
                           </span>
                           <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded font-mono">
-                            {msg.providerUsed}
+                            via {msg.providerUsed}
                           </span>
                         </div>
 
-                        <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4">
+                        <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans bg-zinc-950/50 border border-zinc-800/70 rounded-xl p-4">
                           {msg.answer}
                         </div>
 
                         {/* Source Citations */}
                         {msg.sources.length > 0 && (
-                          <div className="pt-2 space-y-2">
-                            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
-                              Source Citations ({msg.sources.length})
+                          <div className="space-y-2 pt-1">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                              Source Citations — {msg.sources.length} relevant snippet
+                              {msg.sources.length !== 1 ? 's' : ''}
                             </span>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               {msg.sources.map((src, idx) => (
                                 <div
                                   key={idx}
-                                  className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs space-y-1.5"
+                                  className="group bg-zinc-950 border border-zinc-800 hover:border-emerald-500/30 rounded-xl p-3 text-xs space-y-1.5 transition-colors"
                                 >
-                                  <div className="flex items-center justify-between font-mono text-[11px]">
-                                    <span className="font-bold text-emerald-300 truncate max-w-[200px]">
+                                  {/* File path + line range */}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span
+                                      className="font-mono font-bold text-emerald-300 break-all text-[11px] leading-snug"
+                                      title={src.filePath}
+                                    >
                                       {src.filePath}
                                     </span>
-                                    <span className="text-zinc-500">
-                                      L{src.startLine}–L{src.endLine}
+                                    <span className="text-zinc-500 font-mono text-[11px] shrink-0 whitespace-nowrap">
+                                      L{src.startLine}–{src.endLine}
                                     </span>
                                   </div>
 
-                                  <div className="flex items-center justify-between text-[10px]">
+                                  {/* Symbol + score row */}
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
                                     {src.symbolName ? (
-                                      <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded">
-                                        {src.symbolKind}: {src.symbolName}
+                                      <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                        {src.symbolKind ?? 'symbol'}: {src.symbolName}
                                       </span>
                                     ) : (
-                                      <span className="text-zinc-600">Code Chunk</span>
+                                      <span className="text-zinc-600 text-[10px]">Code chunk</span>
                                     )}
-
-                                    <span className="bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded font-mono">
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                                        src.score >= 0.8
+                                          ? 'bg-emerald-500/15 text-emerald-400'
+                                          : src.score >= 0.5
+                                            ? 'bg-amber-500/10 text-amber-400'
+                                            : 'bg-zinc-800 text-zinc-500'
+                                      }`}
+                                    >
                                       {(src.score * 100).toFixed(0)}% match
                                     </span>
                                   </div>
@@ -989,6 +1189,14 @@ export default function RepositoryDetailPage() {
                               ))}
                             </div>
                           </div>
+                        )}
+
+                        {/* No sources note */}
+                        {msg.sources.length === 0 && (
+                          <p className="text-[11px] text-zinc-600 italic">
+                            No indexed code chunks matched this query — try running AST Analysis
+                            first.
+                          </p>
                         )}
                       </div>
                     </div>

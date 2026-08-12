@@ -22,6 +22,8 @@ import {
   searchSemanticCode,
   getVectorStatus,
   chatRepositoryRAG,
+  getChatHistory,
+  clearChatHistory,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -109,5 +111,17 @@ router.get('/:repositoryId/vector-status', requireAuth, getVectorStatus);
  * Executes a Retrieval-Augmented Generation (RAG) query over the repository codebase.
  */
 router.post('/:repositoryId/chat', requireAuth, chatRepositoryRAG);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/chat/history
+ * Returns the most recent chat session and ordered messages for the authenticated user.
+ */
+router.get('/:repositoryId/chat/history', requireAuth, getChatHistory);
+
+/**
+ * DELETE /api/v1/repositories/:repositoryId/chat/history
+ * Clears all chat sessions and messages for the authenticated user's repository.
+ */
+router.delete('/:repositoryId/chat/history', requireAuth, clearChatHistory);
 
 export { router as repositoryRouter };

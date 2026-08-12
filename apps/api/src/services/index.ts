@@ -18,3 +18,4 @@ export * from './context-retrieval.service.js';
 export * from './rag-prompt.service.js';
 export * from './llm/index.js';
 export * from './rag-pipeline.service.js';
+export * from './chat-history.service.js';

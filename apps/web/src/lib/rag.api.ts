@@ -1,8 +1,8 @@
 // =============================================================================
-// ForgeMind Web — RAG Query API Client
+// ForgeMind Web — RAG Query & Chat History API Client
 // =============================================================================
 
-import type { RAGQueryResponse } from '@forgemind/types';
+import type { ChatMessage, ChatSession, RAGQueryResponse } from '@forgemind/types';
 import { supabase } from './supabase';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? '';
@@ -16,9 +16,11 @@ async function getAccessToken(): Promise<string> {
   return token;
 }
 
+// ---------------------------------------------------------------------------
+// POST /api/v1/repositories/:repositoryId/chat
+// ---------------------------------------------------------------------------
+
 /**
- * POST /api/v1/repositories/:repositoryId/chat
- *
  * Sends a RAG question query to the server for codebase analysis & answer generation.
  */
 export async function queryRepositoryRAG(
@@ -58,5 +60,80 @@ export async function queryRepositoryRAG(
     repositoryId: (body['repositoryId'] as string) || repositoryId,
     query: (body['query'] as string) || query,
     providerUsed: (body['providerUsed'] as string) || 'unknown',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/repositories/:repositoryId/chat/history
+// ---------------------------------------------------------------------------
+
+export interface ChatHistoryResponse {
+  session: ChatSession | null;
+  messages: ChatMessage[];
+}
+
+/**
+ * Returns the most recent chat session and its ordered messages for the given repository.
+ */
+export async function getRepositoryChatHistory(repositoryId: string): Promise<ChatHistoryResponse> {
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `${API_BASE}/api/v1/repositories/${encodeURIComponent(repositoryId)}/chat/history`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
+  const body = (await response.json()) as Record<string, unknown>;
+
+  if (!response.ok) {
+    throw new Error(
+      typeof (body['error'] as Record<string, unknown> | undefined)?.['message'] === 'string'
+        ? ((body['error'] as Record<string, unknown>)['message'] as string)
+        : `API error ${response.status}`,
+    );
+  }
+
+  return {
+    session: (body['session'] as ChatSession) || null,
+    messages: (body['messages'] as ChatMessage[]) || [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/v1/repositories/:repositoryId/chat/history
+// ---------------------------------------------------------------------------
+
+/**
+ * Clears all chat sessions and messages for the given repository.
+ * Returns the number of deleted sessions.
+ */
+export async function clearRepositoryChatHistory(
+  repositoryId: string,
+): Promise<{ deletedSessions: number }> {
+  const token = await getAccessToken();
+
+  const response = await fetch(
+    `${API_BASE}/api/v1/repositories/${encodeURIComponent(repositoryId)}/chat/history`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
+  const body = (await response.json()) as Record<string, unknown>;
+
+  if (!response.ok) {
+    throw new Error(
+      typeof (body['error'] as Record<string, unknown> | undefined)?.['message'] === 'string'
+        ? ((body['error'] as Record<string, unknown>)['message'] as string)
+        : `API error ${response.status}`,
+    );
+  }
+
+  return {
+    deletedSessions: (body['deletedSessions'] as number) || 0,
   };
 }
