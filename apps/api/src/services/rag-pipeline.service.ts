@@ -9,6 +9,9 @@ import { retrieveRepositoryContext } from './context-retrieval.service.js';
 import { getLLMProvider } from './llm/factory.js';
 import { buildRAGPrompt } from './rag-prompt.service.js';
 
+import { analyzeQueryIntent } from './query-intent.service.js';
+import { getArchitectureOverview } from './code-intelligence.service.js';
+
 const prisma = new PrismaClient();
 
 export interface RAGPipelineOptions {
@@ -19,11 +22,12 @@ export interface RAGPipelineOptions {
 /**
  * End-to-end RAG query orchestrator.
  *
- * 1. Retrieves relevant codebase context via pgvector semantic search.
- * 2. Assembles structured, injection-resistant LLM prompt.
- * 3. Synthesizes answer using server-side LLM provider (OpenAI, Gemini, or Local Fallback).
- * 4. Persists chat session and messages to database.
- * 5. Returns answer with source citations.
+ * 1. Analyzes query intent and retrieves relevant codebase context via hybrid search.
+ * 2. Injects structural repository summary for architecture/module questions.
+ * 3. Assembles structured, injection-resistant LLM prompt.
+ * 4. Synthesizes answer using server-side LLM provider (OpenAI, Gemini, or Local Fallback).
+ * 5. Persists chat session and messages to database.
+ * 6. Returns answer with source citations.
  *
  * @param repositoryId Target database repository UUID
  * @param userId Authenticated user UUID
@@ -41,14 +45,44 @@ export async function executeRAGQuery(
     throw new Error('Query string cannot be empty.');
   }
 
-  // 1. Context Retrieval
+  const intent = analyzeQueryIntent(trimmedQuery);
+
+  // 1. Context Retrieval (Hybrid Vector + Lexical Search with Reranking)
   const contextChunks = await retrieveRepositoryContext(repositoryId, userId, trimmedQuery, {
     topK: options.topK || 5,
-    threshold: options.threshold || 0.0,
+    threshold: options.threshold,
   });
 
-  // 2. Prompt Assembly
-  const { systemPrompt, userPrompt } = buildRAGPrompt(contextChunks, trimmedQuery);
+  // 2. Structural Repository Summary (for ARCHITECTURE, DEPENDENCIES, FILE_LOCATION,
+  //    DB_CONFIGURATION, and FLOW intent — any query asking about relationships/structure)
+  let structuralContext: string | undefined;
+  if (
+    intent.category === 'ARCHITECTURE' ||
+    intent.category === 'DEPENDENCIES' ||
+    intent.category === 'FILE_LOCATION' ||
+    intent.category === 'DB_CONFIGURATION' ||
+    intent.category === 'FLOW'
+  ) {
+    try {
+      const arch = await getArchitectureOverview(repositoryId, userId);
+      structuralContext = `Repository: ${arch.repositoryName} (${arch.totalFiles} files, ${arch.totalSymbols} AST symbols, ${arch.totalDependencies} dependencies)
+Major Directories: ${arch.topDirectories.map((d) => `/${d.directory} (${d.fileCount} files)`).join(', ')}
+Language Breakdown: ${Object.entries(arch.languageDistribution)
+        .map(([l, c]) => `${l}: ${c} files`)
+        .join(', ')}
+Top External Packages: ${arch.topExternalPackages
+        .slice(0, 10)
+        .map((p) => p.package)
+        .join(', ')}`;
+    } catch {
+      // Non-fatal if structural overview fetch fails
+    }
+  }
+
+  // 3. Prompt Assembly
+  const { systemPrompt, userPrompt } = buildRAGPrompt(contextChunks, trimmedQuery, {
+    structuralContext,
+  });
 
   // 3. LLM Answer Synthesis
   const llmProvider = getLLMProvider();

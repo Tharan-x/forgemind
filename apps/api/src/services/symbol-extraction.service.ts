@@ -6,12 +6,14 @@ import type { FileDependency, RepositorySymbol, Prisma } from '@prisma/client';
 import { PrismaClient } from '@prisma/client';
 
 import { parseSourceFile } from './ast-parser.service.js';
+import type { CodeSymbolInfo } from './code-chunker.service.js';
 
 const prisma = new PrismaClient();
 
 export interface SymbolExtractionSummary {
   symbolCount: number;
   dependencyCount: number;
+  symbols: CodeSymbolInfo[];
 }
 
 /**
@@ -81,6 +83,12 @@ export async function extractAndIndexFileSymbols(
   return {
     symbolCount,
     dependencyCount,
+    symbols: symbols.map((s) => ({
+      name: s.name,
+      kind: s.kind,
+      startLine: s.startLine,
+      endLine: s.endLine,
+    })),
   };
 }
 

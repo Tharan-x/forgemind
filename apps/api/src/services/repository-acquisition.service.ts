@@ -84,9 +84,9 @@ export async function triggerRepositoryAnalysis(
     const indexing = await indexRepositoryTree(repositoryId, treeItems);
 
     // 6. Extraction & Vector Embedding Pipeline
-    const { files: indexedFiles } = await findRepositoryFiles(repositoryId, { limit: 100 });
+    const { files: indexedFiles } = await findRepositoryFiles(repositoryId, { limit: 5000 });
     const codeFiles = indexedFiles.filter(
-      (f) => f.type === 'file' && f.language && (f.size ?? 0) < 100000,
+      (f) => f.type === 'file' && f.language && (f.size ?? 0) < 500000,
     );
 
     let totalSymbolsExtracted = 0;
@@ -98,7 +98,7 @@ export async function triggerRepositoryAnalysis(
     let totalChunksEmbedded = 0;
     let chunksSkippedUnchanged = 0;
 
-    for (const file of codeFiles.slice(0, 50)) {
+    for (const file of codeFiles) {
       try {
         const content = await github.getFileContent(repo.owner, repo.name, file.path, commitHash);
         if (content) {
@@ -121,7 +121,7 @@ export async function triggerRepositoryAnalysis(
             file.path,
             content,
             file.language,
-            [],
+            res.symbols || [],
             file.size,
           );
 
@@ -132,8 +132,9 @@ export async function triggerRepositoryAnalysis(
             chunksSkippedUnchanged += chunkRes.chunksSkipped;
           }
         }
-      } catch {
-        // Skip individual file fetch failures without failing entire job
+      } catch (fileErr) {
+        // eslint-disable-next-line no-console
+        console.warn(`[Analysis] Skipping file ${file.path} due to processing error:`, fileErr);
       }
     }
 

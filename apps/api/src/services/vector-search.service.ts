@@ -31,13 +31,15 @@ export interface RawVectorQueryResult {
   similarity: number;
 }
 
+import { extractQueryKeywords } from './query-intent.service.js';
+
 /**
- * Searches code chunks using pgvector cosine distance vector similarity.
- * Falls back to full-text matching if vector search is unavailable.
+ * Hybrid search over code chunks combining pgvector cosine similarity with lexical keyword search.
+ * Merges vector and keyword candidate sets into an expanded candidate pool (~30 candidates).
  *
  * @param repositoryId Database UUID of target repository
- * @param queryText Search prompt or query code snippet
- * @param options Pagination and similarity threshold options
+ * @param queryText Natural language question or code query
+ * @param options Candidate limit and similarity threshold options
  */
 export async function searchSemanticCodeChunks(
   repositoryId: string,
@@ -47,17 +49,19 @@ export async function searchSemanticCodeChunks(
   const trimmedQuery = queryText.trim();
   if (!trimmedQuery) return [];
 
-  const limit = options.limit || 10;
+  const limit = options.limit || 30;
   const threshold = options.threshold ?? 0.0;
   const provider = getEmbeddingProvider();
+  const keywords = extractQueryKeywords(trimmedQuery);
 
+  const resultMap = new Map<string, VectorSearchResult>();
+
+  // 1. Vector Search Candidate Retrieval
   try {
-    // 1. Generate query embedding vector
     const queryVector = await provider.generateEmbedding(trimmedQuery);
     const vectorStr = `[${queryVector.join(',')}]`;
 
-    // 2. Perform pgvector cosine distance query (1 - distance = cosine similarity)
-    const rawResults = await prisma.$queryRaw<RawVectorQueryResult[]>`
+    const rawVectorResults = await prisma.$queryRaw<RawVectorQueryResult[]>`
       SELECT
         c.id,
         c.repository_id AS "repositoryId",
@@ -76,62 +80,88 @@ export async function searchSemanticCodeChunks(
       WHERE c.repository_id = ${repositoryId}::uuid
         AND c.embedding IS NOT NULL
       ORDER BY c.embedding <=> ${vectorStr}::vector ASC
-      LIMIT ${limit * 2};
+      LIMIT ${limit};
     `;
 
-    const filtered = rawResults
-      .filter((r) => r.similarity >= threshold)
-      .slice(0, limit)
-      .map((r) => ({
-        id: r.id,
-        repositoryId: r.repositoryId,
-        fileId: r.fileId,
-        chunkIndex: r.chunkIndex,
-        content: r.content,
-        filePath: r.filePath,
-        language: r.language,
-        startLine: r.startLine,
-        endLine: r.endLine,
-        tokenCount: r.tokenCount,
-        linesCount: r.linesCount,
-        similarity: parseFloat(r.similarity.toFixed(4)),
-        metadata: (r.metadata as Record<string, unknown>) || null,
-      }));
-
-    return filtered;
+    for (const r of rawVectorResults) {
+      if (r.similarity >= threshold) {
+        resultMap.set(r.id, {
+          id: r.id,
+          repositoryId: r.repositoryId,
+          fileId: r.fileId,
+          chunkIndex: r.chunkIndex,
+          content: r.content,
+          filePath: r.filePath,
+          language: r.language,
+          startLine: r.startLine,
+          endLine: r.endLine,
+          tokenCount: r.tokenCount,
+          linesCount: r.linesCount,
+          similarity: parseFloat(r.similarity.toFixed(4)),
+          metadata: (r.metadata as Record<string, unknown>) || null,
+        });
+      }
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn('[Vector Search] Fallback to ILIKE text search due to error:', err);
-
-    // Fallback: ILIKE text search if pgvector query fails
-    const textMatches = await prisma.codeChunk.findMany({
-      where: {
-        repositoryId,
-        OR: [
-          { content: { contains: trimmedQuery, mode: 'insensitive' } },
-          { filePath: { contains: trimmedQuery, mode: 'insensitive' } },
-        ],
-      },
-      take: limit,
-      orderBy: { chunkIndex: 'asc' },
-    });
-
-    return textMatches.map((c) => ({
-      id: c.id,
-      repositoryId: c.repositoryId,
-      fileId: c.fileId,
-      chunkIndex: c.chunkIndex,
-      content: c.content,
-      filePath: c.filePath,
-      language: c.language,
-      startLine: c.startLine,
-      endLine: c.endLine,
-      tokenCount: c.tokenCount,
-      linesCount: c.linesCount,
-      similarity: 0.5,
-      metadata: (c.metadata as Record<string, unknown>) || null,
-    }));
+    console.warn('[Vector Search] Vector search warning:', err);
   }
+
+  // 2. Lexical Keyword Candidate Retrieval
+  if (keywords.length > 0) {
+    try {
+      const keywordConditions = keywords.flatMap((kw) => [
+        { filePath: { contains: kw, mode: 'insensitive' as const } },
+        { content: { contains: kw, mode: 'insensitive' as const } },
+      ]);
+
+      const lexicalMatches = await prisma.codeChunk.findMany({
+        where: {
+          repositoryId,
+          OR: keywordConditions,
+        },
+        take: limit,
+        orderBy: { chunkIndex: 'asc' },
+      });
+
+      for (const c of lexicalMatches) {
+        if (!resultMap.has(c.id)) {
+          // Calculate baseline keyword match score
+          let matchCount = 0;
+          const lowerPath = c.filePath.toLowerCase();
+          const lowerContent = c.content.toLowerCase();
+
+          for (const kw of keywords) {
+            if (lowerPath.includes(kw)) matchCount += 2;
+            if (lowerContent.includes(kw)) matchCount += 1;
+          }
+
+          const lexicalSim = Math.min(0.85, 0.4 + matchCount * 0.1);
+
+          resultMap.set(c.id, {
+            id: c.id,
+            repositoryId: c.repositoryId,
+            fileId: c.fileId,
+            chunkIndex: c.chunkIndex,
+            content: c.content,
+            filePath: c.filePath,
+            language: c.language,
+            startLine: c.startLine,
+            endLine: c.endLine,
+            tokenCount: c.tokenCount,
+            linesCount: c.linesCount,
+            similarity: parseFloat(lexicalSim.toFixed(4)),
+            metadata: (c.metadata as Record<string, unknown>) || null,
+          });
+        }
+      }
+    } catch (lexErr) {
+      // eslint-disable-next-line no-console
+      console.warn('[Vector Search] Lexical search warning:', lexErr);
+    }
+  }
+
+  return Array.from(resultMap.values());
 }
 
 /**

@@ -109,6 +109,11 @@ export async function processAndStoreFileChunks(
     if (!chunk) continue;
     const embedding = embeddings[i];
 
+    // Clean metadata to strip out undefined properties for Prisma JSON compatibility
+    const cleanMetadata =
+      (JSON.parse(JSON.stringify(chunk.metadata ?? {})) as Prisma.InputJsonValue) ??
+      Prisma.JsonNull;
+
     const created = await prisma.codeChunk.create({
       data: {
         repositoryId,
@@ -122,7 +127,7 @@ export async function processAndStoreFileChunks(
         tokenCount: chunk.tokenCount,
         linesCount: chunk.linesCount,
         checksum: chunk.checksum,
-        metadata: (chunk.metadata as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        metadata: cleanMetadata,
       },
     });
 
