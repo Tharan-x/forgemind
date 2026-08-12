@@ -314,3 +314,75 @@ export interface ChatMessage {
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }
+
+// ─── Code Intelligence & Explainability ──────────────────────────────────────
+
+export interface CodeExplainRequest {
+  /** Relative file path within the repository */
+  filePath: string;
+  /** Optional symbol name to explain (function, class, interface) */
+  symbolName?: string;
+  /** Optional symbol kind hint ('function' | 'class' | 'interface' | etc.) */
+  symbolKind?: string;
+}
+
+export interface CodeExplainResponse {
+  filePath: string;
+  symbolName?: string;
+  symbolKind?: string;
+  startLine?: number;
+  endLine?: number;
+  /** AI-generated explanation grounded in retrieved code context */
+  explanation: string;
+  /** Supporting source citations */
+  sources: RAGSourceCitation[];
+  /** Related symbols found in the same file */
+  relatedSymbols: RepositorySymbol[];
+  providerUsed: string;
+}
+
+export interface FileDependencyIntelligence {
+  filePath: string;
+  /** Files this file imports from (outgoing) */
+  imports: FileDependency[];
+  /** Files that import this file (incoming) */
+  importedBy: FileDependency[];
+  /** Count of internal dependencies */
+  internalCount: number;
+  /** Count of external package dependencies */
+  externalCount: number;
+}
+
+export interface ImpactAnalysisResult {
+  targetFilePath: string;
+  targetSymbolName?: string;
+  /** Files that directly import the target */
+  directDependents: FileDependency[];
+  /** Symbols defined in the target file */
+  affectedSymbols: RepositorySymbol[];
+  /** Total count of files affected */
+  totalAffected: number;
+  /** Whether semantic RAG explanation was used */
+  ragExplanationUsed: boolean;
+  /** Optional AI narrative of impact */
+  explanation?: string;
+  sources?: RAGSourceCitation[];
+}
+
+export interface ArchitectureOverviewResponse {
+  repositoryId: string;
+  repositoryName: string;
+  /** Language distribution: { TypeScript: 45, Python: 12, ... } */
+  languageDistribution: Record<string, number>;
+  totalFiles: number;
+  totalSymbols: number;
+  totalDependencies: number;
+  internalDependencyCount: number;
+  externalDependencyCount: number;
+  /** Top-level directories detected from file paths */
+  topDirectories: Array<{ directory: string; fileCount: number }>;
+  /** Most referenced external packages */
+  topExternalPackages: Array<{ package: string; count: number }>;
+  /** Top symbol kinds: { function: 120, class: 30, ... } */
+  symbolKindDistribution: Record<string, number>;
+}

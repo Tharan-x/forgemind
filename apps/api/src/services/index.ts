@@ -19,3 +19,4 @@ export * from './rag-prompt.service.js';
 export * from './llm/index.js';
 export * from './rag-pipeline.service.js';
 export * from './chat-history.service.js';
+export * from './code-intelligence.service.js';

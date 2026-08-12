@@ -24,6 +24,10 @@ import {
   chatRepositoryRAG,
   getChatHistory,
   clearChatHistory,
+  explainCodeHandler,
+  fileDependencyIntelligenceHandler,
+  impactAnalysisHandler,
+  architectureOverviewHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -123,5 +127,33 @@ router.get('/:repositoryId/chat/history', requireAuth, getChatHistory);
  * Clears all chat sessions and messages for the authenticated user's repository.
  */
 router.delete('/:repositoryId/chat/history', requireAuth, clearChatHistory);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/explain
+ * Explains a file or symbol grounded in retrieved code context.
+ */
+router.post('/:repositoryId/intelligence/explain', requireAuth, explainCodeHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/dependencies
+ * Returns incoming/outgoing dependency intelligence for a specific file.
+ */
+router.get(
+  '/:repositoryId/intelligence/dependencies',
+  requireAuth,
+  fileDependencyIntelligenceHandler,
+);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/impact
+ * Analyzes the blast radius and affected files/symbols of changing a file/symbol.
+ */
+router.post('/:repositoryId/intelligence/impact', requireAuth, impactAnalysisHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture
+ * Returns a structured architecture overview of the repository.
+ */
+router.get('/:repositoryId/intelligence/architecture', requireAuth, architectureOverviewHandler);
 
 export { router as repositoryRouter };

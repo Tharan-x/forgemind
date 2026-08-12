@@ -10,8 +10,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 
 import type {
   AnalysisJob,
+  ArchitectureOverviewResponse,
   ChatMessage,
+  CodeExplainResponse,
   FileDependency,
+  FileDependencyIntelligence,
+  ImpactAnalysisResult,
   RAGSourceCitation,
   RepositoryFile,
   RepositorySymbol,
@@ -30,13 +34,19 @@ import {
   triggerRepositoryAnalysis,
 } from '@/lib/analysis.api';
 import {
+  explainCode,
+  getFileDependencyIntelligence,
+  analyzeImpact,
+  getArchitectureOverview,
+} from '@/lib/intelligence.api';
+import {
   queryRepositoryRAG,
   getRepositoryChatHistory,
   clearRepositoryChatHistory,
 } from '@/lib/rag.api';
 import { getRepository, type Repository } from '@/lib/repository.api';
 
-type TabType = 'overview' | 'files' | 'symbols' | 'dependencies' | 'chat';
+type TabType = 'overview' | 'intelligence' | 'chat' | 'files' | 'symbols' | 'dependencies';
 
 export default function RepositoryDetailPage() {
   const params = useParams();
@@ -165,21 +175,125 @@ export default function RepositoryDetailPage() {
     }
   };
 
+  // ─── Code Intelligence Tab State ───────────────────────────────────────────
+  const [intelSubTab, setIntelSubTab] = useState<
+    'architecture' | 'explain' | 'depintel' | 'impact'
+  >('architecture');
+
+  // Architecture Overview State
+  const [archOverview, setArchOverview] = useState<ArchitectureOverviewResponse | null>(null);
+  const [archLoading, setArchLoading] = useState<boolean>(false);
+  const [archError, setArchError] = useState<string | null>(null);
+
+  // Code Explanation State
+  const [explainFilePath, setExplainFilePath] = useState<string>('');
+  const [explainSymbolName, setExplainSymbolName] = useState<string>('');
+  const [explainResult, setExplainResult] = useState<CodeExplainResponse | null>(null);
+  const [explainLoading, setExplainLoading] = useState<boolean>(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
+
+  // Dependency Intelligence State
+  const [depIntelFilePath, setDepIntelFilePath] = useState<string>('');
+  const [depIntelResult, setDepIntelResult] = useState<FileDependencyIntelligence | null>(null);
+  const [depIntelLoading, setDepIntelLoading] = useState<boolean>(false);
+  const [depIntelError, setDepIntelError] = useState<string | null>(null);
+
+  // Impact Analysis State
+  const [impactFilePath, setImpactFilePath] = useState<string>('');
+  const [impactSymbolName, setImpactSymbolName] = useState<string>('');
+  const [impactIncludeExplanation, setImpactIncludeExplanation] = useState<boolean>(true);
+  const [impactResult, setImpactResult] = useState<ImpactAnalysisResult | null>(null);
+  const [impactLoading, setImpactLoading] = useState<boolean>(false);
+  const [impactError, setImpactError] = useState<string | null>(null);
+
+  // Callbacks
+  const fetchArchOverview = useCallback(async () => {
+    if (!repositoryId) return;
+    setArchLoading(true);
+    setArchError(null);
+    try {
+      const res = await getArchitectureOverview(repositoryId);
+      setArchOverview(res);
+    } catch (err) {
+      setArchError(err instanceof Error ? err.message : 'Failed to load architecture overview.');
+    } finally {
+      setArchLoading(false);
+    }
+  }, [repositoryId]);
+
+  const handleExplainCode = async (overrideFile?: string, overrideSymbol?: string) => {
+    const file = (overrideFile || explainFilePath).trim();
+    const symbol = (overrideSymbol !== undefined ? overrideSymbol : explainSymbolName).trim();
+    if (!file || !repositoryId) return;
+
+    setExplainLoading(true);
+    setExplainError(null);
+    try {
+      const res = await explainCode(repositoryId, {
+        filePath: file,
+        symbolName: symbol || undefined,
+      });
+      setExplainResult(res);
+    } catch (err) {
+      setExplainError(err instanceof Error ? err.message : 'Failed to explain code.');
+    } finally {
+      setExplainLoading(false);
+    }
+  };
+
+  const handleFetchDepIntel = async (overrideFile?: string) => {
+    const file = (overrideFile || depIntelFilePath).trim();
+    if (!file || !repositoryId) return;
+
+    setDepIntelLoading(true);
+    setDepIntelError(null);
+    try {
+      const res = await getFileDependencyIntelligence(repositoryId, file);
+      setDepIntelResult(res);
+    } catch (err) {
+      setDepIntelError(err instanceof Error ? err.message : 'Failed to analyze dependencies.');
+    } finally {
+      setDepIntelLoading(false);
+    }
+  };
+
+  const handleAnalyzeImpact = async (overrideFile?: string, overrideSymbol?: string) => {
+    const file = (overrideFile || impactFilePath).trim();
+    const symbol = (overrideSymbol !== undefined ? overrideSymbol : impactSymbolName).trim();
+    if (!file || !repositoryId) return;
+
+    setImpactLoading(true);
+    setImpactError(null);
+    try {
+      const res = await analyzeImpact(repositoryId, {
+        filePath: file,
+        symbolName: symbol || undefined,
+        includeExplanation: impactIncludeExplanation,
+      });
+      setImpactResult(res);
+    } catch (err) {
+      setImpactError(err instanceof Error ? err.message : 'Failed to analyze impact.');
+    } finally {
+      setImpactLoading(false);
+    }
+  };
+
   // Load Repository Metadata and Latest Analysis Job
   const fetchRepoData = useCallback(async () => {
     if (!repositoryId) return;
     setLoadingRepo(true);
     setError(null);
+
     try {
-      const [repoData, jobData] = await Promise.all([
+      const [repo, job] = await Promise.all([
         getRepository(repositoryId),
         getLatestAnalysisJob(repositoryId).catch(() => null),
       ]);
-      setRepository(repoData);
-      setLatestJob(jobData);
+
+      setRepository(repo);
+      setLatestJob(job);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load repository details.';
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'Failed to load repository.');
     } finally {
       setLoadingRepo(false);
     }
@@ -260,8 +374,10 @@ export default function RepositoryDetailPage() {
       fetchDependencies();
     } else if (activeTab === 'chat') {
       loadChatHistory();
+    } else if (activeTab === 'intelligence') {
+      fetchArchOverview();
     }
-  }, [activeTab, fetchFiles, fetchSymbols, fetchDependencies, loadChatHistory]);
+  }, [activeTab, fetchFiles, fetchSymbols, fetchDependencies, loadChatHistory, fetchArchOverview]);
 
   // Handle Trigger Repository Analysis
   const handleTriggerAnalysis = async () => {
@@ -462,6 +578,7 @@ export default function RepositoryDetailPage() {
             {(
               [
                 { id: 'overview', label: 'Overview', icon: '📊' },
+                { id: 'intelligence', label: 'Code Intelligence', icon: '🧠' },
                 { id: 'chat', label: 'AI Assistant', icon: '🤖' },
                 { id: 'files', label: 'Indexed Files', icon: '📁', count: totalFiles },
                 { id: 'symbols', label: 'AST Symbols', icon: '🧩', count: totalSymbols },
@@ -854,6 +971,635 @@ export default function RepositoryDetailPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: CODE INTELLIGENCE & EXPLAINABILITY */}
+        {activeTab === 'intelligence' && (
+          <div className="space-y-6">
+            {/* Header / Sub-tab Nav */}
+            <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 shrink-0 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center text-lg">
+                    🧠
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-white leading-tight">
+                      Code Intelligence & Explainability
+                    </h2>
+                    <p className="text-xs text-zinc-400 leading-snug">
+                      Deep structural insights, grounded code explanations, dependency intelligence,
+                      and blast radius analysis.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-tab Pills */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800/60">
+                {[
+                  { id: 'architecture', label: 'Architecture Overview', icon: '🏛' },
+                  { id: 'explain', label: 'Explain File / Symbol', icon: '💡' },
+                  { id: 'depintel', label: 'Dependency Intelligence', icon: '🔗' },
+                  { id: 'impact', label: 'Impact Analysis', icon: '🎯' },
+                ].map((sub) => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setIntelSubTab(sub.id as typeof intelSubTab)}
+                    className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition-all flex items-center gap-1.5 ${
+                      intelSubTab === sub.id
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                        : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-700/50'
+                    }`}
+                  >
+                    <span>{sub.icon}</span>
+                    <span>{sub.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SUBTAB 1: ARCHITECTURE OVERVIEW */}
+            {intelSubTab === 'architecture' && (
+              <div className="space-y-6">
+                {archLoading ? (
+                  <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-8 text-center">
+                    <LoadingSpinner size="md" label="Loading repository architecture metrics..." />
+                  </div>
+                ) : archError ? (
+                  <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-xs text-red-300">
+                    ⚠ {archError}
+                  </div>
+                ) : archOverview ? (
+                  <div className="space-y-6">
+                    {/* Summary Cards Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                          Total Files
+                        </span>
+                        <p className="text-2xl font-extrabold text-white">
+                          {archOverview.totalFiles}
+                        </p>
+                      </div>
+                      <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                          AST Symbols
+                        </span>
+                        <p className="text-2xl font-extrabold text-emerald-400">
+                          {archOverview.totalSymbols}
+                        </p>
+                      </div>
+                      <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                          Internal Imports
+                        </span>
+                        <p className="text-2xl font-extrabold text-blue-400">
+                          {archOverview.internalDependencyCount}
+                        </p>
+                      </div>
+                      <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                          External Packages
+                        </span>
+                        <p className="text-2xl font-extrabold text-purple-400">
+                          {archOverview.externalDependencyCount}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Language Distribution */}
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                        <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                          <span>🌐</span> Language Breakdown
+                        </h3>
+                        <div className="space-y-2.5">
+                          {Object.entries(archOverview.languageDistribution)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([lang, count]) => {
+                              const pct = ((count / (archOverview.totalFiles || 1)) * 100).toFixed(
+                                1,
+                              );
+                              return (
+                                <div key={lang} className="space-y-1 text-xs">
+                                  <div className="flex items-center justify-between text-zinc-300">
+                                    <span className="font-semibold">{lang}</span>
+                                    <span className="text-zinc-500 font-mono">
+                                      {count} files ({pct}%)
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                                    <div
+                                      className="bg-emerald-400 h-full rounded-full"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+
+                      {/* Top Directories */}
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                        <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                          <span>📁</span> Major Modules & Directories
+                        </h3>
+                        <div className="space-y-2">
+                          {archOverview.topDirectories.map((dir) => (
+                            <div
+                              key={dir.directory}
+                              className="flex items-center justify-between p-2.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl text-xs"
+                            >
+                              <span className="font-mono text-purple-300 font-medium">
+                                /{dir.directory}
+                              </span>
+                              <span className="text-zinc-500 font-mono text-[11px] bg-zinc-800 px-2 py-0.5 rounded">
+                                {dir.fileCount} file{dir.fileCount !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Top External Packages */}
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                        <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                          <span>📦</span> Most Used External Packages
+                        </h3>
+                        {archOverview.topExternalPackages.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {archOverview.topExternalPackages.map((pkg) => (
+                              <span
+                                key={pkg.package}
+                                className="bg-zinc-950 border border-zinc-800 text-zinc-300 px-2.5 py-1 rounded-xl text-xs font-mono flex items-center gap-1.5"
+                              >
+                                <span className="font-semibold text-purple-400">{pkg.package}</span>
+                                <span className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 py-0.2 rounded-full">
+                                  {pkg.count}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-zinc-500 italic">
+                            No external package dependencies indexed.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Symbol Kind Distribution */}
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                        <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                          <span>🧩</span> Symbol Kinds
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(archOverview.symbolKindDistribution).map(
+                            ([kind, count]) => (
+                              <div
+                                key={kind}
+                                className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs flex items-center justify-between"
+                              >
+                                <span className="capitalize text-zinc-300 font-medium">{kind}</span>
+                                <span className="font-mono text-emerald-400 font-bold">
+                                  {count}
+                                </span>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {/* SUBTAB 2: EXPLAIN CODE */}
+            {intelSubTab === 'explain' && (
+              <div className="space-y-5">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                  <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                    Grounded Code Explanation
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+                        File Path *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. src/services/auth.service.ts"
+                        value={explainFilePath}
+                        onChange={(e) => setExplainFilePath(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+                        Symbol Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. verifyToken or AuthService"
+                        value={explainSymbolName}
+                        onChange={(e) => setExplainSymbolName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => void handleExplainCode()}
+                    disabled={explainLoading || !explainFilePath.trim()}
+                    className="bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-zinc-950 font-bold text-xs h-9 px-4 flex items-center gap-1.5"
+                  >
+                    {explainLoading ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>Synthesizing Explanation...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>💡</span>
+                        <span>Explain Code</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {explainError && (
+                  <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-xs text-red-300">
+                    ⚠ {explainError}
+                  </div>
+                )}
+
+                {explainResult && (
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">
+                          Explanation Result
+                        </span>
+                        <h4 className="text-sm font-bold text-white font-mono">
+                          {explainResult.filePath}
+                          {explainResult.symbolName ? ` → ${explainResult.symbolName}` : ''}
+                        </h4>
+                      </div>
+                      <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded font-mono">
+                        via {explainResult.providerUsed}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed bg-zinc-950/50 border border-zinc-800/70 rounded-xl p-4">
+                      {explainResult.explanation}
+                    </div>
+
+                    {/* Source Citations */}
+                    {explainResult.sources.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                          Source Citations ({explainResult.sources.length})
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {explainResult.sources.map((src, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between font-mono text-[11px]">
+                                <span className="font-bold text-purple-300 truncate max-w-[220px]">
+                                  {src.filePath}
+                                </span>
+                                <span className="text-zinc-500">
+                                  L{src.startLine}–{src.endLine}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px]">
+                                {src.symbolName ? (
+                                  <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded">
+                                    {src.symbolKind}: {src.symbolName}
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-600">Chunk</span>
+                                )}
+                                <span className="text-emerald-400 font-mono">
+                                  {(src.score * 100).toFixed(0)}% match
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUBTAB 3: DEPENDENCY INTELLIGENCE */}
+            {intelSubTab === 'depintel' && (
+              <div className="space-y-5">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                  <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                    File Dependency Intelligence
+                  </h3>
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+                      File Path *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. src/controllers/user.controller.ts"
+                      value={depIntelFilePath}
+                      onChange={(e) => setDepIntelFilePath(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => void handleFetchDepIntel()}
+                    disabled={depIntelLoading || !depIntelFilePath.trim()}
+                    className="bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-zinc-950 font-bold text-xs h-9 px-4 flex items-center gap-1.5"
+                  >
+                    {depIntelLoading ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>Analyzing Imports...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🔗</span>
+                        <span>Analyze Dependencies</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {depIntelError && (
+                  <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-xs text-red-300">
+                    ⚠ {depIntelError}
+                  </div>
+                )}
+
+                {depIntelResult && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Outgoing Imports */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                        <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                          Outgoing Imports ({depIntelResult.imports.length})
+                        </h4>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <span className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
+                            {depIntelResult.internalCount} internal
+                          </span>
+                          <span className="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">
+                            {depIntelResult.externalCount} external
+                          </span>
+                        </div>
+                      </div>
+
+                      {depIntelResult.imports.length > 0 ? (
+                        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                          {depIntelResult.imports.map((dep) => (
+                            <div
+                              key={dep.id}
+                              className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between font-mono text-[11px]">
+                                <span className="font-semibold text-zinc-200 truncate max-w-[240px]">
+                                  {dep.targetPath}
+                                </span>
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                                    dep.isExternal
+                                      ? 'bg-purple-500/20 text-purple-300'
+                                      : 'bg-blue-500/20 text-blue-300'
+                                  }`}
+                                >
+                                  {dep.isExternal ? 'External' : 'Internal'}
+                                </span>
+                              </div>
+                              {dep.importedSymbols.length > 0 && (
+                                <div className="text-[10px] text-zinc-500 font-mono truncate">
+                                  symbols: {dep.importedSymbols.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-zinc-500 italic py-4">
+                          No outgoing imports detected.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Incoming Imported By */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                        <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                          Imported By ({depIntelResult.importedBy.length})
+                        </h4>
+                        <span className="text-[10px] text-zinc-500">Dependent files</span>
+                      </div>
+
+                      {depIntelResult.importedBy.length > 0 ? (
+                        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                          {depIntelResult.importedBy.map((dep) => (
+                            <div
+                              key={dep.id}
+                              className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono flex items-center justify-between"
+                            >
+                              <span className="text-emerald-300 truncate max-w-[240px]">
+                                {dep.sourcePath}
+                              </span>
+                              <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
+                                imports this
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-zinc-500 italic py-4">
+                          No indexed files import this file directly.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUBTAB 4: IMPACT ANALYSIS */}
+            {intelSubTab === 'impact' && (
+              <div className="space-y-5">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                  <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                    Blast Radius & Impact Analysis
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+                        Target File Path *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. src/services/user.service.ts"
+                        value={impactFilePath}
+                        onChange={(e) => setImpactFilePath(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-1">
+                        Symbol Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. createUser"
+                        value={impactSymbolName}
+                        onChange={(e) => setImpactSymbolName(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="impact-narrative"
+                      checked={impactIncludeExplanation}
+                      onChange={(e) => setImpactIncludeExplanation(e.target.checked)}
+                      className="rounded border-zinc-700 bg-zinc-950 text-purple-500 focus:ring-purple-500"
+                    />
+                    <label htmlFor="impact-narrative" className="text-xs text-zinc-400">
+                      Generate AI impact narrative via RAG retrieval
+                    </label>
+                  </div>
+
+                  <Button
+                    onClick={() => void handleAnalyzeImpact()}
+                    disabled={impactLoading || !impactFilePath.trim()}
+                    className="bg-purple-500 hover:bg-purple-600 disabled:opacity-40 text-zinc-950 font-bold text-xs h-9 px-4 flex items-center gap-1.5"
+                  >
+                    {impactLoading ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>Analyzing Blast Radius...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🎯</span>
+                        <span>Analyze Impact</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {impactError && (
+                  <div className="bg-red-950/30 border border-red-800/50 rounded-xl p-4 text-xs text-red-300">
+                    ⚠ {impactError}
+                  </div>
+                )}
+
+                {impactResult && (
+                  <div className="space-y-6">
+                    {/* Blast Radius Summary Card */}
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">
+                            Blast Radius Summary
+                          </span>
+                          <h4 className="text-sm font-bold text-white font-mono">
+                            {impactResult.targetFilePath}
+                            {impactResult.targetSymbolName
+                              ? ` → ${impactResult.targetSymbolName}`
+                              : ''}
+                          </h4>
+                        </div>
+                        <span className="text-xs bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full font-bold">
+                          {impactResult.totalAffected} dependent file
+                          {impactResult.totalAffected !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      {/* AI Impact Narrative */}
+                      {impactResult.explanation && (
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                            AI Impact Narrative
+                          </span>
+                          <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed bg-zinc-950/50 border border-zinc-800/70 rounded-xl p-4">
+                            {impactResult.explanation}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Direct Dependent Files */}
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+                        <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                          Directly Affected Files ({impactResult.directDependents.length})
+                        </h4>
+                        {impactResult.directDependents.length > 0 ? (
+                          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                            {impactResult.directDependents.map((dep) => (
+                              <div
+                                key={dep.id}
+                                className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono text-emerald-300 flex items-center justify-between"
+                              >
+                                <span className="truncate max-w-[240px]">{dep.sourcePath}</span>
+                                <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
+                                  imports target
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-zinc-500 italic py-4">
+                            No direct dependent files detected.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Defined Symbols in Target File */}
+                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-3">
+                        <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                          Symbols in Target File ({impactResult.affectedSymbols.length})
+                        </h4>
+                        {impactResult.affectedSymbols.length > 0 ? (
+                          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                            {impactResult.affectedSymbols.map((sym) => (
+                              <div
+                                key={sym.id}
+                                className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono flex items-center justify-between"
+                              >
+                                <span className="text-zinc-200 font-semibold">{sym.name}</span>
+                                <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded capitalize">
+                                  {sym.kind}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-zinc-500 italic py-4">
+                            No symbols extracted for this file.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
