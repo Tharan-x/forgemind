@@ -68,16 +68,16 @@ const SESSION_ID_1 = makeUuid(801);
 
 // ── In-Memory Database Stores ─────────────────────────────────────────────────
 
-const userStore = new Map<string, any>();
-const ghCredStore = new Map<string, any>();
-const repoStore = new Map<string, any>();
-const fileStore = new Map<string, any>();
-const symbolStore = new Map<string, any>();
-const depStore = new Map<string, any>();
-const chunkStore = new Map<string, any>();
-const jobStore = new Map<string, any>();
-const sessionStore = new Map<string, any>();
-const messageStore = new Map<string, any>();
+const userStore = new Map<string, Record<string, unknown>>();
+const ghCredStore = new Map<string, Record<string, unknown>>();
+const repoStore = new Map<string, Record<string, unknown>>();
+const fileStore = new Map<string, Record<string, unknown>>();
+const symbolStore = new Map<string, Record<string, unknown>>();
+const depStore = new Map<string, Record<string, unknown>>();
+const chunkStore = new Map<string, Record<string, unknown>>();
+const jobStore = new Map<string, Record<string, unknown>>();
+const sessionStore = new Map<string, Record<string, unknown>>();
+const messageStore = new Map<string, Record<string, unknown>>();
 
 function resetAllStores(): void {
   userStore.clear();
@@ -124,7 +124,7 @@ ghCredStore.set(USER_ID_1, {
 
 // ── Intercept Supabase Auth ────────────────────────────────────────────────────
 
-supabase.auth.getUser = async (token: string): Promise<any> => {
+supabase.auth.getUser = (async (token: string) => {
   if (token === TOKEN_USER_1) {
     return {
       data: {
@@ -153,12 +153,15 @@ supabase.auth.getUser = async (token: string): Promise<any> => {
     data: { user: null },
     error: new Error('Invalid authentication token'),
   };
-};
+}) as unknown as typeof supabase.auth.getUser;
 
 // ── Intercept GitHub API via globalThis.fetch ──────────────────────────────────
 
 const originalFetch = globalThis.fetch;
-globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => {
+globalThis.fetch = async (
+  input: Parameters<typeof fetch>[0],
+  init?: RequestInit,
+): Promise<Response> => {
   const urlStr = typeof input === 'string' ? input : input.toString();
   if (urlStr.includes('api.github.com')) {
     if (urlStr.endsWith('/user')) {
@@ -233,29 +236,40 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
 (
   PrismaClient.prototype as unknown as { _request: (params: unknown) => Promise<unknown> }
 )._request = async function (params: unknown): Promise<unknown> {
-  const { clientMethod, args } = params as {
-    clientMethod?: string;
-    args: Record<string, any>;
-  };
+  const { clientMethod, args } =
+    (params as {
+      clientMethod?: string;
+      args?: Record<string, unknown>;
+    }) || {};
+
+  const where = (args?.['where'] as Record<string, unknown> | undefined) || {};
+  const data = (args?.['data'] as Record<string, unknown> | undefined) || {};
+  const create = (args?.['create'] as Record<string, unknown> | undefined) || {};
+  const update = (args?.['update'] as Record<string, unknown> | undefined) || {};
+  const include = (args?.['include'] as Record<string, unknown> | undefined) || {};
 
   // ── user ──
   if (clientMethod === 'user.findFirst') {
-    const email = args?.where?.email || args?.where?.OR?.find((o: any) => o.email)?.email;
-    const id = args?.where?.id || args?.where?.OR?.find((o: any) => o.id)?.id;
+    const orList = where['OR'] as Array<Record<string, unknown>> | undefined;
+    const email =
+      (where['email'] as string | undefined) ||
+      (orList?.find((o) => typeof o['email'] === 'string')?.['email'] as string | undefined);
+    const id =
+      (where['id'] as string | undefined) ||
+      (orList?.find((o) => typeof o['id'] === 'string')?.['id'] as string | undefined);
     const results = Array.from(userStore.values());
-    return results.find((u) => u.id === id || u.email === email) ?? null;
+    return results.find((u) => u['id'] === id || u['email'] === email) ?? null;
   }
   if (clientMethod === 'user.findUnique') {
-    return userStore.get(args?.where?.id) ?? null;
+    return userStore.get(where['id'] as string) ?? null;
   }
   if (clientMethod === 'user.create') {
-    const data = args['data'];
-    const id = data.id || makeUuid(Math.floor(Math.random() * 1000));
+    const id = (data['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
     const record = {
       id,
-      email: data.email,
-      name: data.name || null,
-      avatarUrl: data.avatarUrl || null,
+      email: data['email'],
+      name: data['name'] || null,
+      avatarUrl: data['avatarUrl'] || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -265,16 +279,20 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
 
   // ── userGitHubCredential ──
   if (clientMethod === 'userGitHubCredential.findUnique') {
-    return ghCredStore.get(args?.where?.userId) ?? null;
+    return ghCredStore.get(where['userId'] as string) ?? null;
   }
   if (clientMethod === 'userGitHubCredential.upsert') {
-    const userId = args.where.userId;
+    const userId = where['userId'] as string;
     const record = {
       id: makeUuid(Math.floor(Math.random() * 1000)),
       userId,
-      encryptedToken: args.create?.encryptedToken || args.update?.encryptedToken || 'token',
-      githubUsername: args.create?.githubUsername || args.update?.githubUsername || 'username',
-      githubAvatarUrl: args.create?.githubAvatarUrl || args.update?.githubAvatarUrl || 'avatar',
+      encryptedToken: (create['encryptedToken'] || update['encryptedToken'] || 'token') as string,
+      githubUsername: (create['githubUsername'] ||
+        update['githubUsername'] ||
+        'username') as string,
+      githubAvatarUrl: (create['githubAvatarUrl'] ||
+        update['githubAvatarUrl'] ||
+        'avatar') as string,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -285,7 +303,7 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
     clientMethod === 'userGitHubCredential.delete' ||
     clientMethod === 'userGitHubCredential.deleteMany'
   ) {
-    const userId = args?.where?.userId;
+    const userId = where['userId'] as string | undefined;
     if (userId) ghCredStore.delete(userId);
     return { count: 1 };
   }
@@ -293,34 +311,33 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
   // ── repository ──
   if (clientMethod === 'repository.findMany') {
     let results = Array.from(repoStore.values());
-    if (args?.where?.userId) results = results.filter((r) => r.userId === args.where.userId);
+    if (where['userId']) results = results.filter((r) => r['userId'] === where['userId']);
     return results;
   }
   if (clientMethod === 'repository.findUnique' || clientMethod === 'repository.findFirst') {
-    if (args?.where?.id) return repoStore.get(args.where.id) ?? null;
-    if (args?.where?.githubId) {
+    if (where['id']) return repoStore.get(where['id'] as string) ?? null;
+    if (where['githubId']) {
       const results = Array.from(repoStore.values());
-      return results.find((r) => r.githubId === args.where.githubId) ?? null;
+      return results.find((r) => r['githubId'] === where['githubId']) ?? null;
     }
     return null;
   }
   if (clientMethod === 'repository.create') {
-    const data = args['data'];
-    const id = data.id || makeUuid(Math.floor(Math.random() * 1000));
+    const id = (data['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
     const record = {
       id,
-      userId: data.userId,
-      githubId: data.githubId,
-      name: data.name,
-      fullName: data.fullName,
-      owner: data.owner,
-      private: data.private ?? false,
-      defaultBranch: data.defaultBranch || 'main',
-      language: data.language || null,
-      description: data.description || null,
-      stars: data.stars || 0,
-      forks: data.forks || 0,
-      htmlUrl: data.htmlUrl,
+      userId: data['userId'],
+      githubId: data['githubId'],
+      name: data['name'],
+      fullName: data['fullName'],
+      owner: data['owner'],
+      private: data['private'] ?? false,
+      defaultBranch: data['defaultBranch'] || 'main',
+      language: data['language'] || null,
+      description: data['description'] || null,
+      stars: data['stars'] || 0,
+      forks: data['forks'] || 0,
+      htmlUrl: data['htmlUrl'],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -328,7 +345,8 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
     return record;
   }
   if (clientMethod === 'repository.delete') {
-    const id = args?.where?.id;
+    const id = where['id'] as string | undefined;
+    if (!id) return null;
     const record = repoStore.get(id);
     if (record) repoStore.delete(id);
     return record || null;
@@ -337,20 +355,20 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
   // ── repositoryFile ──
   if (clientMethod === 'repositoryFile.findMany') {
     let results = Array.from(fileStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((f) => f.repositoryId === args.where.repositoryId);
-    if (args?.where?.id) results = results.filter((f) => f.id === args.where.id);
-    if (args?.take) results = results.slice(0, args.take);
+    if (where['repositoryId'])
+      results = results.filter((f) => f['repositoryId'] === where['repositoryId']);
+    if (where['id']) results = results.filter((f) => f['id'] === where['id']);
+    if (args?.['take']) results = results.slice(0, Number(args['take']));
     return results;
   }
   if (clientMethod === 'repositoryFile.findUnique') {
     const results = Array.from(fileStore.values());
-    if (args?.where?.repositoryId_path) {
+    const repoIdPath = where['repositoryId_path'] as
+      { repositoryId: string; path: string } | undefined;
+    if (repoIdPath) {
       return (
         results.find(
-          (f) =>
-            f.repositoryId === args.where.repositoryId_path.repositoryId &&
-            f.path === args.where.repositoryId_path.path,
+          (f) => f['repositoryId'] === repoIdPath.repositoryId && f['path'] === repoIdPath.path,
         ) ?? null
       );
     }
@@ -358,21 +376,22 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
   }
   if (clientMethod === 'repositoryFile.count') {
     let results = Array.from(fileStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((f) => f.repositoryId === args.where.repositoryId);
+    if (where['repositoryId'])
+      results = results.filter((f) => f['repositoryId'] === where['repositoryId']);
     return results.length;
   }
   if (clientMethod === 'repositoryFile.createMany') {
-    for (const f of args.data || []) {
-      const id = f.id || makeUuid(Math.floor(Math.random() * 10000));
+    const dataList = (args?.['data'] as Array<Record<string, unknown>> | undefined) || [];
+    for (const f of dataList) {
+      const id = (f['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 10000));
       fileStore.set(id, { ...f, id, createdAt: new Date(), updatedAt: new Date() });
     }
-    return { count: args.data?.length || 0 };
+    return { count: dataList.length };
   }
   if (clientMethod === 'repositoryFile.deleteMany') {
-    if (args?.where?.repositoryId) {
+    if (where['repositoryId']) {
       for (const [id, f] of Array.from(fileStore.entries())) {
-        if (f.repositoryId === args.where.repositoryId) fileStore.delete(id);
+        if (f['repositoryId'] === where['repositoryId']) fileStore.delete(id);
       }
     }
     return { count: 1 };
@@ -381,90 +400,91 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
   // ── repositorySymbol ──
   if (clientMethod === 'repositorySymbol.findMany') {
     let results = Array.from(symbolStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((s) => s.repositoryId === args.where.repositoryId);
-    if (args?.where?.fileId) results = results.filter((s) => s.fileId === args.where.fileId);
-    if (args?.where?.filePath?.contains) {
-      const match = args.where.filePath.contains.toLowerCase();
-      results = results.filter((s) => s.filePath.toLowerCase().includes(match));
+    if (where['repositoryId'])
+      results = results.filter((s) => s['repositoryId'] === where['repositoryId']);
+    if (where['fileId']) results = results.filter((s) => s['fileId'] === where['fileId']);
+    const filePathFilter = where['filePath'] as { contains?: string } | undefined;
+    if (filePathFilter?.contains) {
+      const match = filePathFilter.contains.toLowerCase();
+      results = results.filter((s) => String(s['filePath']).toLowerCase().includes(match));
     }
     return results;
   }
   if (clientMethod === 'repositorySymbol.count') {
     let results = Array.from(symbolStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((s) => s.repositoryId === args.where.repositoryId);
+    if (where['repositoryId'])
+      results = results.filter((s) => s['repositoryId'] === where['repositoryId']);
     return results.length;
   }
 
   // ── fileDependency ──
   if (clientMethod === 'fileDependency.findMany') {
     let results = Array.from(depStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((d) => d.repositoryId === args.where.repositoryId);
-    if (args?.where?.targetPath?.contains) {
-      const match = args.where.targetPath.contains.toLowerCase();
-      results = results.filter((d) => d.targetPath.toLowerCase().includes(match));
+    if (where['repositoryId'])
+      results = results.filter((d) => d['repositoryId'] === where['repositoryId']);
+    const targetPathFilter = where['targetPath'] as { contains?: string } | undefined;
+    if (targetPathFilter?.contains) {
+      const match = targetPathFilter.contains.toLowerCase();
+      results = results.filter((d) => String(d['targetPath']).toLowerCase().includes(match));
     }
-    if (args?.where?.sourcePath)
-      results = results.filter((d) => d.sourcePath === args.where.sourcePath);
+    if (where['sourcePath'])
+      results = results.filter((d) => d['sourcePath'] === where['sourcePath']);
     return results;
   }
   if (clientMethod === 'fileDependency.count') {
     let results = Array.from(depStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((d) => d.repositoryId === args.where.repositoryId);
+    if (where['repositoryId'])
+      results = results.filter((d) => d['repositoryId'] === where['repositoryId']);
     return results.length;
   }
 
   // ── codeChunk ──
   if (clientMethod === 'codeChunk.findMany') {
     let results = Array.from(chunkStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((c) => c.repositoryId === args.where.repositoryId);
-    if (args?.where?.fileId) results = results.filter((c) => c.fileId === args.where.fileId);
+    if (where['repositoryId'])
+      results = results.filter((c) => c['repositoryId'] === where['repositoryId']);
+    if (where['fileId']) results = results.filter((c) => c['fileId'] === where['fileId']);
     return results;
   }
   if (clientMethod === 'codeChunk.count') {
     let results = Array.from(chunkStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((c) => c.repositoryId === args.where.repositoryId);
+    if (where['repositoryId'])
+      results = results.filter((c) => c['repositoryId'] === where['repositoryId']);
     return results.length;
   }
   if (clientMethod === 'codeChunk.groupBy') {
     let results = Array.from(chunkStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((c) => c.repositoryId === args.where.repositoryId);
-    const uniqueFileIds = Array.from(new Set(results.map((c) => c.fileId)));
+    if (where['repositoryId'])
+      results = results.filter((c) => c['repositoryId'] === where['repositoryId']);
+    const uniqueFileIds = Array.from(new Set(results.map((c) => c['fileId'])));
     return uniqueFileIds.map((fileId) => ({ fileId }));
   }
 
   // ── analysisJob ──
   if (clientMethod === 'analysisJob.findMany') {
     let results = Array.from(jobStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((j) => j.repositoryId === args.where.repositoryId);
+    if (where['repositoryId'])
+      results = results.filter((j) => j['repositoryId'] === where['repositoryId']);
     return results;
   }
   if (clientMethod === 'analysisJob.findFirst') {
     let results = Array.from(jobStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((j) => j.repositoryId === args.where.repositoryId);
+    if (where['repositoryId'])
+      results = results.filter((j) => j['repositoryId'] === where['repositoryId']);
     return results[0] ?? null;
   }
   if (clientMethod === 'analysisJob.create') {
-    const data = args['data'];
-    const id = data.id || makeUuid(Math.floor(Math.random() * 1000));
+    const id = (data['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
     const record = {
       id,
-      repositoryId: data.repositoryId,
-      status: data.status || 'pending',
-      commitHash: data.commitHash || 'sha-123',
-      fileCount: data.fileCount || 0,
-      symbolCount: data.symbolCount || 0,
-      dependencyCount: data.dependencyCount || 0,
-      chunkCount: data.chunkCount || 0,
-      errorMessage: data.errorMessage || null,
+      repositoryId: data['repositoryId'],
+      status: data['status'] || 'pending',
+      commitHash: data['commitHash'] || 'sha-123',
+      fileCount: data['fileCount'] || 0,
+      symbolCount: data['symbolCount'] || 0,
+      dependencyCount: data['dependencyCount'] || 0,
+      chunkCount: data['chunkCount'] || 0,
+      errorMessage: data['errorMessage'] || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -472,10 +492,11 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
     return record;
   }
   if (clientMethod === 'analysisJob.update') {
-    const id = args?.where?.id;
+    const id = where['id'] as string | undefined;
+    if (!id) return null;
     const existing = jobStore.get(id);
     if (existing) {
-      const updated = { ...existing, ...args.data, updatedAt: new Date() };
+      const updated = { ...existing, ...data, updatedAt: new Date() };
       jobStore.set(id, updated);
       return updated;
     }
@@ -485,24 +506,25 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
   // ── chatSession ──
   if (clientMethod === 'chatSession.findFirst') {
     let results = Array.from(sessionStore.values());
-    if (args?.where?.repositoryId)
-      results = results.filter((s) => s.repositoryId === args.where.repositoryId);
-    if (args?.where?.userId) results = results.filter((s) => s.userId === args.where.userId);
+    if (where['repositoryId'])
+      results = results.filter((s) => s['repositoryId'] === where['repositoryId']);
+    if (where['userId']) results = results.filter((s) => s['userId'] === where['userId']);
     const session = results[0] ?? null;
-    if (session && args?.include?.messages) {
-      const msgs = Array.from(messageStore.values()).filter((m) => m.sessionId === session.id);
+    if (session && include['messages']) {
+      const msgs = Array.from(messageStore.values()).filter(
+        (m) => m['sessionId'] === session['id'],
+      );
       return { ...session, messages: msgs };
     }
     return session;
   }
   if (clientMethod === 'chatSession.create') {
-    const data = args['data'];
-    const id = data.id || makeUuid(Math.floor(Math.random() * 1000));
+    const id = (data['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
     const record = {
       id,
-      repositoryId: data.repositoryId,
-      userId: data.userId,
-      title: data.title || 'New Chat',
+      repositoryId: data['repositoryId'],
+      userId: data['userId'],
+      title: data['title'] || 'New Chat',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -510,9 +532,9 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
     return record;
   }
   if (clientMethod === 'chatSession.deleteMany') {
-    if (args?.where?.repositoryId) {
+    if (where['repositoryId']) {
       for (const [id, s] of Array.from(sessionStore.entries())) {
-        if (s.repositoryId === args.where.repositoryId) sessionStore.delete(id);
+        if (s['repositoryId'] === where['repositoryId']) sessionStore.delete(id);
       }
     }
     return { count: 1 };
@@ -521,21 +543,19 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
   // ── chatMessage ──
   if (clientMethod === 'chatMessage.findMany') {
     let results = Array.from(messageStore.values());
-    if (args?.where?.sessionId)
-      results = results.filter((m) => m.sessionId === args.where.sessionId);
+    if (where['sessionId']) results = results.filter((m) => m['sessionId'] === where['sessionId']);
     return results;
   }
   if (clientMethod === 'chatMessage.create') {
-    const data = args['data'];
-    const id = data.id || makeUuid(Math.floor(Math.random() * 1000));
+    const id = (data['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
     const record = {
       id,
-      sessionId: data.sessionId,
-      sender: data.sender,
-      text: data.text || data.content,
-      content: data.content || data.text,
-      metadata: data.metadata || {},
-      sources: data.sources || [],
+      sessionId: data['sessionId'],
+      sender: data['sender'],
+      text: data['text'] || data['content'],
+      content: data['content'] || data['text'],
+      metadata: data['metadata'] || {},
+      sources: data['sources'] || [],
       createdAt: new Date(),
     };
     messageStore.set(id, record);
@@ -552,10 +572,15 @@ globalThis.fetch = async (input: any, init?: RequestInit): Promise<Response> => 
 // Intercept Raw Query for Vector Search and Metrics
 (
   PrismaClient.prototype as unknown as {
-    $queryRaw: (query: any, ...args: any[]) => Promise<unknown>;
+    $queryRaw: (query: unknown, ...args: unknown[]) => Promise<unknown>;
   }
-).$queryRaw = async function (query: any): Promise<unknown> {
-  const queryStr = String(query?.strings || query || '');
+).$queryRaw = async function (query: unknown): Promise<unknown> {
+  const queryObj = query as { strings?: string[] } | string | undefined;
+  const queryStr = String(
+    typeof queryObj === 'object' && queryObj && 'strings' in queryObj
+      ? queryObj.strings
+      : query || '',
+  );
   if (queryStr.includes('COUNT(*)')) {
     return [{ count: BigInt(chunkStore.size) }];
   }
@@ -759,11 +784,41 @@ function seedInitialData(): void {
   });
 }
 
+interface ApiResponsePayload {
+  success: boolean;
+  error: { code: string; message: string };
+  data: Record<string, unknown> & {
+    id: string;
+    synced: boolean;
+    success: boolean;
+    connection: { connected: boolean; githubUsername: string | null };
+  };
+  repository: Record<string, unknown> & { id: string };
+  repositories: Array<Record<string, unknown>>;
+  job: Record<string, unknown> & { id: string };
+  jobs: Array<Record<string, unknown>>;
+  files: Array<Record<string, unknown>>;
+  symbols: Array<Record<string, unknown>>;
+  dependencies: Array<Record<string, unknown>>;
+  chunks: Array<Record<string, unknown>>;
+  results: Array<Record<string, unknown>>;
+  status: Record<string, unknown>;
+  session: Record<string, unknown>;
+  messages: Array<Record<string, unknown>>;
+  answer: string;
+  explanation: string;
+  query: string;
+  filePath: string;
+  targetFilePath: string;
+  totalFiles: number;
+  result: Record<string, unknown> & { total: number };
+}
+
 async function apiRequest(
   method: string,
   path: string,
-  options: { token?: string; body?: any } = {},
-): Promise<{ status: number; body: any }> {
+  options: { token?: string; body?: unknown } = {},
+): Promise<{ status: number; body: ApiResponsePayload }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -778,11 +833,11 @@ async function apiRequest(
   });
 
   const text = await res.text();
-  let jsonBody = {};
+  let jsonBody = {} as ApiResponsePayload;
   try {
-    jsonBody = JSON.parse(text);
+    jsonBody = JSON.parse(text) as ApiResponsePayload;
   } catch {
-    jsonBody = { raw: text };
+    jsonBody = { raw: text } as unknown as ApiResponsePayload;
   }
 
   return { status: res.status, body: jsonBody };
