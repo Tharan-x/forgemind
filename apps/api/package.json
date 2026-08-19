@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",
-    "test": "tsx src/services/repository-service-sync.test.ts && tsx src/services/rag-pipeline.test.ts",
+    "test": "tsx src/services/repository-service-sync.test.ts && tsx src/services/repository-analysis-acquisition.test.ts && tsx src/services/rag-pipeline.test.ts",
     "clean": "rimraf dist",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
