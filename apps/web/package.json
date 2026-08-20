@@ -10,7 +10,7 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",
-    "test": "tsx --env-file=.env.test src/lib/web-client-api.test.ts",
+    "test": "tsx --env-file=.env.test src/lib/web-client-api.test.ts && tsx --env-file=.env.test src/context/web-context-guards.test.ts",
     "clean": "rimraf .next dist"
   },
   "dependencies": {
