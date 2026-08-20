@@ -7,10 +7,19 @@ import crypto from 'node:crypto';
 const ALGORITHM = 'aes-256-gcm';
 
 function getEncryptionKey(): Buffer {
-  const secret =
-    process.env['ENCRYPTION_SECRET'] ||
-    process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
-    'forgemind-default-secret-key-for-encryption-32-bytes';
+  const secret = process.env['ENCRYPTION_SECRET'] || process.env['SUPABASE_SERVICE_ROLE_KEY'];
+
+  if (!secret) {
+    if (process.env['NODE_ENV'] === 'test') {
+      return crypto
+        .createHash('sha256')
+        .update('forgemind-test-secret-key-for-encryption-32-bytes')
+        .digest();
+    }
+    throw new Error(
+      'ENCRYPTION_SECRET or SUPABASE_SERVICE_ROLE_KEY environment variable is required for encryption.',
+    );
+  }
 
   return crypto.createHash('sha256').update(secret).digest();
 }

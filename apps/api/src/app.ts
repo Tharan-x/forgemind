@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 import { env } from './config/env.js';
+import { globalRateLimiter } from './lib/rate-limiter.js';
 import { router } from './routes/index.js';
 
 // ─── App Factory ─────────────────────────────────────────────────────────────
@@ -13,24 +14,32 @@ export function createApp(): express.Application {
 
   // ── Security middleware ──────────────────────────────────────────────────
   app.use(helmet());
+
+  const allowedOrigins = env.isDevelopment
+    ? ['http://localhost:3000', 'http://127.0.0.1:3000']
+    : (process.env['ALLOWED_ORIGINS'] ?? '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0);
+
   app.use(
     cors({
-      origin: env.isDevelopment
-        ? ['http://localhost:3000', 'http://127.0.0.1:3000']
-        : (process.env['ALLOWED_ORIGINS'] ?? '').split(','),
+      origin: allowedOrigins.length > 0 ? allowedOrigins : false,
       credentials: true,
     }),
   );
 
   // ── Logging ──────────────────────────────────────────────────────────────
-  app.use(morgan(env.isDevelopment ? 'dev' : 'combined'));
+  if (!env.isTest) {
+    app.use(morgan(env.isDevelopment ? 'dev' : 'combined'));
+  }
 
   // ── Body parsing ─────────────────────────────────────────────────────────
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  // ── Routes ───────────────────────────────────────────────────────────────
-  app.use('/api/v1', router);
+  // ── Rate Limiting & Routes ───────────────────────────────────────────────
+  app.use('/api/v1', globalRateLimiter, router);
 
   // ── 404 fallback ─────────────────────────────────────────────────────────
   app.use((_req, res) => {
@@ -46,13 +55,15 @@ export function createApp(): express.Application {
   // ── Global error handler ─────────────────────────────────────────────────
   app.use(
     (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-      // eslint-disable-next-line no-console
-      console.error('[Error]', err.message, err.stack);
+      if (env.isDevelopment) {
+        // eslint-disable-next-line no-console
+        console.error('[Error]', err.message, err.stack);
+      }
       res.status(500).json({
         success: false,
         error: {
           code: 'INTERNAL_SERVER_ERROR',
-          message: env.isDevelopment ? err.message : 'An unexpected error occurred.',
+          message: env.isDevelopment || env.isTest ? err.message : 'An unexpected error occurred.',
         },
       });
     },

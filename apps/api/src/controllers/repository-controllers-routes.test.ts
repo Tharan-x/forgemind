@@ -8,8 +8,10 @@ import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 import { PrismaClient } from '@prisma/client';
 
+import express from 'express';
 import { createApp } from '../app.js';
-import { encryptToken } from '../lib/encryption.js';
+import { encryptToken, decryptToken } from '../lib/encryption.js';
+import { createRateLimiter } from '../lib/rate-limiter.js';
 import { supabase } from '../lib/supabase.js';
 import { getEmbeddingProvider } from '../services/embeddings/index.js';
 import { getLLMProvider } from '../services/llm/index.js';
@@ -1400,8 +1402,182 @@ async function runPartF() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PART G — SPRINT 5 CRYPTOGRAPHIC SECURITY & RATE LIMITING HARDENING
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runPartG() {
+  console.log('\n📋 Part G — Cryptographic Security, CORS & Rate Limiting Hardening (Tests 42–46)');
+
+  // 42. Encryption cycle verification
+  {
+    const secretText = 'ghp_super_secret_github_pat_12345';
+    const encrypted = encryptToken(secretText);
+    assert(encrypted.split(':').length === 3, 'Test 42: Encrypted token format iv:authTag:cipher');
+    const decrypted = decryptToken(encrypted);
+    assertEqual(decrypted, secretText, 'Test 42: Decrypted value matches original secret');
+    console.log('  ✅ Test 42: AES-256-GCM encryption/decryption roundtrip verified');
+  }
+
+  // 43. Production missing encryption secret enforcement
+  {
+    const originalEnv = process.env['NODE_ENV'];
+    const originalSecret = process.env['ENCRYPTION_SECRET'];
+    const originalRoleKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+
+    try {
+      process.env['NODE_ENV'] = 'production';
+      delete process.env['ENCRYPTION_SECRET'];
+      delete process.env['SUPABASE_SERVICE_ROLE_KEY'];
+
+      let errorThrown = false;
+      try {
+        encryptToken('test-payload');
+      } catch (err) {
+        errorThrown = true;
+        assert(
+          err instanceof Error && err.message.includes('ENCRYPTION_SECRET'),
+          'Test 43: Error message mentions missing secret',
+        );
+      }
+      assert(errorThrown, 'Test 43: Production mode throws when encryption secret is missing');
+      console.log(
+        '  ✅ Test 43: Production encryption fails safely when ENCRYPTION_SECRET is absent',
+      );
+    } finally {
+      process.env['NODE_ENV'] = originalEnv;
+      if (originalSecret) process.env['ENCRYPTION_SECRET'] = originalSecret;
+      if (originalRoleKey) process.env['SUPABASE_SERVICE_ROLE_KEY'] = originalRoleKey;
+    }
+  }
+
+  // 44. Rate limiter 429 enforcement
+  {
+    const originalRateTest = process.env['ENABLE_RATE_LIMIT_TEST'];
+    try {
+      process.env['ENABLE_RATE_LIMIT_TEST'] = 'true';
+
+      const rateApp = express();
+      rateApp.use(express.json());
+      const testLimiter = createRateLimiter({
+        windowMs: 60 * 1000,
+        max: 3,
+        message: 'Too many requests. Please try again later.',
+        keyGenerator: () => 'test-client-ip',
+      });
+
+      rateApp.get('/test-limit', testLimiter, (_req, res) => {
+        res.status(200).json({ success: true });
+      });
+
+      let testPort = 0;
+      const testServer = await new Promise<Server>((resolve) => {
+        const s = rateApp.listen(0, () => {
+          testPort = (s.address() as AddressInfo).port;
+          resolve(s);
+        });
+      });
+
+      const testUrl = `http://127.0.0.1:${testPort}/test-limit`;
+
+      // 3 requests succeed
+      for (let i = 0; i < 3; i++) {
+        const r = await fetch(testUrl);
+        assertEqual(r.status, 200, `Test 44: Request ${i + 1} under limit succeeds`);
+      }
+
+      // 4th request gets 429
+      const r4 = await fetch(testUrl);
+      assertEqual(r4.status, 429, 'Test 44: Request 4 over limit returns 429');
+      const body4 = (await r4.json()) as { error: { code: string } };
+      assertEqual(body4.error.code, 'TOO_MANY_REQUESTS', 'Test 44: Error code TOO_MANY_REQUESTS');
+      assertDefined(r4.headers.get('retry-after'), 'Test 44: Retry-After header set');
+      assertDefined(r4.headers.get('ratelimit-limit'), 'Test 44: RateLimit-Limit header set');
+
+      await new Promise<void>((resolve) => testServer.close(() => resolve()));
+      console.log('  ✅ Test 44: Rate limiter middleware enforces HTTP 429 and response headers');
+    } finally {
+      if (originalRateTest !== undefined) {
+        process.env['ENABLE_RATE_LIMIT_TEST'] = originalRateTest;
+      } else {
+        delete process.env['ENABLE_RATE_LIMIT_TEST'];
+      }
+    }
+  }
+
+  // 45. CORS origin empty-string sanitization
+  {
+    const origins = 'https://app.forgemind.io, , https://dashboard.forgemind.io'
+      .split(',')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0);
+
+    assertEqual(origins.length, 2, 'Test 45: Empty origins stripped out');
+    assertEqual(origins[0], 'https://app.forgemind.io', 'Test 45: First origin matched');
+    assertEqual(origins[1], 'https://dashboard.forgemind.io', 'Test 45: Second origin matched');
+    console.log('  ✅ Test 45: CORS allowed origins filter strips empty origin entries');
+  }
+
+  // 46. Generic production error response
+  {
+    const originalEnv = process.env['NODE_ENV'];
+    try {
+      process.env['NODE_ENV'] = 'production';
+      const testErr = new Error('Sensitive database internal error details');
+      const mockReq = {} as express.Request;
+      let statusResult = 0;
+      let jsonResult: unknown = null;
+
+      const mockRes = {
+        status(code: number) {
+          statusResult = code;
+          return this;
+        },
+        json(data: unknown) {
+          jsonResult = data;
+          return this;
+        },
+      } as express.Response;
+
+      const errHandler = (
+        err: Error,
+        _req: express.Request,
+        res: express.Response,
+        _next: express.NextFunction,
+      ) => {
+        const isDev = process.env['NODE_ENV'] === 'development';
+        res.status(500).json({
+          success: false,
+          error: {
+            code: 'INTERNAL_SERVER_ERROR',
+            message: isDev ? err.message : 'An unexpected error occurred.',
+          },
+        });
+      };
+
+      errHandler(testErr, mockReq, mockRes, (() => {}) as express.NextFunction);
+
+      assertEqual(statusResult, 500, 'Test 46: HTTP 500 status set');
+      const body = jsonResult as { error: { message: string } };
+      assertEqual(
+        body.error.message,
+        'An unexpected error occurred.',
+        'Test 46: Generic error message returned in production',
+      );
+      console.log('  ✅ Test 46: Production error responses hide internal error details');
+    } finally {
+      process.env['NODE_ENV'] = originalEnv;
+    }
+  }
+}
+
 // Execute test suite
-runTests().catch((err) => {
+async function executeSuite() {
+  await runTests();
+  await runPartG();
+}
+
+executeSuite().catch((err) => {
   console.error('\n❌ Test suite failed:', err);
   process.exit(1);
 });

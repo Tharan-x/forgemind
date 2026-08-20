@@ -37,4 +37,7 @@ export const env = {
   get isProduction() {
     return this.NODE_ENV === 'production';
   },
+  get isTest() {
+    return this.NODE_ENV === 'test';
+  },
 } as const;

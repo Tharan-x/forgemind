@@ -5,6 +5,7 @@
 import { Router, type Router as RouterType } from 'express';
 
 import { requireAuth } from '../auth/index.js';
+import { heavyRouteRateLimiter } from '../lib/rate-limiter.js';
 import {
   syncRepositories,
   getRepositories,
@@ -60,7 +61,7 @@ router.delete('/:id', requireAuth, deleteRepository);
  * POST /api/v1/repositories/:repositoryId/analyze
  * Triggers repository acquisition and analysis job execution.
  */
-router.post('/:repositoryId/analyze', requireAuth, triggerAnalysis);
+router.post('/:repositoryId/analyze', requireAuth, heavyRouteRateLimiter, triggerAnalysis);
 
 /**
  * GET /api/v1/repositories/:repositoryId/analysis
@@ -102,7 +103,12 @@ router.get('/:repositoryId/chunks', requireAuth, getRepositoryChunks);
  * POST /api/v1/repositories/:repositoryId/search/semantic
  * Executes a vector semantic search over repository code chunks.
  */
-router.post('/:repositoryId/search/semantic', requireAuth, searchSemanticCode);
+router.post(
+  '/:repositoryId/search/semantic',
+  requireAuth,
+  heavyRouteRateLimiter,
+  searchSemanticCode,
+);
 
 /**
  * GET /api/v1/repositories/:repositoryId/vector-status
@@ -114,7 +120,7 @@ router.get('/:repositoryId/vector-status', requireAuth, getVectorStatus);
  * POST /api/v1/repositories/:repositoryId/chat
  * Executes a Retrieval-Augmented Generation (RAG) query over the repository codebase.
  */
-router.post('/:repositoryId/chat', requireAuth, chatRepositoryRAG);
+router.post('/:repositoryId/chat', requireAuth, heavyRouteRateLimiter, chatRepositoryRAG);
 
 /**
  * GET /api/v1/repositories/:repositoryId/chat/history
@@ -132,7 +138,12 @@ router.delete('/:repositoryId/chat/history', requireAuth, clearChatHistory);
  * POST /api/v1/repositories/:repositoryId/intelligence/explain
  * Explains a file or symbol grounded in retrieved code context.
  */
-router.post('/:repositoryId/intelligence/explain', requireAuth, explainCodeHandler);
+router.post(
+  '/:repositoryId/intelligence/explain',
+  requireAuth,
+  heavyRouteRateLimiter,
+  explainCodeHandler,
+);
 
 /**
  * GET /api/v1/repositories/:repositoryId/intelligence/dependencies
@@ -148,7 +159,12 @@ router.get(
  * POST /api/v1/repositories/:repositoryId/intelligence/impact
  * Analyzes the blast radius and affected files/symbols of changing a file/symbol.
  */
-router.post('/:repositoryId/intelligence/impact', requireAuth, impactAnalysisHandler);
+router.post(
+  '/:repositoryId/intelligence/impact',
+  requireAuth,
+  heavyRouteRateLimiter,
+  impactAnalysisHandler,
+);
 
 /**
  * GET /api/v1/repositories/:repositoryId/intelligence/architecture
