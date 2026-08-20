@@ -93,6 +93,37 @@ export async function explainCodeHandler(req: AuthenticatedRequest, res: Respons
       return;
     }
 
+    if (body.filePath.trim().length > 1024) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'filePath exceeds maximum length of 1024 characters.',
+        },
+      });
+      return;
+    }
+    if (body.symbolName && body.symbolName.trim().length > 256) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'symbolName exceeds maximum length of 256 characters.',
+        },
+      });
+      return;
+    }
+    if (body.symbolKind && body.symbolKind.trim().length > 100) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'symbolKind exceeds maximum length of 100 characters.',
+        },
+      });
+      return;
+    }
+
     const result = await explainCode(repositoryId, user.id, {
       filePath: body.filePath.trim(),
       symbolName: body.symbolName?.trim(),
@@ -140,6 +171,17 @@ export async function fileDependencyIntelligenceHandler(
       return;
     }
 
+    if (filePath.length > 1024) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'filePath exceeds maximum length of 1024 characters.',
+        },
+      });
+      return;
+    }
+
     const result = await getFileDependencyIntelligence(repositoryId, user.id, filePath);
     res.status(200).json({ success: true, ...result });
   } catch (err) {
@@ -182,6 +224,27 @@ export async function impactAnalysisHandler(
       res.status(400).json({
         success: false,
         error: { code: 'INVALID_REQUEST', message: 'filePath is required.' },
+      });
+      return;
+    }
+
+    if (body.filePath.trim().length > 1024) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'filePath exceeds maximum length of 1024 characters.',
+        },
+      });
+      return;
+    }
+    if (body.symbolName && body.symbolName.trim().length > 256) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'symbolName exceeds maximum length of 256 characters.',
+        },
       });
       return;
     }

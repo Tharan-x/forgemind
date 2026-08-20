@@ -88,6 +88,17 @@ export async function chatRepositoryRAG(req: AuthenticatedRequest, res: Response
       return;
     }
 
+    if (query.length > 2000) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Query exceeds maximum length of 2000 characters.',
+        },
+      });
+      return;
+    }
+
     const result = await executeRAGQuery(repositoryId, user.id, query, {
       topK: body.topK,
     });

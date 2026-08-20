@@ -869,6 +869,7 @@ async function runTests() {
     await runPartD();
     await runPartE();
     await runPartF();
+    await runPartH();
 
     console.log('\n🎉 ALL CONTROLLER & ROUTE INTEGRATION TESTS PASSED SUCCESSFULLY!\n');
   } finally {
@@ -1568,6 +1569,75 @@ async function runPartG() {
     } finally {
       process.env['NODE_ENV'] = originalEnv;
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PART H — SPRINT 5 TASK 5 RESOURCE EXHAUSTION & BOUNDARY TESTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runPartH() {
+  console.log('\n📋 Part H — Resource Exhaustion & Boundary Tests (Tests 47–52)');
+
+  // 47. Oversized RAG query rejected
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/chat`, {
+      token: TOKEN_USER_1,
+      body: { query: 'A'.repeat(2001) },
+    });
+    assertEqual(res.status, 400, 'Test 47: Status 400');
+    console.log('  ✅ Test 47: Oversized RAG query correctly rejected');
+  }
+
+  // 48. Oversized semantic query rejected
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/search/semantic`, {
+      token: TOKEN_USER_1,
+      body: { query: 'A'.repeat(2001) },
+    });
+    assertEqual(res.status, 400, 'Test 48: Status 400');
+    console.log('  ✅ Test 48: Oversized semantic query correctly rejected');
+  }
+
+  // 49. Oversized intelligence input rejected
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/intelligence/explain`, {
+      token: TOKEN_USER_1,
+      body: { filePath: 'A'.repeat(1025) },
+    });
+    assertEqual(res.status, 400, 'Test 49: Status 400');
+    console.log('  ✅ Test 49: Oversized intelligence input correctly rejected');
+  }
+
+  // 50. limit > 100 clamped (verify it works and doesn't crash)
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/files?limit=100000`, {
+      token: TOKEN_USER_1,
+    });
+    assertEqual(res.status, 200, 'Test 50: Status 200');
+    console.log('  ✅ Test 50: limit > 100 is clamped safely');
+  }
+
+  // 51. invalid/NaN limit clamped safely
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/symbols?limit=abc`, {
+      token: TOKEN_USER_1,
+    });
+    assertEqual(res.status, 200, 'Test 51: Status 200');
+    console.log('  ✅ Test 51: invalid/NaN limit is handled safely');
+  }
+
+  // 52. negative/zero limit clamped safely
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${REPO_ID_1}/dependencies?limit=-50`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    assertEqual(res.status, 200, 'Test 52: Status 200');
+    console.log('  ✅ Test 52: negative limit is handled safely');
   }
 }
 

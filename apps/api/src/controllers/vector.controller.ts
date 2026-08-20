@@ -58,10 +58,23 @@ export async function getRepositoryChunks(req: AuthenticatedRequest, res: Respon
     }
 
     const fileId = typeof req.query['fileId'] === 'string' ? req.query['fileId'] : undefined;
-    const limit =
+    const parsedLimit =
       typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
-    const offset =
+    const limit =
+      parsedLimit !== undefined
+        ? isNaN(parsedLimit)
+          ? 50
+          : Math.max(1, Math.min(parsedLimit, 100))
+        : undefined;
+
+    const parsedOffset =
       typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+    const offset =
+      parsedOffset !== undefined
+        ? isNaN(parsedOffset)
+          ? 0
+          : Math.max(0, parsedOffset)
+        : undefined;
 
     const result = await findRepositoryChunks(repositoryId, { fileId, limit, offset });
 
@@ -123,6 +136,17 @@ export async function searchSemanticCode(req: AuthenticatedRequest, res: Respons
       res.status(400).json({
         success: false,
         error: { code: 'INVALID_REQUEST', message: 'Search query string is required.' },
+      });
+      return;
+    }
+
+    if (query.length > 2000) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Query exceeds maximum length of 2000 characters.',
+        },
       });
       return;
     }

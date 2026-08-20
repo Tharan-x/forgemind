@@ -214,10 +214,23 @@ export async function getRepositoryFiles(req: AuthenticatedRequest, res: Respons
     }
 
     const language = typeof req.query['language'] === 'string' ? req.query['language'] : undefined;
-    const limit =
+    const parsedLimit =
       typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
-    const offset =
+    const limit =
+      parsedLimit !== undefined
+        ? isNaN(parsedLimit)
+          ? 50
+          : Math.max(1, Math.min(parsedLimit, 100))
+        : undefined;
+
+    const parsedOffset =
       typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+    const offset =
+      parsedOffset !== undefined
+        ? isNaN(parsedOffset)
+          ? 0
+          : Math.max(0, parsedOffset)
+        : undefined;
 
     const result = await findRepositoryFiles(repositoryId, { language, limit, offset });
 
@@ -265,10 +278,23 @@ export async function getSymbols(req: AuthenticatedRequest, res: Response): Prom
 
     const kind = typeof req.query['kind'] === 'string' ? req.query['kind'] : undefined;
     const query = typeof req.query['query'] === 'string' ? req.query['query'] : undefined;
-    const limit =
+    const parsedLimit =
       typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
-    const offset =
+    const limit =
+      parsedLimit !== undefined
+        ? isNaN(parsedLimit)
+          ? 50
+          : Math.max(1, Math.min(parsedLimit, 100))
+        : undefined;
+
+    const parsedOffset =
       typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+    const offset =
+      parsedOffset !== undefined
+        ? isNaN(parsedOffset)
+          ? 0
+          : Math.max(0, parsedOffset)
+        : undefined;
 
     const result = await findRepositorySymbols(repositoryId, { kind, query, limit, offset });
 
@@ -316,10 +342,23 @@ export async function getDependencies(req: AuthenticatedRequest, res: Response):
 
     const isExternal =
       typeof req.query['isExternal'] === 'string' ? req.query['isExternal'] === 'true' : undefined;
-    const limit =
+    const parsedLimit =
       typeof req.query['limit'] === 'string' ? parseInt(req.query['limit'], 10) : undefined;
-    const offset =
+    const limit =
+      parsedLimit !== undefined
+        ? isNaN(parsedLimit)
+          ? 50
+          : Math.max(1, Math.min(parsedLimit, 100))
+        : undefined;
+
+    const parsedOffset =
       typeof req.query['offset'] === 'string' ? parseInt(req.query['offset'], 10) : undefined;
+    const offset =
+      parsedOffset !== undefined
+        ? isNaN(parsedOffset)
+          ? 0
+          : Math.max(0, parsedOffset)
+        : undefined;
 
     const result = await findRepositoryDependencies(repositoryId, { isExternal, limit, offset });
 
