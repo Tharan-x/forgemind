@@ -84,6 +84,7 @@ jobs:
       - type-check
 
     env:
+      NODE_ENV: 'test'
       DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
       DIRECT_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
       SUPABASE_URL: 'https://placeholder.supabase.co'
