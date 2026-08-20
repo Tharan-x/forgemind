@@ -6,8 +6,10 @@ import { PrismaClient } from '@prisma/client';
 import type { RAGQueryResponse, RAGSourceCitation } from '@forgemind/types';
 
 import { retrieveRepositoryContext } from './context-retrieval.service.js';
+import { getRecentRepositoryChatHistory } from './chat-history.service.js';
 import { getLLMProvider } from './llm/factory.js';
 import { buildRAGPrompt } from './rag-prompt.service.js';
+import { reformulateQueryForRetrieval } from './query-reformulation.service.js';
 
 import { analyzeQueryIntent } from './query-intent.service.js';
 import { getArchitectureOverview } from './code-intelligence.service.js';
@@ -22,12 +24,14 @@ export interface RAGPipelineOptions {
 /**
  * End-to-end RAG query orchestrator.
  *
- * 1. Analyzes query intent and retrieves relevant codebase context via hybrid search.
- * 2. Injects structural repository summary for architecture/module questions.
- * 3. Assembles structured, injection-resistant LLM prompt.
- * 4. Synthesizes answer using server-side LLM provider (OpenAI, Gemini, or Local Fallback).
- * 5. Persists chat session and messages to database.
- * 6. Returns answer with source citations.
+ * 1. Retrieves bounded recent chat history (max 10 turns) for multi-turn context.
+ * 2. Reformulates retrieval query string deterministically using context history.
+ * 3. Analyzes query intent and retrieves relevant codebase context via hybrid search.
+ * 4. Injects structural repository summary for architecture/module questions.
+ * 5. Assembles structured, injection-resistant LLM prompt with original query.
+ * 6. Synthesizes answer using server-side LLM provider (OpenAI, Gemini, or Local Fallback).
+ * 7. Persists chat session and messages to database.
+ * 8. Returns answer with source citations.
  *
  * @param repositoryId Target database repository UUID
  * @param userId Authenticated user UUID
@@ -45,15 +49,27 @@ export async function executeRAGQuery(
     throw new Error('Query string cannot be empty.');
   }
 
-  const intent = analyzeQueryIntent(trimmedQuery);
+  // 1. Bounded Conversation History Retrieval (Last 10 messages for repository/user session)
+  let historyMessages;
+  try {
+    historyMessages = await getRecentRepositoryChatHistory(repositoryId, userId, 10);
+  } catch (histErr) {
+    // Non-fatal: if history retrieval fails, proceed with single-turn RAG
+    // eslint-disable-next-line no-console
+    console.warn('[RAG Pipeline] Failed retrieving conversation history:', histErr);
+  }
 
-  // 1. Context Retrieval (Hybrid Vector + Lexical Search with Reranking)
-  const contextChunks = await retrieveRepositoryContext(repositoryId, userId, trimmedQuery, {
+  // 2. Deterministic Contextual Query Reformulation (for retrieval only)
+  const retrievalQuery = reformulateQueryForRetrieval(trimmedQuery, historyMessages);
+
+  // 3. Intent Analysis & Context Retrieval (Hybrid Vector + Lexical Search with Reranking)
+  const intent = analyzeQueryIntent(retrievalQuery);
+  const contextChunks = await retrieveRepositoryContext(repositoryId, userId, retrievalQuery, {
     topK: options.topK || 5,
     threshold: options.threshold,
   });
 
-  // 2. Structural Repository Summary (for ARCHITECTURE, DEPENDENCIES, FILE_LOCATION,
+  // 4. Structural Repository Summary (for ARCHITECTURE, DEPENDENCIES, FILE_LOCATION,
   //    DB_CONFIGURATION, and FLOW intent — any query asking about relationships/structure)
   let structuralContext: string | undefined;
   if (
@@ -79,9 +95,10 @@ Top External Packages: ${arch.topExternalPackages
     }
   }
 
-  // 3. Prompt Assembly
+  // 5. Prompt Assembly (uses ORIGINAL user query + bounded history)
   const { systemPrompt, userPrompt } = buildRAGPrompt(contextChunks, trimmedQuery, {
     structuralContext,
+    historyMessages,
   });
 
   // 3. LLM Answer Synthesis

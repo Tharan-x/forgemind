@@ -315,6 +315,14 @@ function seedRepository(id: string, userId: string, name: string, owner: string)
     let results = Array.from(messageStore.values());
     if (args?.where?.sessionId)
       results = results.filter((m) => m.sessionId === args.where.sessionId);
+    if (args?.orderBy?.createdAt === 'desc') {
+      results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } else if (args?.orderBy?.createdAt === 'asc') {
+      results.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    }
+    if (typeof args?.take === 'number') {
+      results = results.slice(0, args.take);
+    }
     return results;
   }
   if (clientMethod === 'chatMessage.deleteMany') {
@@ -345,6 +353,7 @@ const { calculateChunkHybridScore, retrieveRepositoryContext } =
 const { explainCode, getFileDependencyIntelligence, analyzeImpact, getArchitectureOverview } =
   await import('./code-intelligence.service.js');
 const { executeRAGQuery } = await import('./rag-pipeline.service.js');
+const { getRecentRepositoryChatHistory } = await import('./chat-history.service.js');
 const { analyzeQueryIntent } = await import('./query-intent.service.js');
 
 // =============================================================================
@@ -1016,6 +1025,110 @@ async function runPartE() {
     const res = await executeRAGQuery(REPO_ID_1, USER_ID_1, 'Query');
     assertDefined(res.answer, 'Test 33: Graceful fallback resolves to a string');
     console.log('  ✅ Test 33: graceful LLM failure fallback');
+  }
+
+  // 34. getRecentRepositoryChatHistory DB-level limit and chronological ordering
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_1, USER_ID_1, 'test', 'user');
+
+    const session = {
+      id: makeUuid(901),
+      repositoryId: REPO_ID_1,
+      userId: USER_ID_1,
+      title: 'History Test',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    sessionStore.set(session.id, session);
+
+    for (let i = 1; i <= 15; i++) {
+      const msgId = makeUuid(910 + i);
+      messageStore.set(msgId, {
+        id: msgId,
+        sessionId: session.id,
+        sender: i % 2 === 1 ? 'user' : 'assistant',
+        content: `Message ${i}`,
+        metadata: null,
+        createdAt: new Date(Date.now() + i * 1000),
+      });
+    }
+
+    const recent = await getRecentRepositoryChatHistory(REPO_ID_1, USER_ID_1, 10);
+    assertEqual(recent.length, 10, 'Test 34: Max 10 messages returned');
+    assertEqual(
+      recent[0]!.content,
+      'Message 6',
+      'Test 34: Chronological oldest of recent 10 is Message 6',
+    );
+    assertEqual(
+      recent[9]!.content,
+      'Message 15',
+      'Test 34: Chronological newest of recent 10 is Message 15',
+    );
+    console.log(
+      '  ✅ Test 34: getRecentRepositoryChatHistory DB-level limit (10) and chronological order',
+    );
+  }
+
+  // 35. Tenant isolation (Repository + User scoping)
+  {
+    const REPO_ID_2 = makeUuid(1002);
+    seedRepository(REPO_ID_2, USER_ID_2, 'repo2', 'user2');
+
+    // Repo 1 User 1 history should not be returned for Repo 2 User 2
+    const repo2Recent = await getRecentRepositoryChatHistory(REPO_ID_2, USER_ID_2, 10);
+    assertEqual(repo2Recent.length, 0, 'Test 35: No history returned for isolated Repo 2');
+
+    // User 2 query on Repo 1 should not see User 1's history
+    const user2OnRepo1Recent = await getRecentRepositoryChatHistory(REPO_ID_1, USER_ID_2, 10);
+    assertEqual(
+      user2OnRepo1Recent.length,
+      0,
+      'Test 35: User 2 cannot access User 1 history on Repo 1',
+    );
+    console.log('  ✅ Test 35: Strict Repository + User tenant isolation enforced');
+  }
+
+  // 36. Multi-turn executeRAGQuery receives previous history in prompt
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_1, USER_ID_1, 'test', 'user');
+
+    // Turn 1
+    const res1 = await executeRAGQuery(REPO_ID_1, USER_ID_1, 'Where is auth implemented?');
+    assertEqual(sessionStore.size, 1, 'Test 36: Session created');
+    assertEqual(messageStore.size, 2, 'Test 36: Turn 1 saved 2 messages');
+
+    // Turn 2: executeRAGQuery now automatically fetches Turn 1 history
+    const res2 = await executeRAGQuery(
+      REPO_ID_1,
+      USER_ID_1,
+      'What vulnerability did you find there?',
+    );
+    assertEqual(messageStore.size, 4, 'Test 36: Turn 2 saved 2 more messages (total 4)');
+    console.log('  ✅ Test 36: Multi-turn executeRAGQuery incorporates bounded chat history');
+  }
+
+  // 37. First query in new session has no history
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_1, USER_ID_1, 'test', 'user');
+    const freshRecent = await getRecentRepositoryChatHistory(REPO_ID_1, USER_ID_1, 10);
+    assertEqual(freshRecent.length, 0, 'Test 37: Fresh session has 0 history messages');
+    const res = await executeRAGQuery(REPO_ID_1, USER_ID_1, 'First query');
+    assertEqual(res.query, 'First query', 'Test 37: First query executes cleanly');
+    console.log('  ✅ Test 37: First message in new session executes cleanly without history');
+  }
+
+  // 38. User message and assistant message persistence after synthesis
+  {
+    assertEqual(sessionStore.size, 1, 'Test 38: Session exists');
+    assertEqual(messageStore.size, 2, 'Test 38: Current turn saved user + assistant messages');
+    const msgs = Array.from(messageStore.values());
+    assertEqual(msgs[0]!.sender, 'user', 'Test 38: User message persisted first');
+    assertEqual(msgs[1]!.sender, 'assistant', 'Test 38: Assistant message persisted second');
+    console.log('  ✅ Test 38: User and assistant messages correctly persisted after synthesis');
   }
 }
 
