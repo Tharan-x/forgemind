@@ -117,6 +117,7 @@ export async function getRepositories(req: AuthenticatedRequest, res: Response):
  * GET /repositories/:id
  *
  * Returns a single repository by its database UUID.
+ * Enforces repository ownership by the authenticated user.
  */
 export async function getRepository(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -141,6 +142,14 @@ export async function getRepository(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
+    if (repository.userId !== user.id) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied.' },
+      });
+      return;
+    }
+
     res.status(200).json({ success: true, repository });
   } catch {
     sendInternalError(res);
@@ -151,6 +160,7 @@ export async function getRepository(req: AuthenticatedRequest, res: Response): P
  * DELETE /repositories/:id
  *
  * Deletes a repository record by its database UUID.
+ * Enforces repository ownership by the authenticated user.
  */
 export async function deleteRepository(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -165,15 +175,25 @@ export async function deleteRepository(req: AuthenticatedRequest, res: Response)
     }
 
     const { id } = req.params as { id: string };
-    const deleted = await deleteRepoService(id);
+    const repository = await findRepositoryById(id);
 
-    if (!deleted) {
+    if (!repository) {
       res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'Repository not found.' },
       });
       return;
     }
+
+    if (repository.userId !== user.id) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied.' },
+      });
+      return;
+    }
+
+    const deleted = await deleteRepoService(id);
 
     res.status(200).json({ success: true, repository: deleted });
   } catch {

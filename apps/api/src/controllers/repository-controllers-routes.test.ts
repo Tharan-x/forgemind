@@ -1014,7 +1014,7 @@ async function runPartB() {
     console.log('  ✅ Test 14: GET /api/v1/repositories unauthenticated status 401');
   }
 
-  // 15. GET /api/v1/repositories/:id (Single repo lookup)
+  // 15. GET /api/v1/repositories/:id (Single repo lookup - Owner)
   {
     const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
       token: TOKEN_USER_1,
@@ -1022,6 +1022,16 @@ async function runPartB() {
     assertEqual(res.status, 200, 'Test 15: Status 200');
     assertEqual(res.body.repository.id, REPO_ID_1, 'Test 15: Repo ID matched');
     console.log('  ✅ Test 15: GET /api/v1/repositories/:id returns repository details');
+  }
+
+  // 15b. GET /api/v1/repositories/:id (Single repo lookup - Non-owner IDOR attempt)
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_2}`, {
+      token: TOKEN_USER_1,
+    });
+    assertEqual(res.status, 403, 'Test 15b: Cross-user GET status 403 FORBIDDEN');
+    assertEqual(res.body.error.code, 'FORBIDDEN', 'Test 15b: FORBIDDEN error code');
+    console.log('  ✅ Test 15b: GET /api/v1/repositories/:id cross-user access rejected with 403');
   }
 
   // 16. GET /api/v1/repositories/:id (Non-existent ID)
@@ -1034,14 +1044,26 @@ async function runPartB() {
     console.log('  ✅ Test 16: GET /api/v1/repositories/:id non-existent returns 404');
   }
 
-  // 17. DELETE /api/v1/repositories/:id (Delete repository)
+  // 17. DELETE /api/v1/repositories/:id (Delete repository - Non-owner IDOR attempt)
+  {
+    const res = await apiRequest('DELETE', `/api/v1/repositories/${REPO_ID_2}`, {
+      token: TOKEN_USER_1,
+    });
+    assertEqual(res.status, 403, 'Test 17: Cross-user DELETE status 403 FORBIDDEN');
+    assertEqual(res.body.error.code, 'FORBIDDEN', 'Test 17: FORBIDDEN error code');
+    console.log(
+      '  ✅ Test 17: DELETE /api/v1/repositories/:id cross-user deletion rejected with 403',
+    );
+  }
+
+  // 17b. DELETE /api/v1/repositories/:id (Delete repository - Owner)
   {
     const res = await apiRequest('DELETE', `/api/v1/repositories/${REPO_ID_1}`, {
       token: TOKEN_USER_1,
     });
-    assertEqual(res.status, 200, 'Test 17: Delete status 200');
-    assertEqual(res.body.repository.id, REPO_ID_1, 'Test 17: Deleted repo returned');
-    console.log('  ✅ Test 17: DELETE /api/v1/repositories/:id deletes repository');
+    assertEqual(res.status, 200, 'Test 17b: Delete status 200');
+    assertEqual(res.body.repository.id, REPO_ID_1, 'Test 17b: Deleted repo returned');
+    console.log('  ✅ Test 17b: DELETE /api/v1/repositories/:id deletes repository');
   }
 
   // 18. DELETE /api/v1/repositories/:id (Non-existent ID)
