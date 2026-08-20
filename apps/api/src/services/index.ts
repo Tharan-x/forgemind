@@ -22,3 +22,4 @@ export * from './chat-history.service.js';
 export * from './code-intelligence.service.js';
 export * from './query-intent.service.js';
 export * from './query-reformulation.service.js';
+export * from './graph-topology.service.js';

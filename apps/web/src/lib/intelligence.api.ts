@@ -7,7 +7,9 @@ import type {
   CodeExplainRequest,
   CodeExplainResponse,
   FileDependencyIntelligence,
+  GraphQueryOptions,
   ImpactAnalysisResult,
+  RepositoryGraphResponse,
 } from '@forgemind/types';
 import { supabase } from './supabase';
 
@@ -102,5 +104,25 @@ export async function getArchitectureOverview(
 ): Promise<ArchitectureOverviewResponse> {
   return request<ArchitectureOverviewResponse>(
     `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture`,
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/graph
+ */
+export async function getRepositoryGraphTopology(
+  repositoryId: string,
+  options: GraphQueryOptions = {},
+): Promise<RepositoryGraphResponse> {
+  const queryParts: string[] = [];
+  if (options.depth !== undefined) queryParts.push(`depth=${encodeURIComponent(options.depth)}`);
+  if (options.nodeType !== undefined)
+    queryParts.push(`nodeType=${encodeURIComponent(options.nodeType)}`);
+  if (options.limit !== undefined) queryParts.push(`limit=${encodeURIComponent(options.limit)}`);
+  if (options.filter !== undefined) queryParts.push(`filter=${encodeURIComponent(options.filter)}`);
+
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  return request<RepositoryGraphResponse>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/graph${queryString}`,
   );
 }

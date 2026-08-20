@@ -813,6 +813,8 @@ interface ApiResponsePayload {
   filePath: string;
   targetFilePath: string;
   totalFiles: number;
+  nodes?: Array<Record<string, unknown>>;
+  edges?: Array<Record<string, unknown>>;
   result: Record<string, unknown> & { total: number };
 }
 
@@ -1391,6 +1393,23 @@ async function runPartF() {
     assertEqual(res.body.totalFiles, 1, 'Test 40: Total files matched');
     console.log(
       '  ✅ Test 40: GET /api/v1/repositories/:repositoryId/intelligence/architecture returns overview',
+    );
+  }
+
+  // 40b. GET /api/v1/repositories/:repositoryId/intelligence/graph (Graph topology)
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/graph?limit=50&nodeType=all`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    assertEqual(res.status, 200, 'Test 40b: Status 200');
+    assert(Array.isArray(res.body.nodes), 'Test 40b: Nodes array returned');
+    assert(Array.isArray(res.body.edges), 'Test 40b: Edges array returned');
+    console.log(
+      '  ✅ Test 40b: GET /api/v1/repositories/:repositoryId/intelligence/graph returns topology',
     );
   }
 

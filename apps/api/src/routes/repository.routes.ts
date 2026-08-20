@@ -29,6 +29,7 @@ import {
   fileDependencyIntelligenceHandler,
   impactAnalysisHandler,
   architectureOverviewHandler,
+  getGraphTopologyHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -171,5 +172,13 @@ router.post(
  * Returns a structured architecture overview of the repository.
  */
 router.get('/:repositoryId/intelligence/architecture', requireAuth, architectureOverviewHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/graph
+ * GET /api/v1/repositories/:repositoryId/graph
+ * Returns a structured visual dependency graph topology dataset for the repository.
+ */
+router.get('/:repositoryId/intelligence/graph', requireAuth, getGraphTopologyHandler);
+router.get('/:repositoryId/graph', requireAuth, getGraphTopologyHandler);
 
 export { router as repositoryRouter };

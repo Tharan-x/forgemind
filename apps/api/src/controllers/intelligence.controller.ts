@@ -294,3 +294,59 @@ export async function architectureOverviewHandler(
     sendInternalError(res, message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/repositories/:repositoryId/intelligence/graph
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a structured visual dependency graph topology dataset for the repository.
+ * Query: ?depth=3&nodeType=all&limit=100&filter=services
+ */
+export async function getGraphTopologyHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { depth, nodeType, limit, filter } = req.query as {
+      depth?: string;
+      nodeType?: string;
+      limit?: string;
+      filter?: string;
+    };
+
+    const parsedDepth = depth ? parseInt(depth, 10) : undefined;
+    const parsedLimit = limit ? parseInt(limit, 10) : undefined;
+    const validNodeType =
+      nodeType === 'file' ||
+      nodeType === 'symbol' ||
+      nodeType === 'module' ||
+      nodeType === 'package'
+        ? nodeType
+        : 'all';
+
+    const { generateRepositoryGraphTopology } =
+      await import('../services/graph-topology.service.js');
+    const result = await generateRepositoryGraphTopology(repositoryId, user.id, {
+      depth: isNaN(parsedDepth as number) ? undefined : parsedDepth,
+      limit: isNaN(parsedLimit as number) ? undefined : parsedLimit,
+      nodeType: validNodeType,
+      filter,
+    });
+
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}

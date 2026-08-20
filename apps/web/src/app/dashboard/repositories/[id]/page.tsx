@@ -23,7 +23,9 @@ import type {
 import { Button } from '@forgemind/ui';
 
 import { ProtectedLayout } from '@/components/dashboard/ProtectedLayout';
+import { DependencyGraphVisualizer } from '@/components/graph/DependencyGraphVisualizer';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -46,7 +48,8 @@ import {
 } from '@/lib/rag.api';
 import { getRepository, type Repository } from '@/lib/repository.api';
 
-type TabType = 'overview' | 'intelligence' | 'chat' | 'files' | 'symbols' | 'dependencies';
+type TabType =
+  'overview' | 'intelligence' | 'graph' | 'chat' | 'files' | 'symbols' | 'dependencies';
 
 export default function RepositoryDetailPage() {
   const params = useParams();
@@ -579,6 +582,7 @@ export default function RepositoryDetailPage() {
               [
                 { id: 'overview', label: 'Overview', icon: '📊' },
                 { id: 'intelligence', label: 'Code Intelligence', icon: '🧠' },
+                { id: 'graph', label: 'Graph & Topology', icon: '🌐' },
                 { id: 'chat', label: 'AI Assistant', icon: '🤖' },
                 { id: 'files', label: 'Indexed Files', icon: '📁', count: totalFiles },
                 { id: 'symbols', label: 'AST Symbols', icon: '🧩', count: totalSymbols },
@@ -614,6 +618,19 @@ export default function RepositoryDetailPage() {
             })}
           </div>
         </div>
+
+        {/* TAB: GRAPH & TOPOLOGY */}
+        {activeTab === 'graph' && (
+          <DependencyGraphVisualizer
+            repositoryId={repositoryId}
+            onSelectNodeForImpact={() => {
+              setActiveTab('intelligence');
+            }}
+            onSelectNodeForExplain={() => {
+              setActiveTab('intelligence');
+            }}
+          />
+        )}
 
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (

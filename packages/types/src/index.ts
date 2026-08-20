@@ -386,3 +386,63 @@ export interface ArchitectureOverviewResponse {
   /** Top symbol kinds: { function: 120, class: 30, ... } */
   symbolKindDistribution: Record<string, number>;
 }
+
+// ─── Interactive Dependency Graph & Visual Topology Engine ───────────────────
+
+export type GraphNodeType = 'file' | 'symbol' | 'module' | 'package';
+export type GraphEdgeType = 'imports' | 'defines' | 'calls' | 'depends_on';
+
+export interface GraphNodeMetrics {
+  inDegree: number;
+  outDegree: number;
+  linesCount?: number;
+  symbolKind?: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: GraphNodeType;
+  group: string;
+  path?: string;
+  metrics: GraphNodeMetrics;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: GraphEdgeType;
+  weight: number;
+}
+
+export interface CircularDependencyCycle {
+  cycle: string[];
+  length: number;
+}
+
+export interface GraphTopologyMetrics {
+  totalNodes: number;
+  totalEdges: number;
+  fileNodeCount: number;
+  symbolNodeCount: number;
+  packageNodeCount: number;
+  moduleNodeCount: number;
+  density: number;
+  hubNodes: GraphNode[];
+  circularDependencies: CircularDependencyCycle[];
+}
+
+export interface RepositoryGraphResponse {
+  repositoryId: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  metrics: GraphTopologyMetrics;
+}
+
+export interface GraphQueryOptions {
+  depth?: number;
+  nodeType?: GraphNodeType | 'all';
+  limit?: number;
+  filter?: string;
+}

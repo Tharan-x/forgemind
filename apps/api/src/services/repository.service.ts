@@ -29,6 +29,23 @@ export async function findRepositoryById(id: string): Promise<Repository | null>
 }
 
 /**
+ * Verifies repository existence and user ownership.
+ * Throws a descriptive error if verification fails.
+ */
+export async function assertRepositoryOwnership(
+  repositoryId: string,
+  userId: string,
+): Promise<void> {
+  const repo = await findRepositoryById(repositoryId);
+  if (!repo) {
+    throw new Error(`Repository not found: ${repositoryId}`);
+  }
+  if (repo.userId !== userId) {
+    throw new Error(`Access denied for repository: ${repositoryId}`);
+  }
+}
+
+/**
  * Finds a repository by its unique GitHub ID.
  */
 export async function findRepositoryByGithubId(githubId: number): Promise<Repository | null> {
