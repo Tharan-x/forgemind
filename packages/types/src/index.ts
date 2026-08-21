@@ -675,3 +675,50 @@ export interface RemediationExplanationResponse {
   sources: RAGSourceCitation[];
   providerUsed: string;
 }
+
+// ─── Architectural Health Timeline & Regression Engine (Sprint 8 Task 5) ───
+
+export type HealthTrendDirection = 'IMPROVED' | 'DEGRADED' | 'STABLE';
+export type RegressionSeverity = 'CRITICAL' | 'WARNING' | 'NONE';
+
+export interface ArchitectureHealthPoint {
+  analysisId: string;
+  commitHash: string | null;
+  healthScore: number;
+  grade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+  circularCycleCount: number;
+  layerViolationCount: number;
+  hotspotCount: number;
+  orphanExportCount: number;
+  evaluatedAt: string;
+}
+
+export interface ArchitectureHealthHistoryResponse {
+  repositoryId: string;
+  currentHealthScore: number;
+  overallTrend: HealthTrendDirection;
+  points: ArchitectureHealthPoint[];
+}
+
+export interface ArchitectureHealthComparisonResponse {
+  repositoryId: string;
+  baselineAnalysisId: string;
+  currentAnalysisId: string;
+  baselineHealthScore: number;
+  currentHealthScore: number;
+  healthDelta: number;
+  trend: HealthTrendDirection;
+  isRegressed: boolean;
+  regressionSeverity: RegressionSeverity;
+  newFindings: HealthFinding[];
+  resolvedFindings: HealthFinding[];
+  unmodifiedFindings: HealthFinding[];
+  scoreBreakdownDelta: {
+    baseScoreDelta: number;
+    cyclePenaltyDelta: number;
+    layerViolationPenaltyDelta: number;
+    hotspotPenaltyDelta: number;
+    orphanPenaltyDelta: number;
+  };
+  evaluatedAt: string;
+}

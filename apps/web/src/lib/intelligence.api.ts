@@ -7,6 +7,8 @@ import type {
   ArchitectureHealthExplainRequest,
   ArchitectureHealthExplanationResponse,
   ArchitecturalRiskIntelligenceResponse,
+  ArchitectureHealthHistoryResponse,
+  ArchitectureHealthComparisonResponse,
   RemediationExplainRequest,
   RemediationExplanationResponse,
   ArchitectureOverviewResponse,
@@ -261,5 +263,33 @@ export async function explainRemediationAction(
       method: 'POST',
       body: JSON.stringify(reqData),
     },
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/history
+ */
+export async function getArchitectureHealthHistory(
+  repositoryId: string,
+): Promise<{ success: boolean; data: ArchitectureHealthHistoryResponse }> {
+  return request<{ success: boolean; data: ArchitectureHealthHistoryResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture/history`,
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/compare
+ */
+export async function compareArchitectureHealth(
+  repositoryId: string,
+  baselineId?: string,
+  currentId?: string,
+): Promise<{ success: boolean; data: ArchitectureHealthComparisonResponse }> {
+  const queryParts: string[] = [];
+  if (baselineId) queryParts.push(`baselineId=${encodeURIComponent(baselineId)}`);
+  if (currentId) queryParts.push(`currentId=${encodeURIComponent(currentId)}`);
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  return request<{ success: boolean; data: ArchitectureHealthComparisonResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture/compare${queryString}`,
   );
 }

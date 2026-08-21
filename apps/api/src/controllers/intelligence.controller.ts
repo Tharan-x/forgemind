@@ -753,3 +753,75 @@ export async function explainRemediationActionHandler(
     }
   }
 }
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/history
+ * GET /api/v1/repositories/:repositoryId/architecture/history
+ * Returns historical architecture health trend points over time.
+ */
+export async function getArchitectureHealthHistoryHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { getArchitectureHealthHistory } =
+      await import('../services/architecture-history.service.js');
+
+    const result = await getArchitectureHealthHistory(repositoryId, user.id);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/compare
+ * GET /api/v1/repositories/:repositoryId/architecture/compare
+ * Compares two architectural health snapshots to detect score delta, regressions, and new/resolved findings.
+ */
+export async function compareArchitectureHealthHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { baselineId, currentId } = req.query as {
+      baselineId?: string;
+      currentId?: string;
+    };
+
+    const { compareArchitectureHealthSnapshots } =
+      await import('../services/architecture-history.service.js');
+
+    const result = await compareArchitectureHealthSnapshots(
+      repositoryId,
+      user.id,
+      baselineId,
+      currentId,
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    sendInternalError(res, message);
+  }
+}

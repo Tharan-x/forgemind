@@ -1948,6 +1948,57 @@ async function runPartH() {
     assert(res.status === 400 || res.status === 429, 'Test 68: Status 400 or 429');
     console.log('  ✅ Test 68: POST Explain Remediation Action missing findingId rejected');
   }
+
+  // 69. GET Architecture Health History returns HTTP 200 with points & trend
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/architecture/history`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 69: Status 200');
+    assert((res.body as any)?.data?.repositoryId === REPO_ID_1, 'Test 69: repositoryId matches');
+    assert(Array.isArray((res.body as any)?.data?.points), 'Test 69: points is array');
+    console.log(
+      '  ✅ Test 69: GET Architecture Health History returns HTTP 200 with points & trend',
+    );
+  }
+
+  // 70. GET Architecture Health History cross-user access rejected with 403
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_2}/architecture/history`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 403, 'Test 70: Status 403');
+    console.log(
+      '  ✅ Test 70: GET Architecture Health History cross-user access rejected with 403',
+    );
+  }
+
+  // 71. GET Compare Architecture Snapshots returns HTTP 200 with diff dataset
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/architecture/compare`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 71: Status 200');
+    assert((res.body as any)?.data?.repositoryId === REPO_ID_1, 'Test 71: repositoryId matches');
+    assert(
+      typeof (res.body as any)?.data?.healthDelta === 'number',
+      'Test 71: healthDelta is number',
+    );
+    console.log(
+      '  ✅ Test 71: GET Compare Architecture Snapshots returns HTTP 200 with diff dataset',
+    );
+  }
+
+  // 72. GET Compare Architecture Snapshots cross-user access rejected with 403
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_2}/architecture/compare`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 403, 'Test 72: Status 403');
+    console.log(
+      '  ✅ Test 72: GET Compare Architecture Snapshots cross-user access rejected with 403',
+    );
+  }
 }
 
 // Execute test suite

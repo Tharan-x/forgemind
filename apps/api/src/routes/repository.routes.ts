@@ -38,6 +38,8 @@ import {
   explainArchitectureFindingHandler,
   getArchitecturalRiskIntelligenceHandler,
   explainRemediationActionHandler,
+  getArchitectureHealthHistoryHandler,
+  compareArchitectureHealthHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -270,6 +272,30 @@ router.post(
   heavyRouteRateLimiter,
   explainRemediationActionHandler,
 );
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/history
+ * GET /api/v1/repositories/:repositoryId/architecture/history
+ * Returns historical architecture health trend points over time.
+ */
+router.get(
+  '/:repositoryId/intelligence/architecture/history',
+  requireAuth,
+  getArchitectureHealthHistoryHandler,
+);
+router.get('/:repositoryId/architecture/history', requireAuth, getArchitectureHealthHistoryHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/compare
+ * GET /api/v1/repositories/:repositoryId/architecture/compare
+ * Compares two architectural health snapshots to detect score delta and new/resolved findings.
+ */
+router.get(
+  '/:repositoryId/intelligence/architecture/compare',
+  requireAuth,
+  compareArchitectureHealthHandler,
+);
+router.get('/:repositoryId/architecture/compare', requireAuth, compareArchitectureHealthHandler);
 
 /**
  * GET /api/v1/onboarding/share/:shareToken

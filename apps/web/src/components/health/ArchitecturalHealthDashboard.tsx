@@ -16,6 +16,7 @@ import { getArchitectureHealth } from '@/lib/intelligence.api';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AIExplanationDrawer } from './AIExplanationDrawer';
 import { ArchitecturalRiskActionLoop } from './ArchitecturalRiskActionLoop';
+import { ArchitecturalHealthHistoryTrend } from './ArchitecturalHealthHistoryTrend';
 
 interface ArchitecturalHealthDashboardProps {
   repositoryId: string;
@@ -30,8 +31,10 @@ export function ArchitecturalHealthDashboard({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // View Mode: 'risk_loop' | 'findings'
-  const [activeSubTab, setActiveSubTab] = useState<'risk_loop' | 'findings'>('risk_loop');
+  // View Mode: 'risk_loop' | 'history' | 'findings'
+  const [activeSubTab, setActiveSubTab] = useState<'risk_loop' | 'history' | 'findings'>(
+    'risk_loop',
+  );
 
   // Filter State
   const [severityFilter, setSeverityFilter] = useState<'all' | HealthFindingSeverity>('all');
@@ -231,6 +234,19 @@ export function ArchitecturalHealthDashboard({
 
         <button
           type="button"
+          onClick={() => setActiveSubTab('history')}
+          className={`py-2 px-3 rounded-lg transition-all flex items-center gap-2 ${
+            activeSubTab === 'history'
+              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <span>📈</span>
+          <span>Health History & Regression Diff</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveSubTab('findings')}
           className={`py-2 px-3 rounded-lg transition-all flex items-center gap-2 ${
             activeSubTab === 'findings'
@@ -245,6 +261,8 @@ export function ArchitecturalHealthDashboard({
 
       {activeSubTab === 'risk_loop' ? (
         <ArchitecturalRiskActionLoop repositoryId={repositoryId} />
+      ) : activeSubTab === 'history' ? (
+        <ArchitecturalHealthHistoryTrend repositoryId={repositoryId} />
       ) : (
         <>
           {/* Filter Bar */}
