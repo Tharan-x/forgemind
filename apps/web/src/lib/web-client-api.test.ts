@@ -73,6 +73,8 @@ import {
   askOnboardingStepQuestion,
   shareOnboardingBlueprint,
   getSharedBlueprint,
+  getArchitectureHealth,
+  explainArchitectureFinding,
 } from './intelligence.api.js';
 
 import { getGitHubConnection, connectGitHub, disconnectGitHub } from './github-credential.api.js';
@@ -1790,6 +1792,40 @@ async function runPartI(): Promise<void> {
     }
     assert(!threw, 'Test 80: 200 response does not throw');
     console.log('  ✅ Test 80: 200 response is not treated as an error');
+  }
+
+  // Test 81: getArchitectureHealth sends GET to /intelligence/health
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { success: true, data: { healthScore: 100 } });
+
+    await getArchitectureHealth(REPO_ID);
+
+    assertDefined(lastRequest, 'Test 81: lastRequest captured');
+    assert(
+      lastRequest.url.includes(`/repositories/${REPO_ID}/intelligence/health`),
+      'Test 81: correct URL target',
+    );
+    assert(lastRequest.method === 'GET', 'Test 81: GET method');
+    console.log('  ✅ Test 81: getArchitectureHealth sends GET to /intelligence/health');
+  }
+
+  // Test 82: explainArchitectureFinding sends POST to /intelligence/health/explain
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { success: true, data: { explanation: 'Refactoring guide' } });
+
+    await explainArchitectureFinding(REPO_ID, { findingId: 'finding-1' });
+
+    assertDefined(lastRequest, 'Test 82: lastRequest captured');
+    assert(
+      lastRequest.url.includes(`/repositories/${REPO_ID}/intelligence/health/explain`),
+      'Test 82: correct URL target',
+    );
+    assert(lastRequest.method === 'POST', 'Test 82: POST method');
+    console.log(
+      '  ✅ Test 82: explainArchitectureFinding sends POST to /intelligence/health/explain',
+    );
   }
 }
 

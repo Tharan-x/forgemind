@@ -34,6 +34,8 @@ import {
   askOnboardingStepQuestionHandler,
   shareOnboardingBlueprintHandler,
   getSharedBlueprintHandler,
+  getArchitectureHealthHandler,
+  explainArchitectureFindingHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -214,6 +216,23 @@ router.post(
   requireAuth,
   heavyRouteRateLimiter,
   shareOnboardingBlueprintHandler,
+);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/health
+ * Returns deterministic 0-100 architecture health score and findings.
+ */
+router.get('/:repositoryId/intelligence/health', requireAuth, getArchitectureHealthHandler);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/health/explain
+ * Provides a RAG-grounded AI explanation and refactoring plan for an architectural finding.
+ */
+router.post(
+  '/:repositoryId/intelligence/health/explain',
+  requireAuth,
+  heavyRouteRateLimiter,
+  explainArchitectureFindingHandler,
 );
 
 /**

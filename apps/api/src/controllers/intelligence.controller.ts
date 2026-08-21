@@ -4,6 +4,8 @@
 
 import type { Request, Response } from 'express';
 
+import type { HealthFindingCategory } from '@forgemind/types';
+
 import type { AuthenticatedRequest } from '../auth/index.js';
 import { findRepositoryById } from '../services/index.js';
 import {
@@ -568,6 +570,99 @@ export async function getSharedBlueprintHandler(req: Request, res: Response): Pr
       res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message },
+      });
+    } else {
+      sendInternalError(res, message);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Architecture Health Handlers (Sprint 8 Task 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/health
+ * Returns a 100% deterministic architectural health report and anti-pattern findings.
+ */
+export async function getArchitectureHealthHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { generateArchitectureHealthReport } =
+      await import('../services/architecture-health.service.js');
+
+    const report = await generateArchitectureHealthReport(repositoryId, user.id);
+    res.status(200).json({ success: true, data: report });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/health/explain
+ * Provides a RAG-grounded AI explanation and refactoring plan for a deterministic finding.
+ *
+ * Body: { findingId: string, category?: string, affectedFiles?: string[] }
+ */
+export async function explainArchitectureFindingHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const body = (req.body || {}) as {
+      findingId?: string;
+      category?: string;
+      affectedFiles?: string[];
+    };
+
+    if (!body.findingId?.trim()) {
+      sendBadRequest(res, 'findingId is required.');
+      return;
+    }
+
+    const { explainArchitectureFinding } =
+      await import('../services/architecture-health.service.js');
+
+    const explanation = await explainArchitectureFinding(repositoryId, user.id, {
+      findingId: body.findingId.trim(),
+      category: body.category as HealthFindingCategory | undefined,
+      affectedFiles: body.affectedFiles,
+    });
+
+    res.status(200).json({ success: true, data: explanation });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as Record<string, unknown>).code)
+        : '';
+    if (code === 'INVALID_FINDING_ID' || message.includes('not found')) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_FINDING_ID', message },
       });
     } else {
       sendInternalError(res, message);

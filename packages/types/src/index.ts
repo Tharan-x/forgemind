@@ -599,3 +599,26 @@ export interface ArchitectureHealthReport {
   fanMetrics: NodeFanMetrics[];
   evaluatedAt: string;
 }
+
+export interface ArchitectureHealthExplainRequest {
+  findingId: string;
+  category?: HealthFindingCategory;
+  affectedFiles?: string[];
+}
+
+export interface ArchitectureHealthExplanationResponse {
+  findingId: string;
+  category: HealthFindingCategory;
+  title: string;
+  explanation: string;
+  architecturalImpact: string;
+  remediationSteps: string[];
+  safeFilesToKeep: string[];
+  blastRadius: {
+    directDependents: string[];
+    transitiveDependents: string[];
+    blastRadiusScore: number;
+  };
+  sources: RAGSourceCitation[];
+  providerUsed: string;
+}

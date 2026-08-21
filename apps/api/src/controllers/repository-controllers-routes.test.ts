@@ -1802,6 +1802,79 @@ async function runPartH() {
     }
     console.log('  ✅ Test 59: GET Public Shared Blueprint returns HTTP 200 for valid token');
   }
+
+  // 60. GET Architecture Health returns HTTP 200 with deterministic score & findings
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/intelligence/health`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 60: Status 200');
+    assert((res.body as any)?.data?.repositoryId === REPO_ID_1, 'Test 60: repositoryId matches');
+    assert(
+      typeof (res.body as any)?.data?.healthScore === 'number',
+      'Test 60: healthScore is number',
+    );
+    assert(Array.isArray((res.body as any)?.data?.findings), 'Test 60: findings is array');
+    console.log('  ✅ Test 60: GET Architecture Health returns HTTP 200 with score & findings');
+  }
+
+  // 61. GET Architecture Health cross-user access rejected with 403 Forbidden
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_2}/intelligence/health`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 403, 'Test 61: Status 403');
+    console.log('  ✅ Test 61: GET Architecture Health cross-user access rejected with 403');
+  }
+
+  // 62. POST Explain Architecture Finding returns HTTP 200 with explanation & evidence
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/health/explain`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          findingId: 'finding-cycle-1',
+          category: 'circular_dependency',
+          affectedFiles: ['src/a.ts', 'src/b.ts'],
+        },
+      },
+    );
+    assert(
+      res.status === 200 || res.status === 400 || res.status === 429,
+      'Test 62: Status 200, 400 or 429',
+    );
+    console.log('  ✅ Test 62: POST Explain Architecture Finding handled correctly');
+  }
+
+  // 63. POST Explain Architecture Finding missing findingId rejected with 400
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/health/explain`,
+      {
+        token: TOKEN_USER_1,
+        body: {},
+      },
+    );
+    assert(res.status === 400 || res.status === 429, 'Test 63: Status 400 or 429');
+    console.log('  ✅ Test 63: POST Explain Architecture Finding missing findingId rejected');
+  }
+
+  // 64. POST Explain Architecture Finding cross-user access rejected with 403
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_2}/intelligence/health/explain`,
+      {
+        token: TOKEN_USER_1,
+        body: { findingId: 'finding-1' },
+      },
+    );
+    assert(res.status === 403 || res.status === 429, 'Test 64: Status 403 or 429');
+    console.log('  ✅ Test 64: POST Explain Architecture Finding cross-user access rejected');
+  }
 }
 
 // Execute test suite

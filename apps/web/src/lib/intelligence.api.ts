@@ -3,6 +3,9 @@
 // =============================================================================
 
 import type {
+  ArchitectureHealthReport,
+  ArchitectureHealthExplainRequest,
+  ArchitectureHealthExplanationResponse,
   ArchitectureOverviewResponse,
   BlueprintShareRequest,
   BlueprintShareResponse,
@@ -202,4 +205,31 @@ export async function getSharedBlueprint(
     throw new Error(message);
   }
   return body as { success: boolean; data: SharedBlueprintView };
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/health
+ */
+export async function getArchitectureHealth(
+  repositoryId: string,
+): Promise<{ success: boolean; data: ArchitectureHealthReport }> {
+  return request<{ success: boolean; data: ArchitectureHealthReport }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/health`,
+  );
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/health/explain
+ */
+export async function explainArchitectureFinding(
+  repositoryId: string,
+  reqData: ArchitectureHealthExplainRequest,
+): Promise<{ success: boolean; data: ArchitectureHealthExplanationResponse }> {
+  return request<{ success: boolean; data: ArchitectureHealthExplanationResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/health/explain`,
+    {
+      method: 'POST',
+      body: JSON.stringify(reqData),
+    },
+  );
 }
