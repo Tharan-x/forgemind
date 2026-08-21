@@ -31,6 +31,7 @@ import {
   architectureOverviewHandler,
   getGraphTopologyHandler,
   getOnboardingBlueprintHandler,
+  askOnboardingStepQuestionHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -189,5 +190,16 @@ router.get('/:repositoryId/graph', requireAuth, getGraphTopologyHandler);
  */
 router.get('/:repositoryId/intelligence/blueprint', requireAuth, getOnboardingBlueprintHandler);
 router.get('/:repositoryId/onboarding/blueprint', requireAuth, getOnboardingBlueprintHandler);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/blueprint/step-ask
+ * Answers a developer's question grounded in a specific onboarding tour step.
+ */
+router.post(
+  '/:repositoryId/intelligence/blueprint/step-ask',
+  requireAuth,
+  heavyRouteRateLimiter,
+  askOnboardingStepQuestionHandler,
+);
 
 export { router as repositoryRouter };

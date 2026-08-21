@@ -4,6 +4,8 @@
 
 import type {
   ArchitectureOverviewResponse,
+  BlueprintStepQARequest,
+  BlueprintStepQAResponse,
   CodeExplainRequest,
   CodeExplainResponse,
   FileDependencyIntelligence,
@@ -136,5 +138,21 @@ export async function getOnboardingBlueprint(
 ): Promise<{ success: boolean; data: OnboardingBlueprint }> {
   return request<{ success: boolean; data: OnboardingBlueprint }>(
     `/repositories/${encodeURIComponent(repositoryId)}/intelligence/blueprint`,
+  );
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/blueprint/step-ask
+ */
+export async function askOnboardingStepQuestion(
+  repositoryId: string,
+  reqData: BlueprintStepQARequest,
+): Promise<{ success: boolean; data: BlueprintStepQAResponse }> {
+  return request<{ success: boolean; data: BlueprintStepQAResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/blueprint/step-ask`,
+    {
+      method: 'POST',
+      body: JSON.stringify(reqData),
+    },
   );
 }

@@ -11,14 +11,19 @@ import type {
   BlueprintEntryPoint,
   BlueprintQuickstart,
   BlueprintSection,
+  BlueprintStepQARequest,
+  BlueprintStepQAResponse,
   BlueprintTourStep,
   OnboardingBlueprint,
+  RAGSourceCitation,
 } from '@forgemind/types';
 
+import { retrieveRepositoryContext } from './context-retrieval.service.js';
+import { getLLMProvider } from './llm/factory.js';
+import { buildRAGPrompt } from './rag-prompt.service.js';
 import { findRepositoryById } from './repository.service.js';
 import { findRepositoryDependencies, findRepositorySymbols } from './symbol-extraction.service.js';
 import { findRepositoryFiles } from './tree-indexing.service.js';
-import { getLLMProvider } from './llm/factory.js';
 
 /**
  * Verifies repository existence and user ownership.
@@ -397,6 +402,89 @@ export async function generateOnboardingBlueprint(
     guidedTour,
     architecturalSections: sections,
     quickstart,
+    providerUsed,
+  };
+}
+
+/**
+ * Answers a developer's question grounded in a specific onboarding tour step and target file.
+ */
+export async function askOnboardingStepQuestion(
+  repositoryId: string,
+  userId: string,
+  request: BlueprintStepQARequest,
+): Promise<BlueprintStepQAResponse> {
+  await assertRepositoryOwnership(repositoryId, userId);
+
+  const { stepNumber, targetFile, query, symbolName } = request;
+
+  if (typeof stepNumber !== 'number' || stepNumber < 1 || stepNumber > 10) {
+    throw new Error('Invalid step number');
+  }
+
+  if (
+    !targetFile ||
+    typeof targetFile !== 'string' ||
+    targetFile.trim().length === 0 ||
+    targetFile.length > 500
+  ) {
+    throw new Error('Invalid target file path');
+  }
+
+  if (!query || typeof query !== 'string' || query.trim().length === 0) {
+    throw new Error('Query is required');
+  }
+
+  if (query.length > 2000) {
+    throw new Error('Query exceeds maximum length of 2000 characters');
+  }
+
+  if (symbolName && (typeof symbolName !== 'string' || symbolName.length > 200)) {
+    throw new Error('Invalid symbol name');
+  }
+
+  const retrievalQuery = symbolName
+    ? `${query} regarding symbol "${symbolName}" in file ${targetFile}`
+    : `${query} regarding file ${targetFile}`;
+
+  const contextChunks = await retrieveRepositoryContext(repositoryId, userId, retrievalQuery, {
+    topK: 6,
+    threshold: 0.0,
+  });
+
+  const promptQuery = `[Onboarding Step ${stepNumber}: File ${targetFile}${symbolName ? `, Symbol ${symbolName}` : ''}]\nDeveloper Question: ${query}`;
+  const { systemPrompt, userPrompt } = buildRAGPrompt(contextChunks, promptQuery);
+
+  const llmProvider = getLLMProvider();
+  let answer = '';
+  let providerUsed = llmProvider.name;
+
+  try {
+    answer = await llmProvider.generateAnswer(systemPrompt, userPrompt);
+  } catch {
+    providerUsed = 'deterministic-ast-analysis';
+    answer = `Step ${stepNumber} (${targetFile}) context retrieved successfully. LLM generation is currently unavailable — please inspect ${targetFile}${symbolName ? ` symbol "${symbolName}"` : ''} directly for detailed source logic.`;
+  }
+
+  const sources: RAGSourceCitation[] = contextChunks.map((chunk) => ({
+    filePath: chunk.filePath,
+    startLine: chunk.startLine,
+    endLine: chunk.endLine,
+    score: chunk.similarity,
+    symbolName:
+      typeof chunk.metadata?.['symbolName'] === 'string' ? chunk.metadata['symbolName'] : undefined,
+    symbolKind:
+      typeof chunk.metadata?.['symbolKind'] === 'string' ? chunk.metadata['symbolKind'] : undefined,
+    language: chunk.language,
+    content: chunk.content,
+  }));
+
+  return {
+    stepNumber,
+    targetFile,
+    query,
+    answer,
+    sources,
     providerUsed,
   };
 }

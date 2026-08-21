@@ -490,3 +490,19 @@ export interface OnboardingBlueprint {
   quickstart: BlueprintQuickstart;
   providerUsed: string;
 }
+
+export interface BlueprintStepQARequest {
+  stepNumber: number;
+  targetFile: string;
+  query: string;
+  symbolName?: string;
+}
+
+export interface BlueprintStepQAResponse {
+  stepNumber: number;
+  targetFile: string;
+  query: string;
+  answer: string;
+  sources: RAGSourceCitation[];
+  providerUsed: string;
+}

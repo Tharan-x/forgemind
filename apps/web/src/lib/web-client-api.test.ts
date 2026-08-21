@@ -70,6 +70,7 @@ import {
   analyzeImpact,
   getArchitectureOverview,
   getOnboardingBlueprint,
+  askOnboardingStepQuestion,
 } from './intelligence.api.js';
 
 import { getGitHubConnection, connectGitHub, disconnectGitHub } from './github-credential.api.js';
@@ -1272,6 +1273,37 @@ async function runPartF(): Promise<void> {
     assertEqual(res.data.repositoryName, 'my-repo', 'Test 54b: repositoryName returned');
     console.log(
       '  ✅ Test 54b: getOnboardingBlueprint — GET /repositories/:id/intelligence/blueprint',
+    );
+  }
+
+  // 54c. askOnboardingStepQuestion — POST /repositories/:id/intelligence/blueprint/step-ask
+  {
+    mockAuthenticatedSession();
+    const mockQaResponse = {
+      stepNumber: 1,
+      targetFile: 'src/main.ts',
+      query: 'What does this file do?',
+      answer: 'This is the main bootstrap file.',
+      sources: [],
+      providerUsed: 'mock',
+    };
+    installFetchInterceptor(200, { success: true, data: mockQaResponse });
+
+    const res = await askOnboardingStepQuestion(REPO_ID, {
+      stepNumber: 1,
+      targetFile: 'src/main.ts',
+      query: 'What does this file do?',
+    });
+
+    assertEqual(lastRequest!.method, 'POST', 'Test 54c: method is POST');
+    assertEqual(
+      lastRequest!.url,
+      `http://api.test/api/v1/repositories/${REPO_ID}/intelligence/blueprint/step-ask`,
+      'Test 54c: URL is correct',
+    );
+    assertEqual(res.data.answer, 'This is the main bootstrap file.', 'Test 54c: answer returned');
+    console.log(
+      '  ✅ Test 54c: askOnboardingStepQuestion — POST /repositories/:id/intelligence/blueprint/step-ask',
     );
   }
 

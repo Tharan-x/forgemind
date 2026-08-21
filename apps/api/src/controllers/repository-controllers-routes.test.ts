@@ -1689,6 +1689,65 @@ async function runPartH() {
     assertEqual(res.status, 403, 'Test 54: Status 403');
     console.log('  ✅ Test 54: GET Onboarding Blueprint cross-user access rejected');
   }
+
+  // 55. POST Onboarding Step Q&A returns HTTP 200 for owned repository
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/blueprint/step-ask`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          stepNumber: 1,
+          targetFile: 'src/main.ts',
+          query: 'Explain server bootstrap initialization',
+        },
+      },
+    );
+    assert(res.status === 200 || res.status === 429, 'Test 55: Status 200 or 429 rate limited');
+    if (res.status === 200) {
+      const body = res.body as unknown as { success: boolean; data: { answer: string } };
+      assert(body.success === true, 'Test 55: success is true');
+      assert(typeof body.data.answer === 'string', 'Test 55: answer returned');
+    }
+    console.log('  ✅ Test 55: POST Onboarding Step Q&A returns HTTP 200 for owned repository');
+  }
+
+  // 56. POST Onboarding Step Q&A with invalid payload rejected with 400
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/blueprint/step-ask`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          stepNumber: 1,
+          targetFile: '',
+          query: '',
+        },
+      },
+    );
+    assert(res.status === 400 || res.status === 429, 'Test 56: Status 400 or 429 rate limited');
+    console.log('  ✅ Test 56: POST Onboarding Step Q&A invalid payload rejected');
+  }
+
+  // 57. POST Onboarding Step Q&A for non-owned repository rejected with 403
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_2}/intelligence/blueprint/step-ask`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          stepNumber: 1,
+          targetFile: 'src/main.ts',
+          query: 'Explain main.ts',
+        },
+      },
+    );
+    assert(res.status === 403 || res.status === 429, 'Test 57: Status 403 or 429 rate limited');
+    console.log('  ✅ Test 57: POST Onboarding Step Q&A cross-user access rejected');
+  }
 }
 
 // Execute test suite

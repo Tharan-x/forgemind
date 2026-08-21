@@ -4,12 +4,23 @@
 // ForgeMind Web — Automated Onboarding Blueprint Viewer Component
 // =============================================================================
 
-import React, { useState } from 'react';
-import type { OnboardingBlueprint, BlueprintTourStep } from '@forgemind/types';
+import React, { useState, useEffect } from 'react';
+import type { OnboardingBlueprint, BlueprintTourStep, RAGSourceCitation } from '@forgemind/types';
+import { askOnboardingStepQuestion } from '../../lib/intelligence.api';
 
 interface OnboardingBlueprintViewerProps {
   blueprint: OnboardingBlueprint;
   onFileSelect?: (filePath: string) => void;
+}
+
+interface StepQAThreadItem {
+  id: string;
+  stepNumber: number;
+  query: string;
+  answer: string;
+  sources: RAGSourceCitation[];
+  providerUsed: string;
+  timestamp: string;
 }
 
 export function OnboardingBlueprintViewer({
@@ -17,17 +28,125 @@ export function OnboardingBlueprintViewer({
   onFileSelect,
 }: OnboardingBlueprintViewerProps): React.JSX.Element {
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set([1]));
+
+  // Initialize progress state with localStorage persistence
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(() => {
+    if (typeof window === 'undefined') return new Set([1]);
+    try {
+      const saved = localStorage.getItem(`forgemind_onboarding_progress_${blueprint.repositoryId}`);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.length > 0) return new Set(arr);
+      }
+    } catch {
+      // Fallback on storage errors
+    }
+    return new Set([1]);
+  });
+
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'tour' | 'entrypoints' | 'sections' | 'quickstart'>(
     'tour',
   );
+
+  // Initialize Step-Specific Q&A State with localStorage persistence
+  const [stepQAThreads, setStepQAThreads] = useState<Record<number, StepQAThreadItem[]>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const saved = localStorage.getItem(`forgemind_onboarding_qa_${blueprint.repositoryId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed === 'object' && parsed !== null) return parsed;
+      }
+    } catch {
+      // Fallback on storage errors
+    }
+    return {};
+  });
+
+  const [stepQuery, setStepQuery] = useState<string>('');
+  const [stepQALoading, setStepQALoading] = useState<boolean>(false);
+  const [stepQAError, setStepQAError] = useState<string | null>(null);
+
+  // Persist completedSteps changes to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        `forgemind_onboarding_progress_${blueprint.repositoryId}`,
+        JSON.stringify(Array.from(completedSteps)),
+      );
+    } catch {
+      // Ignore quota errors
+    }
+  }, [completedSteps, blueprint.repositoryId]);
+
+  // Persist stepQAThreads changes to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(
+        `forgemind_onboarding_qa_${blueprint.repositoryId}`,
+        JSON.stringify(stepQAThreads),
+      );
+    } catch {
+      // Ignore quota errors
+    }
+  }, [stepQAThreads, blueprint.repositoryId]);
 
   const tourStep: BlueprintTourStep | undefined = blueprint.guidedTour[activeStepIndex];
 
   const handleStepClick = (index: number) => {
     setActiveStepIndex(index);
     setCompletedSteps((prev) => new Set(prev).add(index + 1));
+  };
+
+  const toggleCurrentStepCompletion = (stepNum: number) => {
+    setCompletedSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepNum)) {
+        next.delete(stepNum);
+      } else {
+        next.add(stepNum);
+      }
+      return next;
+    });
+  };
+
+  const handleAskStepQuestion = async () => {
+    if (!tourStep || !stepQuery.trim() || stepQALoading) return;
+    const queryText = stepQuery.trim();
+    setStepQALoading(true);
+    setStepQAError(null);
+
+    try {
+      const res = await askOnboardingStepQuestion(blueprint.repositoryId, {
+        stepNumber: tourStep.stepNumber,
+        targetFile: tourStep.targetFile,
+        query: queryText,
+        symbolName: tourStep.symbolName,
+      });
+
+      const newItem: StepQAThreadItem = {
+        id: `qa-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        stepNumber: tourStep.stepNumber,
+        query: queryText,
+        answer: res.data.answer,
+        sources: res.data.sources || [],
+        providerUsed: res.data.providerUsed || 'AI Engine',
+        timestamp: new Date().toLocaleTimeString(),
+      };
+
+      setStepQAThreads((prev) => ({
+        ...prev,
+        [tourStep.stepNumber]: [...(prev[tourStep.stepNumber] || []), newItem],
+      }));
+      setStepQuery('');
+    } catch (err) {
+      setStepQAError(err instanceof Error ? err.message : 'Failed to retrieve AI answer for step');
+    } finally {
+      setStepQALoading(false);
+    }
   };
 
   const handleCopy = (text: string) => {
@@ -37,6 +156,29 @@ export function OnboardingBlueprintViewer({
   };
 
   const handleExportMarkdown = () => {
+    const tourMarkdown = blueprint.guidedTour
+      .map((s) => {
+        const isDone = completedSteps.has(s.stepNumber);
+        const qaItems = stepQAThreads[s.stepNumber] || [];
+        const qaMd =
+          qaItems.length > 0
+            ? `\n**Step Q&A Notes**:\n` +
+              qaItems
+                .map(
+                  (q) =>
+                    `- **Q**: ${q.query}\n  **A**: ${q.answer}\n  *Sources*: ${
+                      q.sources
+                        .map((src) => `\`${src.filePath}:${src.startLine}-${src.endLine}\``)
+                        .join(', ') || 'N/A'
+                    }\n`,
+                )
+                .join('\n')
+            : '';
+
+        return `### Step ${s.stepNumber}: ${s.title} ${isDone ? '[COMPLETED ✓]' : '[PENDING]'}\n- **Target File**: \`${s.targetFile}\`\n- **Description**: ${s.description}\n- **Key Takeaway**: ${s.keyTakeaway}${qaMd}\n`;
+      })
+      .join('\n');
+
     const mdContent = `# Onboarding Blueprint — ${blueprint.repositoryName}
 *Generated at: ${new Date(blueprint.generatedAt).toLocaleString()}*
 
@@ -47,12 +189,7 @@ ${blueprint.summary}
 ${blueprint.entryPoints.map((e) => `- \`${e.path}\` (${e.name}): ${e.description}`).join('\n')}
 
 ## 🗺️ 5-Step Guided Code Tour
-${blueprint.guidedTour
-  .map(
-    (s) =>
-      `### Step ${s.stepNumber}: ${s.title}\n- **Target File**: \`${s.targetFile}\`\n- **Description**: ${s.description}\n- **Key Takeaway**: ${s.keyTakeaway}\n`,
-  )
-  .join('\n')}
+${tourMarkdown}
 
 ## 🛠️ Quickstart Guide
 **Prerequisites**:
@@ -221,14 +358,26 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                     </span>
                     <h3 className="text-xl font-bold text-white mt-1">{tourStep.title}</h3>
                   </div>
-                  {onFileSelect && (
+                  <div className="flex items-center gap-3">
                     <button
-                      onClick={() => onFileSelect(tourStep.targetFile)}
-                      className="text-xs font-medium text-indigo-400 hover:text-indigo-300 underline"
+                      onClick={() => toggleCurrentStepCompletion(tourStep.stepNumber)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        completedSteps.has(tourStep.stepNumber)
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
                     >
-                      View File →
+                      {completedSteps.has(tourStep.stepNumber) ? '✓ Completed' : 'Mark Complete'}
                     </button>
-                  )}
+                    {onFileSelect && (
+                      <button
+                        onClick={() => onFileSelect(tourStep.targetFile)}
+                        className="text-xs font-medium text-indigo-400 hover:text-indigo-300 underline"
+                      >
+                        View File →
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mt-4 space-y-4">
@@ -260,6 +409,79 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                     <p className="mt-1 text-xs text-indigo-200 font-medium">
                       {tourStep.keyTakeaway}
                     </p>
+                  </div>
+
+                  {/* Step-Specific Grounded AI Q&A Panel */}
+                  <div className="mt-6 rounded-lg border border-slate-800 bg-slate-900/80 p-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                        🤖 Step-Grounded AI Q&A Assistant
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Grounded in {tourStep.targetFile}
+                      </span>
+                    </div>
+
+                    {/* Q&A Thread Items for this Step */}
+                    {(stepQAThreads[tourStep.stepNumber] || []).length > 0 && (
+                      <div className="mt-3 space-y-3 max-h-64 overflow-y-auto pr-1">
+                        {(stepQAThreads[tourStep.stepNumber] || []).map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded-md border border-slate-800 bg-slate-950 p-3 text-xs"
+                          >
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="font-bold text-indigo-300">Q: {item.query}</span>
+                              <span>{item.timestamp}</span>
+                            </div>
+                            <p className="mt-2 text-slate-200 leading-relaxed font-sans">
+                              {item.answer}
+                            </p>
+                            {item.sources.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
+                                <span className="text-[10px] font-semibold text-slate-400">
+                                  Sources:
+                                </span>
+                                {item.sources.map((src, i) => (
+                                  <span
+                                    key={i}
+                                    onClick={() => onFileSelect && onFileSelect(src.filePath)}
+                                    className="cursor-pointer rounded bg-slate-900 border border-slate-800 px-1.5 py-0.5 text-[10px] font-mono text-emerald-400 hover:border-emerald-500/50"
+                                  >
+                                    {src.filePath}:{src.startLine}-{src.endLine}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {stepQAError && (
+                      <div className="mt-2 rounded bg-rose-500/10 border border-rose-500/30 p-2 text-xs text-rose-300">
+                        {stepQAError}
+                      </div>
+                    )}
+
+                    {/* Query Input */}
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        type="text"
+                        value={stepQuery}
+                        onChange={(e) => setStepQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAskStepQuestion()}
+                        placeholder={`Ask a question about Step ${tourStep.stepNumber} (${tourStep.targetFile.split('/').pop()})...`}
+                        className="flex-1 rounded-lg bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-sans"
+                      />
+                      <button
+                        disabled={stepQALoading || !stepQuery.trim()}
+                        onClick={handleAskStepQuestion}
+                        className="rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        {stepQALoading ? 'Asking...' : 'Ask AI'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Tour Navigation Controls */}

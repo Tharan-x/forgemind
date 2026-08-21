@@ -31,6 +31,13 @@ function sendUnauthorized(res: Response): void {
   });
 }
 
+function sendBadRequest(res: Response, message: string): void {
+  res.status(400).json({
+    success: false,
+    error: { code: 'BAD_REQUEST', message },
+  });
+}
+
 /**
  * Verifies repository existence and user ownership.
  * Sends appropriate error and returns false on failure.
@@ -378,6 +385,67 @@ export async function getOnboardingBlueprintHandler(
     const blueprint = await generateOnboardingBlueprint(repositoryId, user.id);
 
     res.status(200).json({ success: true, data: blueprint });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Onboarding Step Q&A Handler
+// ---------------------------------------------------------------------------
+
+/**
+ * Answers a developer's question grounded in a specific onboarding tour step and target file.
+ */
+export async function askOnboardingStepQuestionHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const { stepNumber, targetFile, query, symbolName } = req.body as {
+      stepNumber?: unknown;
+      targetFile?: unknown;
+      query?: unknown;
+      symbolName?: unknown;
+    };
+
+    if (
+      typeof stepNumber !== 'number' ||
+      typeof targetFile !== 'string' ||
+      typeof query !== 'string' ||
+      query.trim().length === 0
+    ) {
+      sendBadRequest(res, 'Valid stepNumber, targetFile, and non-empty query are required');
+      return;
+    }
+
+    if (query.length > 2000) {
+      sendBadRequest(res, 'Query exceeds maximum length of 2000 characters');
+      return;
+    }
+
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { askOnboardingStepQuestion } =
+      await import('../services/onboarding-blueprint.service.js');
+
+    const result = await askOnboardingStepQuestion(repositoryId, user.id, {
+      stepNumber,
+      targetFile,
+      query: query.trim(),
+      symbolName: typeof symbolName === 'string' ? symbolName : undefined,
+    });
+
+    res.status(200).json({ success: true, data: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : undefined;
     sendInternalError(res, message);
