@@ -539,3 +539,63 @@ export interface SharedBlueprintView {
   customNotes?: string;
   qaThreads?: Record<number, SharedBlueprintQAItem[]>;
 }
+
+// ─── Architecture Health Engine (Sprint 8 Task 1) ─────────────────────────
+
+export type HealthFindingCategory =
+  'circular_dependency' | 'layer_violation' | 'coupling_hotspot' | 'orphan_export';
+
+export type HealthFindingSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+export interface HealthFinding {
+  id: string;
+  category: HealthFindingCategory;
+  severity: HealthFindingSeverity;
+  title: string;
+  description: string;
+  affectedNodeIds: string[];
+  affectedFilePaths: string[];
+  metrics: {
+    fanIn?: number;
+    fanOut?: number;
+    cycleLength?: number;
+    totalDegree?: number;
+  };
+  penaltyPoints: number;
+}
+
+export interface NodeFanMetrics {
+  nodeId: string;
+  filePath: string;
+  fanIn: number;
+  fanOut: number;
+  totalDegree: number;
+}
+
+export interface ArchitectureHealthScoreBreakdown {
+  baseScore: number;
+  cyclePenalty: number;
+  layerViolationPenalty: number;
+  hotspotPenalty: number;
+  orphanPenalty: number;
+  finalScore: number;
+  grade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+}
+
+export interface ArchitectureHealthReport {
+  repositoryId: string;
+  healthScore: number;
+  grade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+  scoreBreakdown: ArchitectureHealthScoreBreakdown;
+  metrics: {
+    totalFiles: number;
+    totalDependencies: number;
+    circularCycleCount: number;
+    layerViolationCount: number;
+    hotspotCount: number;
+    orphanExportCount: number;
+  };
+  findings: HealthFinding[];
+  fanMetrics: NodeFanMetrics[];
+  evaluatedAt: string;
+}

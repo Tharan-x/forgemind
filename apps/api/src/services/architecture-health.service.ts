@@ -1,0 +1,305 @@
+// =============================================================================
+// ForgeMind API — Deterministic Architecture Health Engine (Sprint 8 Task 1)
+// =============================================================================
+//
+// Computes 100% deterministic, reproducible architectural health metrics and
+// anti-pattern findings from AST dependency graphs.
+// Zero LLM dependencies — all scores and detections are mathematical & rule-based.
+// =============================================================================
+
+import type {
+  ArchitectureHealthReport,
+  ArchitectureHealthScoreBreakdown,
+  HealthFinding,
+  HealthFindingSeverity,
+  NodeFanMetrics,
+} from '@forgemind/types';
+
+import { detectCircularDependencies } from './graph-topology.service.js';
+import { assertRepositoryOwnership } from './repository.service.js';
+import { findRepositoryFiles } from './tree-indexing.service.js';
+import { findRepositoryDependencies, findRepositorySymbols } from './symbol-extraction.service.js';
+
+export interface RawDependency {
+  sourcePath: string;
+  targetPath: string | null;
+  isExternal: boolean;
+}
+
+export interface RawSymbol {
+  name: string;
+  kind: string;
+  filePath: string;
+}
+
+export interface ArchitectureHealthInput {
+  repositoryId: string;
+  files: Array<{ path: string; name: string }>;
+  dependencies: RawDependency[];
+  symbols?: RawSymbol[];
+}
+
+const DEFAULT_HOTSPOT_DEGREE_THRESHOLD = 10;
+const HIGH_HOTSPOT_DEGREE_THRESHOLD = 15;
+
+/**
+ * Classifies a file path into an architectural layer.
+ */
+export function classifyPathLayer(
+  path: string,
+): 'frontend' | 'api' | 'domain_logic' | 'data_layer' | 'configuration' {
+  const p = path.toLowerCase();
+  if (
+    p.includes('schema.prisma') ||
+    p.includes('/db/') ||
+    p.includes('/repositories/') ||
+    p.includes('/models/')
+  ) {
+    return 'data_layer';
+  }
+  if (
+    p.includes('/controllers/') ||
+    p.includes('/routes/') ||
+    p.includes('/endpoints/') ||
+    p.endsWith('/app.ts')
+  ) {
+    return 'api';
+  }
+  if (p.includes('/services/') || p.includes('/usecases/') || p.includes('/domain/')) {
+    return 'domain_logic';
+  }
+  if (
+    p.includes('/components/') ||
+    p.includes('/pages/') ||
+    p.includes('/app/') ||
+    p.includes('/hooks/')
+  ) {
+    return 'frontend';
+  }
+  return 'configuration';
+}
+
+/**
+ * Computes deterministic fan-in, fan-out, and total degree metrics per file.
+ */
+export function computeFanMetrics(
+  files: Array<{ path: string }>,
+  dependencies: RawDependency[],
+): NodeFanMetrics[] {
+  const fanInMap = new Map<string, number>();
+  const fanOutMap = new Map<string, number>();
+  const filePaths = new Set(files.map((f) => f.path));
+  const uniqueEdges = new Set<string>();
+
+  for (const dep of dependencies) {
+    if (dep.isExternal || !dep.targetPath) continue;
+    const src = dep.sourcePath;
+    const tgt = dep.targetPath;
+    if (src === tgt) continue;
+
+    const edgeKey = `${src}::${tgt}`;
+    if (uniqueEdges.has(edgeKey)) continue;
+    uniqueEdges.add(edgeKey);
+
+    if (filePaths.has(src)) {
+      fanOutMap.set(src, (fanOutMap.get(src) ?? 0) + 1);
+    }
+    if (filePaths.has(tgt)) {
+      fanInMap.set(tgt, (fanInMap.get(tgt) ?? 0) + 1);
+    }
+  }
+
+  return files.map((f) => {
+    const fanIn = fanInMap.get(f.path) ?? 0;
+    const fanOut = fanOutMap.get(f.path) ?? 0;
+    return {
+      nodeId: `file:${f.path}`,
+      filePath: f.path,
+      fanIn,
+      fanOut,
+      totalDegree: fanIn + fanOut,
+    };
+  });
+}
+
+/**
+ * Deterministically analyzes repository graph input and computes architectural health findings.
+ */
+export function analyzeArchitectureHealthSync(
+  input: ArchitectureHealthInput,
+): ArchitectureHealthReport {
+  const { repositoryId, files, dependencies, symbols = [] } = input;
+  const findings: HealthFinding[] = [];
+
+  // 1. Fan-in / Fan-out & Hotspot Detection
+  const fanMetrics = computeFanMetrics(files, dependencies);
+
+  const hotspotNodes = fanMetrics.filter((m) => m.totalDegree >= DEFAULT_HOTSPOT_DEGREE_THRESHOLD);
+
+  let hotspotCount = 0;
+  for (const node of hotspotNodes) {
+    hotspotCount++;
+    const isCritical = node.totalDegree >= HIGH_HOTSPOT_DEGREE_THRESHOLD;
+    const severity: HealthFindingSeverity = isCritical ? 'high' : 'medium';
+    findings.push({
+      id: `finding-hotspot-${hotspotCount}`,
+      category: 'coupling_hotspot',
+      severity,
+      title: `High Coupling Hotspot: ${node.filePath}`,
+      description: `File "${node.filePath}" has ${node.totalDegree} total connections (Fan-In: ${node.fanIn}, Fan-Out: ${node.fanOut}), indicating high structural risk.`,
+      affectedNodeIds: [node.nodeId],
+      affectedFilePaths: [node.filePath],
+      metrics: {
+        fanIn: node.fanIn,
+        fanOut: node.fanOut,
+        totalDegree: node.totalDegree,
+      },
+      penaltyPoints: 5,
+    });
+  }
+
+  // 2. Circular Dependency Cycle Detection (Tarjan's SCC)
+  const rawCycles = detectCircularDependencies(dependencies);
+  let cycleCount = 0;
+  for (const cycle of rawCycles) {
+    cycleCount++;
+    findings.push({
+      id: `finding-cycle-${cycleCount}`,
+      category: 'circular_dependency',
+      severity: 'critical',
+      title: `Circular Dependency Cycle (${cycle.length} files)`,
+      description: `Circular import cycle detected: ${cycle.cycle.join(' → ')}. Cycles create tight coupling and ordering bugs.`,
+      affectedNodeIds: cycle.cycle.map((p) => `file:${p}`),
+      affectedFilePaths: cycle.cycle,
+      metrics: {
+        cycleLength: cycle.length,
+      },
+      penaltyPoints: 10,
+    });
+  }
+
+  // 3. Architectural Layer Violation Detection
+  let layerViolationCount = 0;
+  for (const dep of dependencies) {
+    if (dep.isExternal || !dep.targetPath) continue;
+    const srcLayer = classifyPathLayer(dep.sourcePath);
+    const tgtLayer = classifyPathLayer(dep.targetPath);
+
+    // Rule: Data layer or Domain logic MUST NOT import API controllers or Frontend components
+    if (
+      (srcLayer === 'data_layer' || srcLayer === 'domain_logic') &&
+      (tgtLayer === 'api' || tgtLayer === 'frontend')
+    ) {
+      layerViolationCount++;
+      findings.push({
+        id: `finding-layer-${layerViolationCount}`,
+        category: 'layer_violation',
+        severity: 'high',
+        title: `Architectural Layer Breach: ${srcLayer} → ${tgtLayer}`,
+        description: `File "${dep.sourcePath}" (${srcLayer}) illegally imports "${dep.targetPath}" (${tgtLayer}), breaking clean architecture boundary.`,
+        affectedNodeIds: [`file:${dep.sourcePath}`, `file:${dep.targetPath}`],
+        affectedFilePaths: [dep.sourcePath, dep.targetPath],
+        metrics: {},
+        penaltyPoints: 8,
+      });
+    }
+  }
+
+  // 4. Orphan Export Detection
+  const importedSymbolNames = new Set<string>();
+  for (const dep of dependencies) {
+    if (dep.targetPath) {
+      // Import relation implicitly calls target symbols
+      importedSymbolNames.add(dep.targetPath.split('/').pop() || '');
+    }
+  }
+
+  const orphanSymbols = symbols.filter(
+    (s) =>
+      (s.kind === 'function' || s.kind === 'class') &&
+      !importedSymbolNames.has(s.filePath.split('/').pop() || ''),
+  );
+
+  const orphanExportCount = orphanSymbols.length;
+  if (orphanExportCount > 5) {
+    findings.push({
+      id: `finding-orphan-1`,
+      category: 'orphan_export',
+      severity: 'low',
+      title: `Unreferenced Export Indicators (${orphanExportCount} symbols)`,
+      description: `Detected ${orphanExportCount} exported symbols with zero internal import targets across the codebase.`,
+      affectedNodeIds: orphanSymbols.slice(0, 5).map((s) => `file:${s.filePath}`),
+      affectedFilePaths: Array.from(new Set(orphanSymbols.map((s) => s.filePath))).slice(0, 5),
+      metrics: {},
+      penaltyPoints: Math.min(10, Math.floor(orphanExportCount / 5)),
+    });
+  }
+
+  // 5. Compute Deterministic 0-100 Health Score
+  const cyclePenalty = Math.min(40, cycleCount * 10);
+  const layerViolationPenalty = Math.min(30, layerViolationCount * 8);
+  const hotspotPenalty = Math.min(20, hotspotCount * 5);
+  const orphanPenalty = Math.min(10, Math.floor(orphanExportCount / 5));
+
+  const totalPenalties = cyclePenalty + layerViolationPenalty + hotspotPenalty + orphanPenalty;
+  const finalScore = Math.max(0, Math.min(100, 100 - totalPenalties));
+
+  let grade: ArchitectureHealthScoreBreakdown['grade'] = 'F';
+  if (finalScore >= 90) grade = 'A+';
+  else if (finalScore >= 85) grade = 'A';
+  else if (finalScore >= 75) grade = 'B+';
+  else if (finalScore >= 65) grade = 'B';
+  else if (finalScore >= 55) grade = 'C';
+  else if (finalScore >= 45) grade = 'D';
+
+  const scoreBreakdown: ArchitectureHealthScoreBreakdown = {
+    baseScore: 100,
+    cyclePenalty,
+    layerViolationPenalty,
+    hotspotPenalty,
+    orphanPenalty,
+    finalScore,
+    grade,
+  };
+
+  return {
+    repositoryId,
+    healthScore: finalScore,
+    grade,
+    scoreBreakdown,
+    metrics: {
+      totalFiles: files.length,
+      totalDependencies: dependencies.length,
+      circularCycleCount: cycleCount,
+      layerViolationCount,
+      hotspotCount,
+      orphanExportCount,
+    },
+    findings,
+    fanMetrics,
+    evaluatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetches repository assets and evaluates deterministic architecture health.
+ */
+export async function generateArchitectureHealthReport(
+  repositoryId: string,
+  userId: string,
+): Promise<ArchitectureHealthReport> {
+  await assertRepositoryOwnership(repositoryId, userId);
+
+  const [filesResult, depsResult, symbolsResult] = await Promise.all([
+    findRepositoryFiles(repositoryId, { limit: 1000 }),
+    findRepositoryDependencies(repositoryId, { limit: 2000 }),
+    findRepositorySymbols(repositoryId, { limit: 2000 }),
+  ]);
+
+  return analyzeArchitectureHealthSync({
+    repositoryId,
+    files: filesResult.files,
+    dependencies: depsResult.dependencies,
+    symbols: symbolsResult.symbols,
+  });
+}
