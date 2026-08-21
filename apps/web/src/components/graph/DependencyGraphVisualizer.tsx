@@ -12,12 +12,14 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 interface DependencyGraphVisualizerProps {
   repositoryId: string;
+  highlightNodeIds?: string[];
   onSelectNodeForImpact?: (filePath: string, symbolName?: string) => void;
   onSelectNodeForExplain?: (filePath: string, symbolName?: string) => void;
 }
 
 export function DependencyGraphVisualizer({
   repositoryId,
+  highlightNodeIds = [],
   onSelectNodeForImpact,
   onSelectNodeForExplain,
 }: DependencyGraphVisualizerProps) {
@@ -129,6 +131,7 @@ export function DependencyGraphVisualizer({
       if (!pos) return;
 
       const isSelected = selectedNode?.id === node.id;
+      const isHighlighted = highlightNodeIds.includes(node.id);
 
       let color = '#38bdf8'; // Sky blue for files
       if (node.type === 'module')
@@ -138,11 +141,19 @@ export function DependencyGraphVisualizer({
       else if (node.type === 'package') color = '#fbbf24'; // Amber for packages
 
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, isSelected ? 10 : 6, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
+      ctx.arc(pos.x, pos.y, isSelected ? 10 : isHighlighted ? 8 : 6, 0, 2 * Math.PI);
+      ctx.fillStyle = isHighlighted ? '#ef4444' : color;
       ctx.fill();
 
-      if (isSelected) {
+      if (isHighlighted) {
+        ctx.strokeStyle = '#f87171';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#f87171';
+        ctx.fillText(`⚠ ${node.label}`, pos.x + 12, pos.y + 4);
+      } else if (isSelected) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -155,7 +166,7 @@ export function DependencyGraphVisualizer({
     });
 
     ctx.restore();
-  }, [data, nodePositions, selectedNode, zoomLevel]);
+  }, [data, nodePositions, selectedNode, zoomLevel, highlightNodeIds]);
 
   // Export JSON topology data
   const exportGraphJson = () => {

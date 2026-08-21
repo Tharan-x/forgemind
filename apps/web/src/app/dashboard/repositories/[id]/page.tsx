@@ -25,6 +25,7 @@ import { Button } from '@forgemind/ui';
 
 import { ProtectedLayout } from '@/components/dashboard/ProtectedLayout';
 import { DependencyGraphVisualizer } from '@/components/graph/DependencyGraphVisualizer';
+import { ArchitecturalHealthDashboard } from '@/components/health/ArchitecturalHealthDashboard';
 import { OnboardingBlueprintViewer } from '@/components/onboarding/OnboardingBlueprintViewer';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -52,7 +53,7 @@ import {
 import { getRepository, type Repository } from '@/lib/repository.api';
 
 type TabType =
-  'overview' | 'intelligence' | 'graph' | 'chat' | 'files' | 'symbols' | 'dependencies';
+  'overview' | 'health' | 'intelligence' | 'graph' | 'chat' | 'files' | 'symbols' | 'dependencies';
 
 export default function RepositoryDetailPage() {
   const params = useParams();
@@ -217,6 +218,9 @@ export default function RepositoryDetailPage() {
   const [blueprintLoading, setBlueprintLoading] = useState<boolean>(false);
   const [blueprintError, setBlueprintError] = useState<string | null>(null);
 
+  // Graph Highlight State
+  const [graphHighlightNodeIds, setGraphHighlightNodeIds] = useState<string[]>([]);
+
   // Callbacks
   const fetchBlueprint = useCallback(async () => {
     if (!repositoryId) return;
@@ -338,8 +342,8 @@ export default function RepositoryDetailPage() {
         language: selectedLanguage || undefined,
         limit: 100,
       });
-      setFiles(data.files);
-      setTotalFiles(data.total);
+      setFiles(Array.isArray(data?.files) ? data.files : []);
+      setTotalFiles(data?.total || 0);
     } catch {
       // Ignore initial file load errors gracefully
     } finally {
@@ -357,8 +361,8 @@ export default function RepositoryDetailPage() {
         query: symbolSearch || undefined,
         limit: 100,
       });
-      setSymbols(data.symbols);
-      setTotalSymbols(data.total);
+      setSymbols(Array.isArray(data?.symbols) ? data.symbols : []);
+      setTotalSymbols(data?.total || 0);
     } catch {
       // Ignore symbol load errors gracefully
     } finally {
@@ -377,8 +381,8 @@ export default function RepositoryDetailPage() {
         isExternal: isExternalParam,
         limit: 100,
       });
-      setDependencies(data.dependencies);
-      setTotalDependencies(data.total);
+      setDependencies(Array.isArray(data?.dependencies) ? data.dependencies : []);
+      setTotalDependencies(data?.total || 0);
     } catch {
       // Ignore dependency load errors gracefully
     } finally {
@@ -440,12 +444,14 @@ export default function RepositoryDetailPage() {
   };
 
   // Filter files client-side by search term
-  const filteredFiles = files.filter((f) =>
+  const safeFiles = Array.isArray(files) ? files : [];
+  const filteredFiles = safeFiles.filter((f) =>
     fileSearch ? f.path.toLowerCase().includes(fileSearch.toLowerCase()) : true,
   );
 
   // Filter dependencies client-side by search term
-  const filteredDeps = dependencies.filter((d) =>
+  const safeDeps = Array.isArray(dependencies) ? dependencies : [];
+  const filteredDeps = safeDeps.filter((d) =>
     depSearch
       ? d.sourcePath.toLowerCase().includes(depSearch.toLowerCase()) ||
         d.targetPath.toLowerCase().includes(depSearch.toLowerCase())
@@ -613,6 +619,7 @@ export default function RepositoryDetailPage() {
             {(
               [
                 { id: 'overview', label: 'Overview', icon: '📊' },
+                { id: 'health', label: 'Architectural Health', icon: '🩺' },
                 { id: 'intelligence', label: 'Code Intelligence', icon: '🧠' },
                 { id: 'graph', label: 'Graph & Topology', icon: '🌐' },
                 { id: 'chat', label: 'AI Assistant', icon: '🤖' },
@@ -651,10 +658,22 @@ export default function RepositoryDetailPage() {
           </div>
         </div>
 
+        {/* TAB: ARCHITECTURAL HEALTH */}
+        {activeTab === 'health' && (
+          <ArchitecturalHealthDashboard
+            repositoryId={repositoryId}
+            onNavigateToGraph={(finding) => {
+              setGraphHighlightNodeIds(finding.affectedNodeIds);
+              setActiveTab('graph');
+            }}
+          />
+        )}
+
         {/* TAB: GRAPH & TOPOLOGY */}
         {activeTab === 'graph' && (
           <DependencyGraphVisualizer
             repositoryId={repositoryId}
+            highlightNodeIds={graphHighlightNodeIds}
             onSelectNodeForImpact={() => {
               setActiveTab('intelligence');
             }}

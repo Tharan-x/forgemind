@@ -1341,7 +1341,7 @@ async function runPartD(): Promise<void> {
     const tabBar = rendered.props.children.props.children[1];
     const tabsList = tabBar.props.children.props.children;
 
-    assertEqual(tabsList.length, 7, 'Test 34: 7 tabs present');
+    assertEqual(tabsList.length, 8, 'Test 34: 8 tabs present');
     assertEqual(
       tabsList[0].props.children[1].props.children,
       'Overview',
@@ -1349,33 +1349,38 @@ async function runPartD(): Promise<void> {
     );
     assertEqual(
       tabsList[1].props.children[1].props.children,
-      'Code Intelligence',
-      'Test 34: Tab 2 Intelligence',
+      'Architectural Health',
+      'Test 34: Tab 2 Architectural Health',
     );
     assertEqual(
       tabsList[2].props.children[1].props.children,
-      'Graph & Topology',
-      'Test 34: Tab 3 Graph & Topology',
+      'Code Intelligence',
+      'Test 34: Tab 3 Intelligence',
     );
     assertEqual(
       tabsList[3].props.children[1].props.children,
-      'AI Assistant',
-      'Test 34: Tab 4 Chat',
+      'Graph & Topology',
+      'Test 34: Tab 4 Graph & Topology',
     );
     assertEqual(
       tabsList[4].props.children[1].props.children,
-      'Indexed Files',
-      'Test 34: Tab 5 Files',
+      'AI Assistant',
+      'Test 34: Tab 5 Chat',
     );
     assertEqual(
       tabsList[5].props.children[1].props.children,
-      'AST Symbols',
-      'Test 34: Tab 6 Symbols',
+      'Indexed Files',
+      'Test 34: Tab 6 Files',
     );
     assertEqual(
       tabsList[6].props.children[1].props.children,
+      'AST Symbols',
+      'Test 34: Tab 7 Symbols',
+    );
+    assertEqual(
+      tabsList[7].props.children[1].props.children,
       'Dependencies',
-      'Test 34: Tab 7 Dependencies',
+      'Test 34: Tab 8 Dependencies',
     );
 
     console.log('  ✅ Test 34: Tab bar navigation renders all 7 tabs correctly');
