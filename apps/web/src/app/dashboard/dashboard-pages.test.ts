@@ -1145,7 +1145,7 @@ async function runPartC(): Promise<void> {
 interface RepoDetailStateOverrides {
   repository?: Repository | null;
   latestJob?: AnalysisJob | null;
-  activeTab?: 'overview' | 'intelligence' | 'chat' | 'files' | 'symbols' | 'dependencies';
+  activeTab?: 'overview' | 'intelligence' | 'graph' | 'chat' | 'files' | 'symbols' | 'dependencies';
   loadingRepo?: boolean;
   analyzing?: boolean;
   error?: string | null;
@@ -1255,6 +1255,10 @@ function setupRepoDetailDispatcher(overrides: RepoDetailStateOverrides = {}) {
 async function runPartD(): Promise<void> {
   console.log('\n📋 Part D — Repository Detail Page (Tests 31–48)');
 
+  function getActiveTab(rendered: any) {
+    return rendered.props.children.props.children.slice(2).find(Boolean);
+  }
+
   // Test 31: RepositoryDetailPage loading state renders Skeleton loaders
   {
     setupRepoDetailDispatcher({ loadingRepo: true, repository: null, latestJob: null });
@@ -1330,14 +1334,14 @@ async function runPartD(): Promise<void> {
     );
   }
 
-  // Test 34: Tab bar navigation rendering (Overview, Code Intelligence, AI Assistant, Indexed Files, AST Symbols, Dependencies)
+  // Test 34: Tab bar navigation rendering (Overview, Code Intelligence, Graph & Topology, AI Assistant, Indexed Files, AST Symbols, Dependencies)
   {
     setupRepoDetailDispatcher();
     const rendered = RepositoryDetailPage();
     const tabBar = rendered.props.children.props.children[1];
     const tabsList = tabBar.props.children.props.children;
 
-    assertEqual(tabsList.length, 6, 'Test 34: 6 tabs present');
+    assertEqual(tabsList.length, 7, 'Test 34: 7 tabs present');
     assertEqual(
       tabsList[0].props.children[1].props.children,
       'Overview',
@@ -1350,23 +1354,38 @@ async function runPartD(): Promise<void> {
     );
     assertEqual(
       tabsList[2].props.children[1].props.children,
-      'AI Assistant',
-      'Test 34: Tab 3 Chat',
+      'Graph & Topology',
+      'Test 34: Tab 3 Graph & Topology',
     );
     assertEqual(
       tabsList[3].props.children[1].props.children,
+      'AI Assistant',
+      'Test 34: Tab 4 Chat',
+    );
+    assertEqual(
+      tabsList[4].props.children[1].props.children,
       'Indexed Files',
-      'Test 34: Tab 4 Files',
+      'Test 34: Tab 5 Files',
+    );
+    assertEqual(
+      tabsList[5].props.children[1].props.children,
+      'AST Symbols',
+      'Test 34: Tab 6 Symbols',
+    );
+    assertEqual(
+      tabsList[6].props.children[1].props.children,
+      'Dependencies',
+      'Test 34: Tab 7 Dependencies',
     );
 
-    console.log('  ✅ Test 34: Tab bar navigation renders all 6 tabs correctly');
+    console.log('  ✅ Test 34: Tab bar navigation renders all 7 tabs correctly');
   }
 
   // Test 35: Overview tab metrics cards (Indexed Files, AST Symbols, File Dependencies, Latest Commit)
   {
     setupRepoDetailDispatcher();
     const rendered = RepositoryDetailPage();
-    const overviewTab = rendered.props.children.props.children[2];
+    const overviewTab = getActiveTab(rendered);
     const metricsGrid = overviewTab.props.children[0];
     const [filesCard, symbolsCard, depsCard, commitCard] = metricsGrid.props.children;
 
@@ -1398,7 +1417,7 @@ async function runPartD(): Promise<void> {
   {
     setupRepoDetailDispatcher();
     const rendered = RepositoryDetailPage();
-    const overviewTab = rendered.props.children.props.children[2];
+    const overviewTab = getActiveTab(rendered);
     const statusCard = overviewTab.props.children[1];
 
     const grid = statusCard.props.children[1];
@@ -1422,7 +1441,7 @@ async function runPartD(): Promise<void> {
   {
     setupRepoDetailDispatcher({ latestJob: null });
     const rendered = RepositoryDetailPage();
-    const overviewTab = rendered.props.children.props.children[2];
+    const overviewTab = getActiveTab(rendered);
     const statusCard = overviewTab.props.children[1];
 
     const noJobBox = statusCard.props.children[1];
@@ -1444,10 +1463,6 @@ async function runPartD(): Promise<void> {
     console.log(
       '  ✅ Test 37: Analysis Engine Status card presents "Run AST Analysis Now" CTA when job is null',
     );
-  }
-
-  function getActiveTab(rendered: any) {
-    return rendered.props.children.props.children.slice(2).find(Boolean);
   }
 
   // Test 38: Files tab table rendering & client-side search input
