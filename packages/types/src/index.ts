@@ -446,3 +446,47 @@ export interface GraphQueryOptions {
   limit?: number;
   filter?: string;
 }
+
+// ─── Automated Onboarding Blueprint & Guided Tour Engine ───────────────────
+
+export interface BlueprintEntryPoint {
+  path: string;
+  name: string;
+  type: 'entry_point' | 'configuration' | 'schema' | 'core_logic';
+  description: string;
+}
+
+export interface BlueprintTourStep {
+  stepNumber: number;
+  title: string;
+  targetFile: string;
+  symbolName?: string;
+  description: string;
+  keyTakeaway: string;
+}
+
+export interface BlueprintSection {
+  title: string;
+  category: 'frontend' | 'api' | 'domain_logic' | 'data_layer' | 'configuration';
+  files: string[];
+  summary: string;
+}
+
+export interface BlueprintQuickstart {
+  prerequisites: string[];
+  setupCommands: string[];
+  keyEnvironmentVars: string[];
+  devServerCommand: string;
+}
+
+export interface OnboardingBlueprint {
+  repositoryId: string;
+  repositoryName: string;
+  generatedAt: string;
+  summary: string;
+  entryPoints: BlueprintEntryPoint[];
+  guidedTour: BlueprintTourStep[];
+  architecturalSections: BlueprintSection[];
+  quickstart: BlueprintQuickstart;
+  providerUsed: string;
+}

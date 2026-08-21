@@ -1629,11 +1629,11 @@ async function runPartD(): Promise<void> {
     );
     assertEqual(
       subTabs.join(','),
-      'Architecture Overview,Explain File / Symbol,Dependency Intelligence,Impact Analysis',
+      'Onboarding Blueprint,Architecture Overview,Explain File / Symbol,Dependency Intelligence,Impact Analysis',
       'Test 44: Sub-tab titles',
     );
 
-    console.log('  ✅ Test 44: Code Intelligence tab renders 4 sub-tab navigation options');
+    console.log('  ✅ Test 44: Code Intelligence tab renders 5 sub-tab navigation options');
   }
 
   // Test 45: Code Intelligence - Architecture Overview container

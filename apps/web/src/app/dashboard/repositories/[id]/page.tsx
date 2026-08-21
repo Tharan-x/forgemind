@@ -16,6 +16,7 @@ import type {
   FileDependency,
   FileDependencyIntelligence,
   ImpactAnalysisResult,
+  OnboardingBlueprint,
   RAGSourceCitation,
   RepositoryFile,
   RepositorySymbol,
@@ -24,6 +25,7 @@ import { Button } from '@forgemind/ui';
 
 import { ProtectedLayout } from '@/components/dashboard/ProtectedLayout';
 import { DependencyGraphVisualizer } from '@/components/graph/DependencyGraphVisualizer';
+import { OnboardingBlueprintViewer } from '@/components/onboarding/OnboardingBlueprintViewer';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -40,6 +42,7 @@ import {
   getFileDependencyIntelligence,
   analyzeImpact,
   getArchitectureOverview,
+  getOnboardingBlueprint,
 } from '@/lib/intelligence.api';
 import {
   queryRepositoryRAG,
@@ -180,7 +183,7 @@ export default function RepositoryDetailPage() {
 
   // ─── Code Intelligence Tab State ───────────────────────────────────────────
   const [intelSubTab, setIntelSubTab] = useState<
-    'architecture' | 'explain' | 'depintel' | 'impact'
+    'onboarding' | 'architecture' | 'explain' | 'depintel' | 'impact'
   >('architecture');
 
   // Architecture Overview State
@@ -209,7 +212,27 @@ export default function RepositoryDetailPage() {
   const [impactLoading, setImpactLoading] = useState<boolean>(false);
   const [impactError, setImpactError] = useState<string | null>(null);
 
+  // Onboarding Blueprint State
+  const [blueprint, setBlueprint] = useState<OnboardingBlueprint | null>(null);
+  const [blueprintLoading, setBlueprintLoading] = useState<boolean>(false);
+  const [blueprintError, setBlueprintError] = useState<string | null>(null);
+
   // Callbacks
+  const fetchBlueprint = useCallback(async () => {
+    if (!repositoryId) return;
+    setBlueprintLoading(true);
+    setBlueprintError(null);
+    try {
+      const res = await getOnboardingBlueprint(repositoryId);
+      setBlueprint(res.data);
+    } catch (err) {
+      setBlueprintError(
+        err instanceof Error ? err.message : 'Failed to generate onboarding blueprint.',
+      );
+    } finally {
+      setBlueprintLoading(false);
+    }
+  }, [repositoryId]);
   const fetchArchOverview = useCallback(async () => {
     if (!repositoryId) return;
     setArchLoading(true);
@@ -378,9 +401,18 @@ export default function RepositoryDetailPage() {
     } else if (activeTab === 'chat') {
       loadChatHistory();
     } else if (activeTab === 'intelligence') {
+      fetchBlueprint();
       fetchArchOverview();
     }
-  }, [activeTab, fetchFiles, fetchSymbols, fetchDependencies, loadChatHistory, fetchArchOverview]);
+  }, [
+    activeTab,
+    fetchFiles,
+    fetchSymbols,
+    fetchDependencies,
+    loadChatHistory,
+    fetchBlueprint,
+    fetchArchOverview,
+  ]);
 
   // Handle Trigger Repository Analysis
   const handleTriggerAnalysis = async () => {
@@ -1018,6 +1050,7 @@ export default function RepositoryDetailPage() {
               {/* Sub-tab Pills */}
               <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800/60">
                 {[
+                  { id: 'onboarding', label: 'Onboarding Blueprint', icon: '🗺️' },
                   { id: 'architecture', label: 'Architecture Overview', icon: '🏛' },
                   { id: 'explain', label: 'Explain File / Symbol', icon: '💡' },
                   { id: 'depintel', label: 'Dependency Intelligence', icon: '🔗' },
@@ -1038,6 +1071,36 @@ export default function RepositoryDetailPage() {
                 ))}
               </div>
             </div>
+
+            {/* SUBTAB 0: AUTOMATED ONBOARDING BLUEPRINT */}
+            {intelSubTab === 'onboarding' && (
+              <div>
+                {blueprintLoading ? (
+                  <div className="py-12 flex justify-center">
+                    <LoadingSpinner
+                      size="md"
+                      label="Generating AI Onboarding Walkthrough Blueprint..."
+                    />
+                  </div>
+                ) : blueprintError ? (
+                  <div className="bg-red-950/30 border border-red-800/50 rounded-2xl p-6 text-sm text-red-300">
+                    ⚠ {blueprintError}
+                  </div>
+                ) : blueprint ? (
+                  <OnboardingBlueprintViewer
+                    blueprint={blueprint}
+                    onFileSelect={(path) => {
+                      setExplainFilePath(path);
+                      setIntelSubTab('explain');
+                    }}
+                  />
+                ) : (
+                  <div className="py-8 text-center text-zinc-400 text-sm">
+                    No onboarding blueprint available.
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* SUBTAB 1: ARCHITECTURE OVERVIEW */}
             {intelSubTab === 'architecture' && (

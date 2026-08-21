@@ -350,3 +350,36 @@ export async function getGraphTopologyHandler(
     sendInternalError(res, message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 6. Automated Onboarding Blueprint Handler
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns an automated onboarding blueprint and 5-step guided code tour for the repository.
+ */
+export async function getOnboardingBlueprintHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { generateOnboardingBlueprint } =
+      await import('../services/onboarding-blueprint.service.js');
+    const blueprint = await generateOnboardingBlueprint(repositoryId, user.id);
+
+    res.status(200).json({ success: true, data: blueprint });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}

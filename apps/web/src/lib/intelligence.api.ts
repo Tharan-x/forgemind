@@ -9,6 +9,7 @@ import type {
   FileDependencyIntelligence,
   GraphQueryOptions,
   ImpactAnalysisResult,
+  OnboardingBlueprint,
   RepositoryGraphResponse,
 } from '@forgemind/types';
 import { supabase } from './supabase';
@@ -124,5 +125,16 @@ export async function getRepositoryGraphTopology(
   const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
   return request<RepositoryGraphResponse>(
     `/repositories/${encodeURIComponent(repositoryId)}/intelligence/graph${queryString}`,
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/blueprint
+ */
+export async function getOnboardingBlueprint(
+  repositoryId: string,
+): Promise<{ success: boolean; data: OnboardingBlueprint }> {
+  return request<{ success: boolean; data: OnboardingBlueprint }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/blueprint`,
   );
 }

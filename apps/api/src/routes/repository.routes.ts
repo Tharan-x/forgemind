@@ -30,6 +30,7 @@ import {
   impactAnalysisHandler,
   architectureOverviewHandler,
   getGraphTopologyHandler,
+  getOnboardingBlueprintHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -180,5 +181,13 @@ router.get('/:repositoryId/intelligence/architecture', requireAuth, architecture
  */
 router.get('/:repositoryId/intelligence/graph', requireAuth, getGraphTopologyHandler);
 router.get('/:repositoryId/graph', requireAuth, getGraphTopologyHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/blueprint
+ * GET /api/v1/repositories/:repositoryId/onboarding/blueprint
+ * Returns an automated onboarding blueprint and 5-step guided code tour.
+ */
+router.get('/:repositoryId/intelligence/blueprint', requireAuth, getOnboardingBlueprintHandler);
+router.get('/:repositoryId/onboarding/blueprint', requireAuth, getOnboardingBlueprintHandler);
 
 export { router as repositoryRouter };

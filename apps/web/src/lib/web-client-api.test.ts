@@ -69,6 +69,7 @@ import {
   getFileDependencyIntelligence,
   analyzeImpact,
   getArchitectureOverview,
+  getOnboardingBlueprint,
 } from './intelligence.api.js';
 
 import { getGitHubConnection, connectGitHub, disconnectGitHub } from './github-credential.api.js';
@@ -1236,6 +1237,41 @@ async function runPartF(): Promise<void> {
     assertEqual(data.repositoryName, 'my-repo', 'Test 54: repositoryName returned');
     console.log(
       '  ✅ Test 54: getArchitectureOverview — GET /repositories/:id/intelligence/architecture',
+    );
+  }
+
+  // Test 54b: getOnboardingBlueprint — GET /api/v1/repositories/:id/intelligence/blueprint
+  {
+    mockAuthenticatedSession();
+    const mockBlueprint = {
+      repositoryId: REPO_ID,
+      repositoryName: 'my-repo',
+      generatedAt: '2026-01-01T00:00:00Z',
+      summary: 'Onboarding summary',
+      entryPoints: [],
+      guidedTour: [],
+      architecturalSections: [],
+      quickstart: {
+        prerequisites: [],
+        setupCommands: [],
+        keyEnvironmentVars: [],
+        devServerCommand: 'pnpm dev',
+      },
+      providerUsed: 'mock',
+    };
+    installFetchInterceptor(200, { success: true, data: mockBlueprint });
+
+    const res = await getOnboardingBlueprint(REPO_ID);
+
+    assertEqual(lastRequest!.method, 'GET', 'Test 54b: method is GET');
+    assertEqual(
+      lastRequest!.url,
+      `http://api.test/api/v1/repositories/${REPO_ID}/intelligence/blueprint`,
+      'Test 54b: URL is correct',
+    );
+    assertEqual(res.data.repositoryName, 'my-repo', 'Test 54b: repositoryName returned');
+    console.log(
+      '  ✅ Test 54b: getOnboardingBlueprint — GET /repositories/:id/intelligence/blueprint',
     );
   }
 
