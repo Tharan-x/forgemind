@@ -32,9 +32,12 @@ import {
   getGraphTopologyHandler,
   getOnboardingBlueprintHandler,
   askOnboardingStepQuestionHandler,
+  shareOnboardingBlueprintHandler,
+  getSharedBlueprintHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
+const onboardingShareRouter: RouterType = Router();
 
 /**
  * POST /api/v1/repositories/sync
@@ -202,4 +205,21 @@ router.post(
   askOnboardingStepQuestionHandler,
 );
 
-export { router as repositoryRouter };
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/blueprint/share
+ * Creates a stateless HMAC-SHA256 signed share token for the onboarding blueprint.
+ */
+router.post(
+  '/:repositoryId/intelligence/blueprint/share',
+  requireAuth,
+  heavyRouteRateLimiter,
+  shareOnboardingBlueprintHandler,
+);
+
+/**
+ * GET /api/v1/onboarding/share/:shareToken
+ * Public retrieval of a shared onboarding blueprint by share token (no auth required).
+ */
+onboardingShareRouter.get('/:shareToken', heavyRouteRateLimiter, getSharedBlueprintHandler);
+
+export { router as repositoryRouter, onboardingShareRouter };

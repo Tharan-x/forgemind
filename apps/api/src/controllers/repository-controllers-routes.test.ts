@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 // =============================================================================
 // ForgeMind API — Repository Controllers & HTTP API Routes Integration Test Suite
 // (Sprint 4 Task 4)
@@ -1747,6 +1747,60 @@ async function runPartH() {
     );
     assert(res.status === 403 || res.status === 429, 'Test 57: Status 403 or 429 rate limited');
     console.log('  ✅ Test 57: POST Onboarding Step Q&A cross-user access rejected');
+  }
+
+  // 58. POST Onboarding Blueprint Share returns HTTP 200 with signed token
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/blueprint/share`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          includeQAHistory: true,
+          customNotes: 'Team onboarding note',
+          expiresInDays: 7,
+        },
+      },
+    );
+    assert(res.status === 200 || res.status === 429, 'Test 58: Status 200 or 429 rate limited');
+    if (res.status === 200) {
+      assert(Boolean((res.body as any)?.data?.shareToken), 'Test 58: shareToken returned');
+      assert(Boolean((res.body as any)?.data?.shareUrl), 'Test 58: shareUrl returned');
+    }
+    console.log('  ✅ Test 58: POST Onboarding Blueprint Share returns HTTP 200 with signed token');
+  }
+
+  // 59. GET Public Shared Blueprint returns HTTP 200 for valid token
+  {
+    const createRes = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/intelligence/blueprint/share`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          includeQAHistory: true,
+          expiresInDays: 7,
+        },
+      },
+    );
+
+    if (createRes.status === 200) {
+      const shareToken = (createRes.body as any)?.data?.shareToken as string;
+      const res = await apiRequest(
+        'GET',
+        `/api/v1/onboarding/share/${encodeURIComponent(shareToken)}`,
+      );
+      assert(res.status === 200 || res.status === 429, 'Test 59: Status 200 or 429 rate limited');
+      if (res.status === 200) {
+        assert(
+          Boolean((res.body as any)?.data?.repositoryName),
+          'Test 59: repositoryName returned',
+        );
+        assert(Boolean((res.body as any)?.data?.guidedTour), 'Test 59: guidedTour returned');
+      }
+    }
+    console.log('  ✅ Test 59: GET Public Shared Blueprint returns HTTP 200 for valid token');
   }
 }
 

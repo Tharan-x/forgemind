@@ -2,7 +2,7 @@
 // ForgeMind API — Code Intelligence Controller
 // =============================================================================
 
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 import type { AuthenticatedRequest } from '../auth/index.js';
 import { findRepositoryById } from '../services/index.js';
@@ -449,5 +449,128 @@ export async function askOnboardingStepQuestionHandler(
   } catch (err) {
     const message = err instanceof Error ? err.message : undefined;
     sendInternalError(res, message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8. Share Onboarding Blueprint Handler (Sprint 7 Task 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a stateless HMAC-SHA256 signed share token for a repository's onboarding blueprint.
+ * Body: { includeQAHistory?: boolean; customNotes?: string; expiresInDays?: number }
+ */
+export async function shareOnboardingBlueprintHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { includeQAHistory, customNotes, expiresInDays } = req.body as {
+      includeQAHistory?: unknown;
+      customNotes?: unknown;
+      expiresInDays?: unknown;
+    };
+
+    if (customNotes !== undefined && typeof customNotes !== 'string') {
+      sendBadRequest(res, 'customNotes must be a string if provided');
+      return;
+    }
+
+    if (customNotes && (customNotes as string).length > 2000) {
+      sendBadRequest(res, 'customNotes exceeds maximum length of 2000 characters');
+      return;
+    }
+
+    if (
+      expiresInDays !== undefined &&
+      (typeof expiresInDays !== 'number' || expiresInDays < 1 || expiresInDays > 30)
+    ) {
+      sendBadRequest(res, 'expiresInDays must be a number between 1 and 30');
+      return;
+    }
+
+    const { createBlueprintShareToken } =
+      await import('../services/onboarding-blueprint.service.js');
+
+    const result = await createBlueprintShareToken(repositoryId, user.id, {
+      includeQAHistory: typeof includeQAHistory === 'boolean' ? includeQAHistory : false,
+      customNotes: typeof customNotes === 'string' ? customNotes : undefined,
+      expiresInDays: typeof expiresInDays === 'number' ? expiresInDays : undefined,
+    });
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Get Shared Blueprint (Public Token Retrieval) Handler (Sprint 7 Task 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Retrieves a shared onboarding blueprint by validating the HMAC-SHA256 signed share token.
+ * This is a public endpoint — no authentication required, but ownership is embedded in the token.
+ * Body (optional): { qaThreads?: Record<number, Array<{query, answer, timestamp}>> }
+ */
+export async function getSharedBlueprintHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const { shareToken } = req.params as { shareToken: string };
+
+    if (!shareToken || typeof shareToken !== 'string' || shareToken.trim().length === 0) {
+      sendBadRequest(res, 'shareToken is required');
+      return;
+    }
+
+    if (shareToken.length > 4096) {
+      sendBadRequest(res, 'shareToken exceeds maximum allowed length');
+      return;
+    }
+
+    const { qaThreads } = (req.body ?? {}) as {
+      qaThreads?: unknown;
+    };
+
+    const { resolveSharedBlueprint } = await import('../services/onboarding-blueprint.service.js');
+
+    const view = await resolveSharedBlueprint(
+      shareToken,
+      typeof qaThreads === 'object' && qaThreads !== null && !Array.isArray(qaThreads)
+        ? (qaThreads as Record<number, Array<{ query: string; answer: string; timestamp: string }>>)
+        : undefined,
+    );
+
+    res.status(200).json({ success: true, data: view });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    if (
+      message.includes('expired') ||
+      message.includes('signature') ||
+      message.includes('malformed') ||
+      message.includes('format')
+    ) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_SHARE_TOKEN', message },
+      });
+    } else if (message.includes('no longer exists')) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message },
+      });
+    } else {
+      sendInternalError(res, message);
+    }
   }
 }

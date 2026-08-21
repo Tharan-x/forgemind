@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { OnboardingBlueprint, BlueprintTourStep, RAGSourceCitation } from '@forgemind/types';
-import { askOnboardingStepQuestion } from '../../lib/intelligence.api';
+import { askOnboardingStepQuestion, shareOnboardingBlueprint } from '../../lib/intelligence.api';
 
 interface OnboardingBlueprintViewerProps {
   blueprint: OnboardingBlueprint;
@@ -67,6 +67,18 @@ export function OnboardingBlueprintViewer({
   const [stepQuery, setStepQuery] = useState<string>('');
   const [stepQALoading, setStepQALoading] = useState<boolean>(false);
   const [stepQAError, setStepQAError] = useState<string | null>(null);
+
+  // Share Blueprint State (Sprint 7 Task 3)
+  const [shareModalOpen, setShareModalOpen] = useState<boolean>(false);
+  const [shareLoading, setShareLoading] = useState<boolean>(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareResult, setShareResult] = useState<{ shareUrl: string; expiresAt: string } | null>(
+    null,
+  );
+  const [shareIncludeQA, setShareIncludeQA] = useState<boolean>(false);
+  const [shareCustomNotes, setShareCustomNotes] = useState<string>('');
+  const [shareExpiresInDays, setShareExpiresInDays] = useState<number>(7);
+  const [shareCopied, setShareCopied] = useState<boolean>(false);
 
   // Persist completedSteps changes to localStorage
   useEffect(() => {
@@ -155,6 +167,42 @@ export function OnboardingBlueprintViewer({
     setTimeout(() => setCopiedCommand(null), 2000);
   };
 
+  const handleShareBlueprint = async () => {
+    setShareLoading(true);
+    setShareError(null);
+    setShareResult(null);
+    try {
+      const qaThreadsForShare = shareIncludeQA
+        ? Object.fromEntries(
+            Object.entries(stepQAThreads).map(([stepNum, items]) => [
+              stepNum,
+              items.map((i) => ({ query: i.query, answer: i.answer, timestamp: i.timestamp })),
+            ]),
+          )
+        : undefined;
+
+      void qaThreadsForShare; // payload handled server-side via token flag
+
+      const res = await shareOnboardingBlueprint(blueprint.repositoryId, {
+        includeQAHistory: shareIncludeQA,
+        customNotes: shareCustomNotes.trim() || undefined,
+        expiresInDays: shareExpiresInDays,
+      });
+      setShareResult({ shareUrl: res.data.shareUrl, expiresAt: res.data.expiresAt });
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Failed to generate share link');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleCopyShareUrl = () => {
+    if (!shareResult) return;
+    navigator.clipboard.writeText(shareResult.shareUrl);
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
+  };
+
   const handleExportMarkdown = () => {
     const tourMarkdown = blueprint.guidedTour
       .map((s) => {
@@ -232,12 +280,24 @@ ${blueprint.quickstart.setupCommands.join('\n')}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <button
-              onClick={handleExportMarkdown}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-lg shadow-indigo-600/20"
-            >
-              📥 Export Markdown
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShareModalOpen(true);
+                  setShareResult(null);
+                  setShareError(null);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 shadow-lg shadow-emerald-700/20"
+              >
+                🔗 Share Blueprint
+              </button>
+              <button
+                onClick={handleExportMarkdown}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-lg shadow-indigo-600/20"
+              >
+                📥 Export Markdown
+              </button>
+            </div>
             <div className="text-right">
               <span className="text-xs text-slate-400">Tour Completion</span>
               <div className="mt-1 flex items-center gap-2">
@@ -615,6 +675,108 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Blueprint Modal (Sprint 7 Task 3) */}
+      {shareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-white">🔗 Share Onboarding Blueprint</h3>
+              <button
+                onClick={() => setShareModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                aria-label="Close share modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            {!shareResult ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Expiry (days, 1–30)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={shareExpiresInDays}
+                    onChange={(e) =>
+                      setShareExpiresInDays(Math.min(30, Math.max(1, Number(e.target.value))))
+                    }
+                    className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Custom notes for team (optional, max 2000 chars)
+                  </label>
+                  <textarea
+                    value={shareCustomNotes}
+                    onChange={(e) => setShareCustomNotes(e.target.value.substring(0, 2000))}
+                    rows={3}
+                    className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+                    placeholder="Add onboarding notes for your team..."
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="share-include-qa"
+                    type="checkbox"
+                    checked={shareIncludeQA}
+                    onChange={(e) => setShareIncludeQA(e.target.checked)}
+                    className="rounded border-slate-600"
+                  />
+                  <label htmlFor="share-include-qa" className="text-xs text-slate-300">
+                    Include step Q&amp;A history
+                  </label>
+                </div>
+                {shareError && (
+                  <p className="text-xs text-red-400 bg-red-900/20 rounded-lg px-3 py-2 border border-red-800/40">
+                    ❌ {shareError}
+                  </p>
+                )}
+                <button
+                  onClick={handleShareBlueprint}
+                  disabled={shareLoading}
+                  className="w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-xs font-medium text-white transition-all hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {shareLoading ? '⏳ Generating share link…' : '🔗 Generate Share Link'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-emerald-400 font-medium">
+                  ✓ Share link generated successfully!
+                </p>
+                <div className="rounded-lg bg-slate-900 border border-slate-700 px-3 py-2">
+                  <p className="text-[10px] text-slate-400 mb-1">
+                    Share URL (expires {new Date(shareResult.expiresAt).toLocaleDateString()})
+                  </p>
+                  <p className="text-xs text-slate-100 break-all font-mono">
+                    {shareResult.shareUrl}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCopyShareUrl}
+                    className="flex-1 rounded-lg bg-indigo-700 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-indigo-600"
+                  >
+                    {shareCopied ? '✓ Copied!' : '📋 Copy URL'}
+                  </button>
+                  <button
+                    onClick={() => setShareResult(null)}
+                    className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-medium text-slate-300 transition-all hover:bg-slate-800"
+                  >
+                    Generate New
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

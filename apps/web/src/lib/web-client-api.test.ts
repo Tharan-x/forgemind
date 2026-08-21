@@ -71,6 +71,8 @@ import {
   getArchitectureOverview,
   getOnboardingBlueprint,
   askOnboardingStepQuestion,
+  shareOnboardingBlueprint,
+  getSharedBlueprint,
 } from './intelligence.api.js';
 
 import { getGitHubConnection, connectGitHub, disconnectGitHub } from './github-credential.api.js';
@@ -1305,6 +1307,65 @@ async function runPartF(): Promise<void> {
     console.log(
       '  ✅ Test 54c: askOnboardingStepQuestion — POST /repositories/:id/intelligence/blueprint/step-ask',
     );
+  }
+
+  // 54d. shareOnboardingBlueprint — POST /repositories/:id/intelligence/blueprint/share
+  {
+    mockAuthenticatedSession();
+    const mockShareResponse = {
+      shareToken: 'token.sig',
+      shareUrl: 'http://api.test/api/v1/onboarding/share/token.sig',
+      expiresAt: '2026-08-28T00:00:00.000Z',
+    };
+    installFetchInterceptor(200, { success: true, data: mockShareResponse });
+
+    const res = await shareOnboardingBlueprint(REPO_ID, {
+      includeQAHistory: true,
+      customNotes: 'Team note',
+      expiresInDays: 7,
+    });
+
+    assertEqual(lastRequest!.method, 'POST', 'Test 54d: method is POST');
+    assertEqual(
+      lastRequest!.url,
+      `http://api.test/api/v1/repositories/${REPO_ID}/intelligence/blueprint/share`,
+      'Test 54d: URL is correct',
+    );
+    assertEqual(res.data.shareToken, 'token.sig', 'Test 54d: shareToken returned');
+    console.log(
+      '  ✅ Test 54d: shareOnboardingBlueprint — POST /repositories/:id/intelligence/blueprint/share',
+    );
+  }
+
+  // 54e. getSharedBlueprint — GET /onboarding/share/:shareToken
+  {
+    const mockView = {
+      repositoryName: 'my-repo',
+      generatedAt: '2026-08-21T00:00:00.000Z',
+      expiresAt: '2026-08-28T00:00:00.000Z',
+      summary: 'Repo summary',
+      entryPoints: [],
+      guidedTour: [],
+      architecturalSections: [],
+      quickstart: {
+        prerequisites: [],
+        setupCommands: [],
+        keyEnvironmentVars: [],
+        devServerCommand: 'pnpm dev',
+      },
+    };
+    installFetchInterceptor(200, { success: true, data: mockView });
+
+    const res = await getSharedBlueprint('token.sig');
+
+    assertEqual(lastRequest!.method, 'GET', 'Test 54e: method is GET');
+    assertEqual(
+      lastRequest!.url,
+      'http://api.test/api/v1/onboarding/share/token.sig',
+      'Test 54e: URL is correct',
+    );
+    assertEqual(res.data.repositoryName, 'my-repo', 'Test 54e: repositoryName returned');
+    console.log('  ✅ Test 54e: getSharedBlueprint — GET /onboarding/share/:shareToken');
   }
 
   // Test 55: explainCode — 403 error propagated

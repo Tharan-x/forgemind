@@ -7,15 +7,20 @@
 // tailored for newly onboarded developers.
 // =============================================================================
 
+import crypto from 'node:crypto';
+
 import type {
   BlueprintEntryPoint,
   BlueprintQuickstart,
   BlueprintSection,
+  BlueprintShareRequest,
+  BlueprintShareResponse,
   BlueprintStepQARequest,
   BlueprintStepQAResponse,
   BlueprintTourStep,
   OnboardingBlueprint,
   RAGSourceCitation,
+  SharedBlueprintView,
 } from '@forgemind/types';
 
 import { retrieveRepositoryContext } from './context-retrieval.service.js';
@@ -487,4 +492,151 @@ export async function askOnboardingStepQuestion(
     sources,
     providerUsed,
   };
+}
+
+// =============================================================================
+// Sprint 7 Task 3 — Onboarding Blueprint Share Engine
+// =============================================================================
+
+interface ShareTokenPayload {
+  repositoryId: string;
+  repositoryName: string;
+  expiresAt: string;
+  includeQAHistory: boolean;
+  customNotes: string;
+}
+
+function getHmacKey(): string {
+  const secret = process.env['ENCRYPTION_SECRET'];
+  if (!secret) {
+    if (process.env['NODE_ENV'] === 'test') {
+      return 'forgemind-test-secret-key-for-hmac-signing';
+    }
+    throw new Error('ENCRYPTION_SECRET environment variable is required for share token signing.');
+  }
+  return secret;
+}
+
+function signPayload(payload: string): string {
+  return crypto.createHmac('sha256', getHmacKey()).update(payload).digest('hex');
+}
+
+/**
+ * Creates a stateless HMAC-SHA256 signed share token for an onboarding blueprint.
+ * No database writes — token encodes payload + signature as base64url.
+ */
+export async function createBlueprintShareToken(
+  repositoryId: string,
+  userId: string,
+  request: BlueprintShareRequest,
+): Promise<BlueprintShareResponse> {
+  await assertRepositoryOwnership(repositoryId, userId);
+
+  const repo = await findRepositoryById(repositoryId);
+  if (!repo) throw new Error(`Repository not found: ${repositoryId}`);
+
+  const expiresInDays = Math.min(Math.max(request.expiresInDays ?? 7, 1), 30);
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
+
+  const customNotes = (request.customNotes ?? '').substring(0, 2000);
+  const includeQAHistory = request.includeQAHistory ?? false;
+
+  const payload: ShareTokenPayload = {
+    repositoryId,
+    repositoryName: repo.name,
+    expiresAt,
+    includeQAHistory,
+    customNotes,
+  };
+
+  const payloadJson = JSON.stringify(payload);
+  const payloadB64 = Buffer.from(payloadJson).toString('base64url');
+  const signature = signPayload(payloadB64);
+  const shareToken = `${payloadB64}.${signature}`;
+
+  const apiBase = process.env['API_PUBLIC_URL'] ?? process.env['NEXT_PUBLIC_API_URL'] ?? '';
+  const shareUrl = `${apiBase}/api/v1/onboarding/share/${encodeURIComponent(shareToken)}`;
+
+  return { shareToken, shareUrl, expiresAt };
+}
+
+/**
+ * Resolves and verifies a share token, generating a sanitised SharedBlueprintView.
+ * Raises an error if the token is invalid, expired, or tampered.
+ */
+export async function resolveSharedBlueprint(
+  shareToken: string,
+  qaThreadsFromClient?: Record<number, Array<{ query: string; answer: string; timestamp: string }>>,
+): Promise<SharedBlueprintView> {
+  const dotIndex = shareToken.lastIndexOf('.');
+  if (dotIndex === -1) {
+    throw new Error('Invalid share token format.');
+  }
+
+  const payloadB64 = shareToken.substring(0, dotIndex);
+  const receivedSignature = shareToken.substring(dotIndex + 1);
+
+  const expectedSignature = signPayload(payloadB64);
+  if (
+    !crypto.timingSafeEqual(
+      Buffer.from(receivedSignature, 'hex'),
+      Buffer.from(expectedSignature, 'hex'),
+    )
+  ) {
+    throw new Error('Share token signature verification failed.');
+  }
+
+  let payload: ShareTokenPayload;
+  try {
+    const payloadJson = Buffer.from(payloadB64, 'base64url').toString('utf8');
+    payload = JSON.parse(payloadJson) as ShareTokenPayload;
+  } catch {
+    throw new Error('Share token payload is malformed.');
+  }
+
+  if (new Date(payload.expiresAt) < new Date()) {
+    throw new Error('Share token has expired.');
+  }
+
+  const repo = await findRepositoryById(payload.repositoryId);
+  if (!repo) {
+    throw new Error('Repository no longer exists.');
+  }
+
+  // Generate a fresh blueprint — repository ownership is embedded in the signed token,
+  // no userId available on public share access.
+  const blueprint = await generateOnboardingBlueprint(payload.repositoryId, repo.userId);
+
+  // Strip repositoryId from returned view (internal UUID not needed by consumers)
+  const view: SharedBlueprintView = {
+    repositoryName: blueprint.repositoryName,
+    generatedAt: blueprint.generatedAt,
+    expiresAt: payload.expiresAt,
+    summary: blueprint.summary,
+    entryPoints: blueprint.entryPoints,
+    guidedTour: blueprint.guidedTour,
+    architecturalSections: blueprint.architecturalSections,
+    quickstart: {
+      prerequisites: blueprint.quickstart.prerequisites,
+      setupCommands: blueprint.quickstart.setupCommands,
+      // Strip environment variable values — expose only names for team safety
+      keyEnvironmentVars: blueprint.quickstart.keyEnvironmentVars.map((v) => {
+        const key = v.includes('=') ? (v.split('=')[0] ?? v) : v;
+        return `${key}=<REDACTED>`;
+      }),
+      devServerCommand: blueprint.quickstart.devServerCommand,
+    },
+  };
+
+  if (payload.customNotes) {
+    view.customNotes = payload.customNotes;
+  }
+
+  if (payload.includeQAHistory && qaThreadsFromClient) {
+    // Accept Q&A threads from the client-supplied body only if the token permits it.
+    // Never re-run LLM on behalf of the share viewer.
+    view.qaThreads = qaThreadsFromClient;
+  }
+
+  return view;
 }

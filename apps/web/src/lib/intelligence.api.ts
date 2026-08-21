@@ -4,6 +4,8 @@
 
 import type {
   ArchitectureOverviewResponse,
+  BlueprintShareRequest,
+  BlueprintShareResponse,
   BlueprintStepQARequest,
   BlueprintStepQAResponse,
   CodeExplainRequest,
@@ -13,6 +15,7 @@ import type {
   ImpactAnalysisResult,
   OnboardingBlueprint,
   RepositoryGraphResponse,
+  SharedBlueprintView,
 } from '@forgemind/types';
 import { supabase } from './supabase';
 
@@ -155,4 +158,48 @@ export async function askOnboardingStepQuestion(
       body: JSON.stringify(reqData),
     },
   );
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/blueprint/share
+ * Creates a stateless HMAC-SHA256 signed share token for the onboarding blueprint.
+ */
+export async function shareOnboardingBlueprint(
+  repositoryId: string,
+  reqData: BlueprintShareRequest,
+): Promise<{ success: boolean; data: BlueprintShareResponse }> {
+  return request<{ success: boolean; data: BlueprintShareResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/blueprint/share`,
+    {
+      method: 'POST',
+      body: JSON.stringify(reqData),
+    },
+  );
+}
+
+/**
+ * GET /api/v1/onboarding/share/:shareToken
+ * Retrieves a shared onboarding blueprint by share token (public, no auth required).
+ */
+export async function getSharedBlueprint(
+  shareToken: string,
+): Promise<{ success: boolean; data: SharedBlueprintView }> {
+  const response = await fetch(
+    `${API_BASE}/api/v1/onboarding/share/${encodeURIComponent(shareToken)}`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+  const body = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      typeof body['message'] === 'string'
+        ? body['message']
+        : typeof (body['error'] as Record<string, unknown> | undefined)?.['message'] === 'string'
+          ? ((body['error'] as Record<string, unknown>)['message'] as string)
+          : `API error ${response.status}`;
+    throw new Error(message);
+  }
+  return body as { success: boolean; data: SharedBlueprintView };
 }

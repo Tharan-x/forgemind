@@ -506,3 +506,36 @@ export interface BlueprintStepQAResponse {
   sources: RAGSourceCitation[];
   providerUsed: string;
 }
+
+// ─── Blueprint Share Engine (Sprint 7 Task 3) ──────────────────────────────
+
+export interface BlueprintShareRequest {
+  includeQAHistory?: boolean;
+  customNotes?: string;
+  expiresInDays?: number;
+}
+
+export interface BlueprintShareResponse {
+  shareToken: string;
+  shareUrl: string;
+  expiresAt: string;
+}
+
+export interface SharedBlueprintQAItem {
+  query: string;
+  answer: string;
+  timestamp: string;
+}
+
+export interface SharedBlueprintView {
+  repositoryName: string;
+  generatedAt: string;
+  expiresAt: string;
+  summary: string;
+  entryPoints: BlueprintEntryPoint[];
+  guidedTour: BlueprintTourStep[];
+  architecturalSections: BlueprintSection[];
+  quickstart: BlueprintQuickstart;
+  customNotes?: string;
+  qaThreads?: Record<number, SharedBlueprintQAItem[]>;
+}

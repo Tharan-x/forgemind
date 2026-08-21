@@ -2,7 +2,7 @@ import { Router, type IRouter } from 'express';
 
 import { healthHandler } from './health.js';
 import { authRouter } from './auth.js';
-import { repositoryRouter } from './repository.routes.js';
+import { repositoryRouter, onboardingShareRouter } from './repository.routes.js';
 
 const router: IRouter = Router();
 
@@ -15,6 +15,9 @@ router.use('/auth', authRouter);
 // Repository endpoints
 router.use('/repositories', repositoryRouter);
 
+// Public onboarding share endpoints (no auth required — token self-validates)
+router.use('/onboarding/share', onboardingShareRouter);
+
 // Hello World — Sprint 0 smoke test
 router.get('/', (_req, res) => {
   res.json({
@@ -24,4 +27,4 @@ router.get('/', (_req, res) => {
   });
 });
 
-export { router, repositoryRouter };
+export { router, repositoryRouter, onboardingShareRouter };
