@@ -6,6 +6,9 @@ import type {
   ArchitectureHealthReport,
   ArchitectureHealthExplainRequest,
   ArchitectureHealthExplanationResponse,
+  ArchitecturalRiskIntelligenceResponse,
+  RemediationExplainRequest,
+  RemediationExplanationResponse,
   ArchitectureOverviewResponse,
   BlueprintShareRequest,
   BlueprintShareResponse,
@@ -227,6 +230,33 @@ export async function explainArchitectureFinding(
 ): Promise<{ success: boolean; data: ArchitectureHealthExplanationResponse }> {
   return request<{ success: boolean; data: ArchitectureHealthExplanationResponse }>(
     `/repositories/${encodeURIComponent(repositoryId)}/intelligence/health/explain`,
+    {
+      method: 'POST',
+      body: JSON.stringify(reqData),
+    },
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/risk-intelligence
+ */
+export async function getArchitecturalRiskIntelligence(
+  repositoryId: string,
+): Promise<{ success: boolean; data: ArchitecturalRiskIntelligenceResponse }> {
+  return request<{ success: boolean; data: ArchitecturalRiskIntelligenceResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture/risk-intelligence`,
+  );
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/architecture/remediation-explain
+ */
+export async function explainRemediationAction(
+  repositoryId: string,
+  reqData: RemediationExplainRequest,
+): Promise<{ success: boolean; data: RemediationExplanationResponse }> {
+  return request<{ success: boolean; data: RemediationExplanationResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture/remediation-explain`,
     {
       method: 'POST',
       body: JSON.stringify(reqData),

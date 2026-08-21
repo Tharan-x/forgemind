@@ -36,6 +36,8 @@ import {
   getSharedBlueprintHandler,
   getArchitectureHealthHandler,
   explainArchitectureFindingHandler,
+  getArchitecturalRiskIntelligenceHandler,
+  explainRemediationActionHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -233,6 +235,40 @@ router.post(
   requireAuth,
   heavyRouteRateLimiter,
   explainArchitectureFindingHandler,
+);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/risk-intelligence
+ * GET /api/v1/repositories/:repositoryId/architecture/risk-intelligence
+ * Returns deterministic risk-ranked remediation action plans and projected health scores.
+ */
+router.get(
+  '/:repositoryId/intelligence/architecture/risk-intelligence',
+  requireAuth,
+  getArchitecturalRiskIntelligenceHandler,
+);
+router.get(
+  '/:repositoryId/architecture/risk-intelligence',
+  requireAuth,
+  getArchitecturalRiskIntelligenceHandler,
+);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/architecture/remediation-explain
+ * POST /api/v1/repositories/:repositoryId/architecture/remediation-explain
+ * Generates an evidence-grounded AI code refactoring proposal for a remediation plan.
+ */
+router.post(
+  '/:repositoryId/intelligence/architecture/remediation-explain',
+  requireAuth,
+  heavyRouteRateLimiter,
+  explainRemediationActionHandler,
+);
+router.post(
+  '/:repositoryId/architecture/remediation-explain',
+  requireAuth,
+  heavyRouteRateLimiter,
+  explainRemediationActionHandler,
 );
 
 /**

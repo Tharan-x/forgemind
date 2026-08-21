@@ -23,3 +23,6 @@ export * from './code-intelligence.service.js';
 export * from './query-intent.service.js';
 export * from './query-reformulation.service.js';
 export * from './graph-topology.service.js';
+export * from './onboarding-blueprint.service.js';
+export * from './architecture-health.service.js';
+export * from './architecture-risk.service.js';

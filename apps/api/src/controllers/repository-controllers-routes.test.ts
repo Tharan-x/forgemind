@@ -1875,6 +1875,79 @@ async function runPartH() {
     assert(res.status === 403 || res.status === 429, 'Test 64: Status 403 or 429');
     console.log('  ✅ Test 64: POST Explain Architecture Finding cross-user access rejected');
   }
+
+  // 65. GET Architectural Risk Intelligence returns HTTP 200 with highest-value fix
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${REPO_ID_1}/architecture/risk-intelligence`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    assert(res.status === 200, 'Test 65: Status 200');
+    assert((res.body as any)?.data?.repositoryId === REPO_ID_1, 'Test 65: repositoryId matches');
+    assert(
+      typeof (res.body as any)?.data?.currentHealthScore === 'number',
+      'Test 65: currentHealthScore is number',
+    );
+    assert(
+      Array.isArray((res.body as any)?.data?.rankedRemediations),
+      'Test 65: rankedRemediations is array',
+    );
+    console.log(
+      '  ✅ Test 65: GET Architectural Risk Intelligence returns HTTP 200 with remediations',
+    );
+  }
+
+  // 66. GET Architectural Risk Intelligence cross-user access rejected with 403
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${REPO_ID_2}/architecture/risk-intelligence`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    assert(res.status === 403, 'Test 66: Status 403');
+    console.log(
+      '  ✅ Test 66: GET Architectural Risk Intelligence cross-user access rejected with 403',
+    );
+  }
+
+  // 67. POST Explain Remediation Action handles request correctly
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/architecture/remediation-explain`,
+      {
+        token: TOKEN_USER_1,
+        body: {
+          findingId: 'finding-101',
+          targetFile: 'src/app.ts',
+        },
+      },
+    );
+    assert(
+      res.status === 200 || res.status === 400 || res.status === 429,
+      'Test 67: Status 200, 400 or 429',
+    );
+    console.log('  ✅ Test 67: POST Explain Remediation Action handled correctly');
+  }
+
+  // 68. POST Explain Remediation Action missing findingId rejected with 400
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${REPO_ID_1}/architecture/remediation-explain`,
+      {
+        token: TOKEN_USER_1,
+        body: {},
+      },
+    );
+    assert(res.status === 400 || res.status === 429, 'Test 68: Status 400 or 429');
+    console.log('  ✅ Test 68: POST Explain Remediation Action missing findingId rejected');
+  }
 }
 
 // Execute test suite

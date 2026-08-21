@@ -669,3 +669,87 @@ export async function explainArchitectureFindingHandler(
     }
   }
 }
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/risk-intelligence
+ * GET /api/v1/repositories/:repositoryId/architecture/risk-intelligence
+ * Returns deterministic risk-ranked remediation action plans and projected health scores.
+ */
+export async function getArchitecturalRiskIntelligenceHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { generateArchitecturalRiskIntelligence } =
+      await import('../services/architecture-risk.service.js');
+
+    const result = await generateArchitecturalRiskIntelligence(repositoryId, user.id);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/architecture/remediation-explain
+ * POST /api/v1/repositories/:repositoryId/architecture/remediation-explain
+ * Generates an evidence-grounded AI code refactoring proposal for a remediation plan.
+ *
+ * Body: { findingId: string, targetFile?: string }
+ */
+export async function explainRemediationActionHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const body = (req.body || {}) as {
+      findingId?: string;
+      targetFile?: string;
+    };
+
+    if (!body.findingId?.trim()) {
+      sendBadRequest(res, 'findingId is required.');
+      return;
+    }
+
+    const { explainRemediationAction } = await import('../services/architecture-risk.service.js');
+
+    const result = await explainRemediationAction(repositoryId, user.id, {
+      findingId: body.findingId.trim(),
+      targetFile: body.targetFile?.trim(),
+    });
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    if (message.includes('not found')) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_FINDING_ID', message },
+      });
+    } else {
+      sendInternalError(res, message);
+    }
+  }
+}

@@ -15,6 +15,7 @@ import { Button } from '@forgemind/ui';
 import { getArchitectureHealth } from '@/lib/intelligence.api';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AIExplanationDrawer } from './AIExplanationDrawer';
+import { ArchitecturalRiskActionLoop } from './ArchitecturalRiskActionLoop';
 
 interface ArchitecturalHealthDashboardProps {
   repositoryId: string;
@@ -28,6 +29,9 @@ export function ArchitecturalHealthDashboard({
   const [report, setReport] = useState<ArchitectureHealthReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // View Mode: 'risk_loop' | 'findings'
+  const [activeSubTab, setActiveSubTab] = useState<'risk_loop' | 'findings'>('risk_loop');
 
   // Filter State
   const [severityFilter, setSeverityFilter] = useState<'all' | HealthFindingSeverity>('all');
@@ -210,102 +214,146 @@ export function ArchitecturalHealthDashboard({
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="mr-2 text-zinc-400">Severity:</span>
-          {(['all', 'critical', 'high', 'medium', 'low'] as const).map((sev) => (
-            <button
-              key={sev}
-              onClick={() => setSeverityFilter(sev)}
-              className={`rounded-lg px-3 py-1.5 font-medium transition ${
-                severityFilter === sev
-                  ? 'bg-zinc-100 text-zinc-950 font-bold'
-                  : 'bg-zinc-950 text-zinc-400 hover:text-white'
-              }`}
-            >
-              {sev.toUpperCase()}
-            </button>
-          ))}
-        </div>
+      {/* Sub-Navigation Bar */}
+      <div className="flex items-center space-x-4 border-b border-zinc-800 pb-2 text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('risk_loop')}
+          className={`py-2 px-3 rounded-lg transition-all flex items-center gap-2 ${
+            activeSubTab === 'risk_loop'
+              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <span>🎯</span>
+          <span>Risk Action Loop & Action Plans</span>
+        </button>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-zinc-400">Category:</span>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as 'all' | HealthFindingCategory)}
-            className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-zinc-200 focus:border-cyan-500 focus:outline-none"
-          >
-            <option value="all">All Categories</option>
-            <option value="circular_dependency">Circular Dependencies</option>
-            <option value="layer_violation">Layer Violations</option>
-            <option value="coupling_hotspot">Coupling Hotspots</option>
-            <option value="orphan_export">Orphan Exports</option>
-          </select>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('findings')}
+          className={`py-2 px-3 rounded-lg transition-all flex items-center gap-2 ${
+            activeSubTab === 'findings'
+              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <span>📋</span>
+          <span>Detailed Anti-Pattern Findings ({report.findings.length})</span>
+        </button>
       </div>
 
-      {/* Findings List */}
-      {filteredFindings.length === 0 ? (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-8 text-center">
-          <p className="text-lg font-bold text-emerald-400">🎉 Excellent Architecture!</p>
-          <p className="mt-1 text-sm text-zinc-400">
-            No architectural anti-patterns detected for the selected filters.
-          </p>
-        </div>
+      {activeSubTab === 'risk_loop' ? (
+        <ArchitecturalRiskActionLoop repositoryId={repositoryId} />
       ) : (
-        <div className="space-y-4">
-          {filteredFindings.map((finding) => (
-            <div
-              key={finding.id}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-zinc-700"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase ${
-                      severityBadges[finding.severity] || severityBadges['medium']
-                    }`}
-                  >
-                    {finding.severity}
-                  </span>
-                  <span className="text-xs font-mono text-zinc-500">{finding.category}</span>
-                </div>
-                <h3 className="text-base font-bold text-white">{finding.title}</h3>
-                <p className="text-xs text-zinc-400">{finding.description}</p>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {finding.affectedFilePaths.slice(0, 3).map((p) => (
-                    <code
-                      key={p}
-                      className="rounded bg-zinc-950 px-2 py-0.5 text-[11px] text-cyan-400"
-                    >
-                      {p}
-                    </code>
-                  ))}
-                  {finding.affectedFilePaths.length > 3 && (
-                    <span className="text-[11px] text-zinc-500">
-                      +{finding.affectedFilePaths.length - 3} more
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {onNavigateToGraph && (
-                  <Button variant="outline" size="sm" onClick={() => onNavigateToGraph(finding)}>
-                    🔍 Highlight on Graph
-                  </Button>
-                )}
-                <Button variant="default" size="sm" onClick={() => setActiveDrawerFinding(finding)}>
-                  ⚡ Explain & Fix with AI
-                </Button>
-              </div>
+        <>
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="mr-2 text-zinc-400">Severity:</span>
+              {(['all', 'critical', 'high', 'medium', 'low'] as const).map((sev) => (
+                <button
+                  key={sev}
+                  onClick={() => setSeverityFilter(sev)}
+                  className={`rounded-lg px-3 py-1.5 font-medium transition ${
+                    severityFilter === sev
+                      ? 'bg-zinc-100 text-zinc-950 font-bold'
+                      : 'bg-zinc-950 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {sev.toUpperCase()}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-zinc-400">Category:</span>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as 'all' | HealthFindingCategory)}
+                className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-zinc-200 focus:border-cyan-500 focus:outline-none"
+              >
+                <option value="all">All Categories</option>
+                <option value="circular_dependency">Circular Dependencies</option>
+                <option value="layer_violation">Layer Violations</option>
+                <option value="coupling_hotspot">Coupling Hotspots</option>
+                <option value="orphan_export">Orphan Exports</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Findings List */}
+          {filteredFindings.length === 0 ? (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-8 text-center">
+              <p className="text-lg font-bold text-emerald-400">🎉 Excellent Architecture!</p>
+              <p className="mt-1 text-sm text-zinc-400">
+                No architectural anti-patterns detected for the selected filters.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredFindings.map((finding) => (
+                <div
+                  key={finding.id}
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition hover:border-zinc-700"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase ${
+                          severityBadges[finding.severity] || severityBadges['medium']
+                        }`}
+                      >
+                        {finding.severity}
+                      </span>
+                      <span className="text-xs font-mono text-zinc-500">{finding.category}</span>
+                    </div>
+                    <h3 className="text-base font-bold text-white">{finding.title}</h3>
+                    <p className="text-xs text-zinc-400">{finding.description}</p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {finding.affectedFilePaths.slice(0, 3).map((p) => (
+                        <code
+                          key={p}
+                          className="rounded bg-zinc-950 px-2 py-0.5 text-[11px] text-cyan-400"
+                        >
+                          {p}
+                        </code>
+                      ))}
+                      {finding.affectedFilePaths.length > 3 && (
+                        <span className="text-[11px] text-zinc-500">
+                          +{finding.affectedFilePaths.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {onNavigateToGraph && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onNavigateToGraph(finding)}
+                      >
+                        🔍 Highlight on Graph
+                      </Button>
+                    )}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setActiveDrawerFinding(finding)}
+                    >
+                      ⚡ Explain & Fix with AI
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Slide-over AI Refactoring Drawer */}
+
       <AIExplanationDrawer
         repositoryId={repositoryId}
         finding={activeDrawerFinding}
