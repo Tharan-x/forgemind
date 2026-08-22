@@ -527,13 +527,7 @@ async function runPartC(): Promise<void> {
   // Test 17: triggerRepositoryAnalysis — POST /api/v1/repositories/:id/analyze
   {
     mockAuthenticatedSession();
-    const acquisitionResult = {
-      job: mockJob,
-      commitHash: 'abc123',
-      fileCount: 10,
-      totalSizeBytes: 1024,
-    };
-    installFetchInterceptor(200, { success: true, result: acquisitionResult });
+    installFetchInterceptor(202, { success: true, job: mockJob });
 
     const data = await triggerRepositoryAnalysis(REPO_ID);
 
@@ -543,7 +537,7 @@ async function runPartC(): Promise<void> {
       `http://api.test/api/v1/repositories/${REPO_ID}/analyze`,
       'Test 17: URL is correct',
     );
-    assertEqual(data.commitHash, 'abc123', 'Test 17: result unwrapped correctly');
+    assertEqual(data.job.id, mockJob.id, 'Test 17: job returned correctly');
     console.log('  ✅ Test 17: triggerRepositoryAnalysis — POST /repositories/:id/analyze');
   }
 

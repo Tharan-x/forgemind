@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "postinstall": "prisma generate",
     "start": "node dist/index.js",
+    "worker": "tsx src/worker.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",

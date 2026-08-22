@@ -422,26 +422,55 @@ export default function RepositoryDetailPage() {
   const handleTriggerAnalysis = async () => {
     if (!repositoryId) return;
     setAnalyzing(true);
-    addToast('Starting AST analysis and file indexing...', 'info');
+    addToast('Analysis job queued. Processing in background...', 'info');
     try {
       const result = await triggerRepositoryAnalysis(repositoryId);
-      setLatestJob(result.job);
-      addToast(
-        `Analysis completed! Parsed ${result.extraction?.filesParsed ?? 0} code files, extracted ${result.extraction?.totalSymbolsExtracted ?? 0} symbols.`,
-        'success',
-      );
-      // Refresh current tab data
-      fetchRepoData();
-      fetchFiles();
-      fetchSymbols();
-      fetchDependencies();
+      if (result.job) {
+        setLatestJob(result.job);
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Repository analysis failed.';
+      const msg = err instanceof Error ? err.message : 'Failed to queue repository analysis.';
       addToast(msg, 'error');
     } finally {
       setAnalyzing(false);
     }
   };
+
+  // Poll analysis job status while in pending or in_progress state
+  useEffect(() => {
+    if (!repositoryId || !latestJob) return;
+    if (latestJob.status !== 'pending' && latestJob.status !== 'in_progress') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const updatedJob = await getLatestAnalysisJob(repositoryId);
+        if (updatedJob) {
+          setLatestJob(updatedJob);
+          if (updatedJob.status === 'completed') {
+            addToast('Repository analysis completed successfully!', 'success');
+            fetchRepoData();
+            fetchFiles();
+            fetchSymbols();
+            fetchDependencies();
+          } else if (updatedJob.status === 'failed') {
+            addToast(`Analysis failed: ${updatedJob.error || 'Unknown error'}`, 'error');
+          }
+        }
+      } catch {
+        // Non-fatal polling error
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [
+    repositoryId,
+    latestJob,
+    addToast,
+    fetchRepoData,
+    fetchFiles,
+    fetchSymbols,
+    fetchDependencies,
+  ]);
 
   // Filter files client-side by search term
   const safeFiles = Array.isArray(files) ? files : [];

@@ -12,6 +12,9 @@
 
 import type { AnalysisJob, RepositoryFile, RepositorySymbol, FileDependency } from '@prisma/client';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { encryptToken } from '../lib/encryption.js';
+
+process.env['ENCRYPTION_SECRET'] = 'forgemind-test-encryption-secret-32-chars';
 
 // ── Assertion Helpers ──────────────────────────────────────────────────────────
 
@@ -92,6 +95,8 @@ const jobStore = new Map<string, StoredAnalysisJob>();
 const symbolStore = new Map<string, StoredSymbol>();
 const depStore = new Map<string, StoredDependency>();
 const chunkStore = new Map<string, StoredCodeChunk>();
+const repositoryStore = new Map<string, StoredRepository>();
+const ghCredStore = new Map<string, string>();
 
 // Seed repository store for acquisition tests (repository.findUnique)
 interface StoredRepository {
@@ -112,8 +117,6 @@ interface StoredRepository {
   updatedAt: Date;
 }
 
-const repositoryStore = new Map<string, StoredRepository>();
-
 function resetAllStores(): void {
   fileStore.clear();
   jobStore.clear();
@@ -121,6 +124,7 @@ function resetAllStores(): void {
   depStore.clear();
   chunkStore.clear();
   repositoryStore.clear();
+  ghCredStore.clear();
   fileIdCounter = 1;
   jobIdCounter = 1;
   symbolIdCounter = 1;
@@ -141,12 +145,13 @@ function seedRepository(id: string, userId: string, name: string, owner: string)
     private: false,
     htmlUrl: `https://github.com/${owner}/${name}`,
     language: 'TypeScript',
-    description: null,
-    stars: 0,
-    forks: 0,
+    description: 'Mock repository',
+    stars: 10,
+    forks: 2,
     createdAt: now,
     updatedAt: now,
   });
+  ghCredStore.set(userId, encryptToken('test-token'));
 }
 
 // ── PrismaClient Multi-Model _request Interceptor ─────────────────────────────
@@ -172,6 +177,22 @@ function seedRepository(id: string, userId: string, name: string, owner: string)
 
   if (action === 'queryRaw' || clientMethod === '$queryRaw') {
     return [];
+  }
+
+  // ── userGitHubCredential.findUnique ──
+  if (clientMethod === 'userGitHubCredential.findUnique') {
+    const { where } = args as { where: { userId?: string } };
+    const enc = where?.userId ? ghCredStore.get(where.userId) : null;
+    return enc
+      ? {
+          userId: where.userId,
+          encryptedToken: enc,
+          githubUsername: 'test',
+          githubAvatarUrl: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+      : null;
   }
 
   // ── repository.findUnique ──
@@ -350,17 +371,45 @@ function seedRepository(id: string, userId: string, name: string, owner: string)
     }
 
     if (action === 'findFirst') {
-      const { where, orderBy } = args as {
-        where: { repositoryId: string };
-        orderBy?: { createdAt: string };
+      const { where } = args as {
+        where?: {
+          repositoryId?: string;
+          status?: string | { in?: string[] };
+          OR?: Array<{ status?: string; startedAt?: { lt?: Date } }>;
+        };
       };
-      void orderBy;
       let found: StoredAnalysisJob | null = null;
-      let latestDate: Date | null = null;
       for (const job of jobStore.values()) {
-        if (job.repositoryId === where.repositoryId) {
-          if (!latestDate || job.createdAt > latestDate) {
-            latestDate = job.createdAt;
+        let matches = true;
+        if (where?.repositoryId && job.repositoryId !== where.repositoryId) matches = false;
+        if (where?.status) {
+          if (typeof where.status === 'string' && job.status !== where.status) matches = false;
+          else if (
+            typeof where.status === 'object' &&
+            where.status.in &&
+            !where.status.in.includes(job.status)
+          ) {
+            matches = false;
+          }
+        }
+        if (where?.OR && Array.isArray(where.OR)) {
+          let orMatch = false;
+          for (const cond of where.OR) {
+            if (cond.status === job.status) {
+              if (
+                !cond.startedAt ||
+                (job.startedAt && job.startedAt < (cond.startedAt.lt ?? new Date()))
+              ) {
+                orMatch = true;
+                break;
+              }
+            }
+          }
+          if (!orMatch) matches = false;
+        }
+
+        if (matches) {
+          if (!found || job.createdAt < found.createdAt) {
             found = job;
           }
         }
@@ -601,22 +650,26 @@ const originalTransaction = PrismaClient.prototype.$transaction;
 const originalFetch = globalThis.fetch;
 let mockFetchHandler: ((url: string, init?: RequestInit) => Promise<Response>) | null = null;
 
+const mockFetchWrapper = async (
+  input: string | URL | Request,
+  init?: RequestInit,
+): Promise<Response> => {
+  const urlString = typeof input === 'string' ? input : input.toString();
+  if (mockFetchHandler) {
+    return mockFetchHandler(urlString, init);
+  }
+  return originalFetch(input, init);
+};
+
 function setMockFetch(handler: (url: string, init?: RequestInit) => Promise<Response>): void {
   mockFetchHandler = handler;
+  globalThis.fetch = mockFetchWrapper;
 }
 
 function restoreFetch(): void {
   mockFetchHandler = null;
   globalThis.fetch = originalFetch;
 }
-
-globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-  if (mockFetchHandler) {
-    const urlString = typeof input === 'string' ? input : input.toString();
-    return mockFetchHandler(urlString, init);
-  }
-  return originalFetch(input, init);
-};
 
 function mockJsonResponse<T>(data: T, status = 200, statusText = 'OK'): Response {
   return new Response(JSON.stringify(data), {
@@ -637,12 +690,14 @@ import type * as AstParserModule from './ast-parser.service.js';
 import type * as SymbolExtractionModule from './symbol-extraction.service.js';
 import type * as AnalysisJobModule from './analysis-job.service.js';
 import type * as AcquisitionModule from './repository-acquisition.service.js';
+import type * as AnalysisWorkerModule from './analysis-worker.service.js';
 
 let treeIndexing: typeof TreeIndexingModule;
 let astParser: typeof AstParserModule;
 let symbolExtraction: typeof SymbolExtractionModule;
 let analysisJob: typeof AnalysisJobModule;
 let acquisition: typeof AcquisitionModule;
+let analysisWorker: typeof AnalysisWorkerModule;
 
 // =============================================================================
 // PART A — Tree Indexing & Language Detection (Tests 1–7)
@@ -1233,11 +1288,8 @@ async function runAnalysisJobTests(): Promise<void> {
 // PART E — Repository Analysis Acquisition Orchestration (Tests 24–30)
 // =============================================================================
 
-async function runAcquisitionOrchestrationTests(): Promise<void> {
-  console.log('\n📋 Part E — Repository Analysis Acquisition Orchestration (Tests 24–30)');
-
-  // Deterministic source content for the mock repository
-  const mockTsContent = `
+// Deterministic source content for the mock repository
+const mockTsContent = `
 import { PrismaClient } from '@prisma/client';
 
 export interface SyncResult {
@@ -1251,92 +1303,101 @@ export async function syncRepositories(userId: string, token: string): Promise<S
 }
 `;
 
-  const MOCK_COMMIT_SHA = 'deadbeef1234567890abcdef1234567890abcdef';
-  const MOCK_FILE_PATH = 'src/sync.service.ts';
-  const MOCK_FILE_SHA = 'fileSha001';
-  const MOCK_FILE_CONTENT_BASE64 = base64Encode(mockTsContent);
+const MOCK_COMMIT_SHA = 'deadbeef1234567890abcdef1234567890abcdef';
+const MOCK_FILE_PATH = 'src/sync.service.ts';
+const MOCK_FILE_SHA = 'fileSha001';
+const MOCK_FILE_CONTENT_BASE64 = base64Encode(mockTsContent);
 
-  // Tree with 2 indexable files + 1 ignored
-  const mockTreeResponse = {
-    sha: MOCK_COMMIT_SHA,
-    url: 'https://api.github.com/repos/testorg/forgemind/git/trees/deadbeef',
-    tree: [
-      {
-        path: MOCK_FILE_PATH,
-        mode: '100644',
-        type: 'blob',
-        sha: MOCK_FILE_SHA,
-        size: mockTsContent.length,
-        url: 'https://api.github.com/repos/testorg/forgemind/git/blobs/fileSha001',
-      },
-      {
-        path: 'src/utils.ts',
-        mode: '100644',
-        type: 'blob',
-        sha: 'fileSha002',
-        size: 200,
-        url: 'https://api.github.com/repos/testorg/forgemind/git/blobs/fileSha002',
-      },
-      {
-        path: 'node_modules/express/index.js',
-        mode: '100644',
-        type: 'blob',
-        sha: 'fileSha003',
-        size: 4096,
-        url: 'https://api.github.com/repos/testorg/forgemind/git/blobs/fileSha003',
-      },
-    ],
-    truncated: false,
-  };
-
-  const mockCommitResponse = {
-    sha: MOCK_COMMIT_SHA,
-    commit: {
-      message: 'feat: add sync service',
-      author: { name: 'dev', email: 'dev@test.com', date: '2026-08-19T00:00:00Z' },
+// Tree with 2 indexable files + 1 ignored
+const mockTreeResponse = {
+  sha: MOCK_COMMIT_SHA,
+  url: 'https://api.github.com/repos/testorg/forgemind/git/trees/deadbeef',
+  tree: [
+    {
+      path: MOCK_FILE_PATH,
+      mode: '100644',
+      type: 'blob',
+      sha: MOCK_FILE_SHA,
+      size: mockTsContent.length,
+      url: 'https://api.github.com/repos/testorg/forgemind/git/blobs/fileSha001',
     },
+    {
+      path: 'src/utils.ts',
+      mode: '100644',
+      type: 'blob',
+      sha: 'fileSha002',
+      size: 200,
+      url: 'https://api.github.com/repos/testorg/forgemind/git/blobs/fileSha002',
+    },
+    {
+      path: 'node_modules/express/index.js',
+      mode: '100644',
+      type: 'blob',
+      sha: 'fileSha003',
+      size: 4096,
+      url: 'https://api.github.com/repos/testorg/forgemind/git/blobs/fileSha003',
+    },
+  ],
+  truncated: false,
+};
+
+const mockCommitResponse = {
+  sha: MOCK_COMMIT_SHA,
+  commit: {
+    message: 'feat: add sync service',
+    author: { name: 'dev', email: 'dev@test.com', date: '2026-08-19T00:00:00Z' },
+  },
+};
+
+const utilsContent = `export const VERSION = '1.0.0';`;
+
+function buildGitHubMockFetch(): (url: string, init?: RequestInit) => Promise<Response> {
+  return async (url: string, init?: RequestInit): Promise<Response> => {
+    const authHeader =
+      (init?.headers as Record<string, string>)?.['Authorization'] ||
+      (init?.headers as Record<string, string>)?.['authorization'];
+    if (authHeader && authHeader.includes('invalid-token')) {
+      return mockJsonResponse({ message: 'Bad credentials' }, 401, 'Unauthorized');
+    }
+    // getCommit: /repos/{owner}/{repo}/commits/{ref}
+    if (url.includes('/commits/')) {
+      return mockJsonResponse(mockCommitResponse);
+    }
+    // getTree: /repos/{owner}/{repo}/git/trees/{sha}
+    if (url.includes('/git/trees/')) {
+      return mockJsonResponse(mockTreeResponse);
+    }
+    // getFileContent: /repos/{owner}/{repo}/contents/{path}
+    if (url.includes('/contents/')) {
+      if (url.includes('sync.service')) {
+        return mockJsonResponse({
+          type: 'file',
+          encoding: 'base64',
+          size: mockTsContent.length,
+          name: 'sync.service.ts',
+          path: MOCK_FILE_PATH,
+          content: MOCK_FILE_CONTENT_BASE64,
+          sha: MOCK_FILE_SHA,
+        });
+      }
+      if (url.includes('utils')) {
+        return mockJsonResponse({
+          type: 'file',
+          encoding: 'base64',
+          size: utilsContent.length,
+          name: 'utils.ts',
+          path: 'src/utils.ts',
+          content: base64Encode(utilsContent),
+          sha: 'fileSha002',
+        });
+      }
+    }
+    return mockJsonResponse({}, 404, 'Not Found');
   };
+}
 
-  const utilsContent = `export const VERSION = '1.0.0';`;
-
-  function buildGitHubMockFetch(): (url: string) => Promise<Response> {
-    return async (url: string): Promise<Response> => {
-      // getCommit: /repos/{owner}/{repo}/commits/{ref}
-      if (url.includes('/commits/')) {
-        return mockJsonResponse(mockCommitResponse);
-      }
-      // getTree: /repos/{owner}/{repo}/git/trees/{sha}
-      if (url.includes('/git/trees/')) {
-        return mockJsonResponse(mockTreeResponse);
-      }
-      // getFileContent: /repos/{owner}/{repo}/contents/{path}
-      if (url.includes('/contents/')) {
-        if (url.includes('sync.service')) {
-          return mockJsonResponse({
-            type: 'file',
-            encoding: 'base64',
-            size: mockTsContent.length,
-            name: 'sync.service.ts',
-            path: MOCK_FILE_PATH,
-            content: MOCK_FILE_CONTENT_BASE64,
-            sha: MOCK_FILE_SHA,
-          });
-        }
-        if (url.includes('utils')) {
-          return mockJsonResponse({
-            type: 'file',
-            encoding: 'base64',
-            size: utilsContent.length,
-            name: 'utils.ts',
-            path: 'src/utils.ts',
-            content: base64Encode(utilsContent),
-            sha: 'fileSha002',
-          });
-        }
-      }
-      return mockJsonResponse({}, 404, 'Not Found');
-    };
-  }
+async function runAcquisitionOrchestrationTests(): Promise<void> {
+  console.log('\n📋 Part E — Repository Analysis Acquisition Orchestration (Tests 24–30)');
 
   // Test 24: triggerRepositoryAnalysis retrieves expected GitHub commit and tree data
   {
@@ -1519,6 +1580,79 @@ export async function syncRepositories(userId: string, token: string): Promise<S
 // MAIN RUNNER
 // =============================================================================
 
+async function runBackgroundWorkerTests(): Promise<void> {
+  console.log('\n📋 Part F — Background Analysis Worker & Job Queue (Tests 31–36)');
+
+  // Test 31: enqueueAnalysisJob enqueues a pending job
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_ACQ, USER_ID_ACQ, 'forgemind', 'testorg');
+    const job = await acquisition.enqueueAnalysisJob(REPO_ID_ACQ, USER_ID_ACQ);
+    assertEqual(job.status, 'pending', 'Test 31: Enqueued job status is pending');
+    assertEqual(job.repositoryId, REPO_ID_ACQ, 'Test 31: Repository ID matches');
+    console.log('  ✅ Test 31: enqueueAnalysisJob enqueues job with status=pending');
+  }
+
+  // Test 32: enqueueAnalysisJob reuses active pending/in_progress job
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_ACQ, USER_ID_ACQ, 'forgemind', 'testorg');
+    const job1 = await acquisition.enqueueAnalysisJob(REPO_ID_ACQ, USER_ID_ACQ);
+    const job2 = await acquisition.enqueueAnalysisJob(REPO_ID_ACQ, USER_ID_ACQ);
+    assertEqual(job1.id, job2.id, 'Test 32: Active job reused for same repository');
+    console.log('  ✅ Test 32: enqueueAnalysisJob reuses active pending job');
+  }
+
+  // Test 33: claimNextAnalysisJob claims pending job and sets in_progress
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_ACQ, USER_ID_ACQ, 'forgemind', 'testorg');
+    const job = await acquisition.enqueueAnalysisJob(REPO_ID_ACQ, USER_ID_ACQ);
+    const claimed = await analysisJob.claimNextAnalysisJob();
+    assertDefined(claimed, 'Test 33: Job claimed successfully');
+    assertEqual(claimed?.id, job.id, 'Test 33: Claimed job matches enqueued job');
+    assertEqual(claimed?.status, 'in_progress', 'Test 33: Claimed job status set to in_progress');
+    console.log('  ✅ Test 33: claimNextAnalysisJob claims pending job atomically');
+  }
+
+  // Test 34: claimNextAnalysisJob returns null when no pending jobs exist
+  {
+    resetAllStores();
+    const claimed = await analysisJob.claimNextAnalysisJob();
+    assertNull(claimed, 'Test 34: Returns null when no pending jobs exist');
+    console.log('  ✅ Test 34: claimNextAnalysisJob returns null when queue is empty');
+  }
+
+  // Test 35: processNextAnalysisJob processes pending job to completion
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_ACQ, USER_ID_ACQ, 'forgemind', 'testorg');
+    setMockFetch(buildGitHubMockFetch());
+    await acquisition.enqueueAnalysisJob(REPO_ID_ACQ, USER_ID_ACQ);
+    const processed = await analysisWorker.processNextAnalysisJob();
+    assertEqual(processed, true, 'Test 35: Job processed by worker');
+
+    const latestJob = await analysisJob.findLatestAnalysisJobByRepository(REPO_ID_ACQ);
+    assertEqual(latestJob?.status, 'completed', 'Test 35: Job status transitioned to completed');
+    console.log('  ✅ Test 35: processNextAnalysisJob processes job to completed state');
+  }
+
+  // Test 36: processNextAnalysisJob handles worker errors gracefully
+  {
+    resetAllStores();
+    seedRepository(REPO_ID_ERR, USER_ID_ACQ, 'error-repo', 'testorg');
+    ghCredStore.delete(USER_ID_ACQ);
+    await acquisition.enqueueAnalysisJob(REPO_ID_ERR, USER_ID_ACQ);
+    const processed = await analysisWorker.processNextAnalysisJob();
+    assertEqual(processed, true, 'Test 36: Worker handled error gracefully');
+
+    const latestJob = await analysisJob.findLatestAnalysisJobByRepository(REPO_ID_ERR);
+    assertEqual(latestJob?.status, 'failed', 'Test 36: Failed job recorded status=failed');
+    assertDefined(latestJob?.error, 'Test 36: Error details recorded');
+    console.log('  ✅ Test 36: processNextAnalysisJob transitions to failed on processing error');
+  }
+}
+
 async function runAllTests(): Promise<void> {
   console.log(
     '🧪 ForgeMind — Repository Analysis Acquisition Integration Test Suite (Sprint 4 Task 2)\n',
@@ -1531,20 +1665,23 @@ async function runAllTests(): Promise<void> {
     symbolExtraction = await import('./symbol-extraction.service.js');
     analysisJob = await import('./analysis-job.service.js');
     acquisition = await import('./repository-acquisition.service.js');
+    analysisWorker = await import('./analysis-worker.service.js');
 
     await runTreeIndexingTests();
     await runAstParsingTests();
     await runSymbolPersistenceTests();
     await runAnalysisJobTests();
     await runAcquisitionOrchestrationTests();
+    await runBackgroundWorkerTests();
 
-    console.log('\n🎉 ALL 30 INTEGRATION & SERVICE TESTS PASSED SUCCESSFULLY!\n');
+    console.log('\n🎉 ALL 36 INTEGRATION & SERVICE TESTS PASSED SUCCESSFULLY!\n');
     console.log('Summary:');
     console.log('  Part A — Tree Indexing & Language Detection:          Tests 1–7   (7 tests)');
     console.log('  Part B — AST Parsing:                                 Tests 8–14  (7 tests)');
     console.log('  Part C — Symbol & Dependency Persistence:             Tests 15–18 (4 tests)');
     console.log('  Part D — Analysis Job Lifecycle:                      Tests 19–23 (5 tests)');
     console.log('  Part E — Repository Analysis Acquisition:             Tests 24–30 (7 tests)');
+    console.log('  Part F — Background Analysis Worker & Queue:          Tests 31–36 (6 tests)');
   } catch (err) {
     console.error('\n❌ Test suite failed:', err);
     process.exit(1);

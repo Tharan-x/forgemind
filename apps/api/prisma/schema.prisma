@@ -109,6 +109,8 @@ model AnalysisJob {
 
   repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 
+  @@index([status])
+  @@index([repositoryId, status])
   @@map("analysis_jobs")
 }
 

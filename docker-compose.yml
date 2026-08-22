@@ -11,7 +11,7 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-      target: builder        # Use builder stage for development (has tsx)
+      target: builder # Use builder stage for development (has tsx)
     container_name: forgemind-api
     restart: unless-stopped
     ports:
@@ -41,12 +41,38 @@ services:
       postgres:
         condition: service_healthy
 
+  # ── Worker (Background Analysis Processing) ─────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: builder
+    container_name: forgemind-worker
+    restart: unless-stopped
+    command: pnpm --filter @forgemind/api worker
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-}
+      DIRECT_URL: ${DIRECT_URL:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-}
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages:/app/packages
+    networks:
+      - forgemind-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # ── Web (Next.js) ──────────────────────────────────────────────────────────
   web:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
-      target: builder        # Use builder stage for dev
+      target: builder # Use builder stage for dev
     container_name: forgemind-web
     restart: unless-stopped
     ports:

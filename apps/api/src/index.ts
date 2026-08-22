@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
+import { startAnalysisWorkerLoop } from './services/analysis-worker.service.js';
 
 const app = createApp();
 
@@ -16,4 +17,8 @@ app.listen(env.PORT, env.HOST, () => {
   ║  URL    : http://localhost:${env.PORT}       ║
   ╚══════════════════════════════════════╝
   `);
+
+  if (process.env['ENABLE_IN_PROCESS_WORKER'] !== 'false') {
+    startAnalysisWorkerLoop({ pollIntervalMs: 2000 });
+  }
 });

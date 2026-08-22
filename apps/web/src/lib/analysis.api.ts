@@ -5,7 +5,6 @@
 import type {
   AnalysisJob,
   FileDependency,
-  RepositoryAcquisitionResult,
   RepositoryFile,
   RepositorySymbol,
 } from '@forgemind/types';
@@ -53,16 +52,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 /**
  * POST /api/v1/repositories/:repositoryId/analyze
  *
- * Triggers repository acquisition and analysis job execution.
+ * Enqueues a repository acquisition and analysis job for background execution.
  */
 export async function triggerRepositoryAnalysis(
   repositoryId: string,
-): Promise<RepositoryAcquisitionResult> {
-  const data = await request<{ success: boolean; result: RepositoryAcquisitionResult }>(
-    `/repositories/${encodeURIComponent(repositoryId)}/analyze`,
-    { method: 'POST' },
-  );
-  return data.result;
+): Promise<{ job: AnalysisJob }> {
+  const data = await request<{
+    success: boolean;
+    job?: AnalysisJob;
+    result?: { job: AnalysisJob };
+  }>(`/repositories/${encodeURIComponent(repositoryId)}/analyze`, { method: 'POST' });
+
+  const job = data.job || data.result?.job;
+  if (!job) {
+    throw new Error('Invalid analysis job response from API.');
+  }
+
+  return { job };
 }
 
 /**

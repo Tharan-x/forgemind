@@ -6,7 +6,7 @@ import type { Request, Response } from 'express';
 
 import type { AuthenticatedRequest } from '../auth/index.js';
 import {
-  triggerRepositoryAnalysis,
+  enqueueAnalysisJob,
   findLatestAnalysisJobByRepository,
   findAnalysisJobsByRepository,
   findRepositoryById,
@@ -41,8 +41,9 @@ function sendInternalError(res: Response, message = 'An unexpected error occurre
 /**
  * POST /repositories/:repositoryId/analyze
  *
- * Triggers a repository acquisition and analysis job for the given repository ID.
+ * Enqueues a repository acquisition and analysis job for background execution.
  * Requires authenticated user ownership and a valid GitHub token.
+ * Returns HTTP 202 Accepted with job metadata.
  */
 export async function triggerAnalysis(req: AnalysisRequest, res: Response): Promise<void> {
   try {
@@ -80,9 +81,13 @@ export async function triggerAnalysis(req: AnalysisRequest, res: Response): Prom
       return;
     }
 
-    const result = await triggerRepositoryAnalysis(repositoryId, user.id, githubToken);
+    const job = await enqueueAnalysisJob(repositoryId, user.id);
 
-    res.status(200).json({ success: true, result });
+    res.status(202).json({
+      success: true,
+      job,
+      result: { job },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : undefined;
     sendInternalError(res, message);

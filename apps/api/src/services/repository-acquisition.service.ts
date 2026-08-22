@@ -8,7 +8,11 @@ import type { ExtractionResult, IndexingResult, VectorIndexingResult } from '@fo
 
 import { createGithubClient } from '../github/index.js';
 
-import { createAnalysisJob, updateAnalysisJobStatus } from './analysis-job.service.js';
+import {
+  createAnalysisJob,
+  findActiveAnalysisJobByRepository,
+  updateAnalysisJobStatus,
+} from './analysis-job.service.js';
 import { processAndStoreFileChunks } from './chunk-embedding.service.js';
 import { getEmbeddingProvider } from './embeddings/factory.js';
 import { findRepositoryById } from './repository.service.js';
@@ -26,28 +30,12 @@ export interface AcquisitionSummary {
 }
 
 /**
- * Triggers repository acquisition and analysis job execution for an authenticated user's repository.
- *
- * Steps:
- * 1. Validates repository existence and user ownership.
- * 2. Creates an AnalysisJob in 'pending' status.
- * 3. Transitions status to 'in_progress' and sets startedAt timestamp.
- * 4. Queries GitHub REST API for latest commit and repository git tree file items.
- * 5. Indexes repository tree metadata (files, language classification, ignore filtering).
- * 6. Performs AST symbol & dependency extraction on primary code files.
- * 7. Performs code chunking & vector embedding generation for code files.
- * 8. Transitions job status to 'completed' with finishedAt timestamp (or 'failed' on error).
- *
- * @param repositoryId The database UUID of the repository.
- * @param userId The database UUID of the authenticated user requesting analysis.
- * @param githubToken GitHub OAuth/access token.
+ * Validates user ownership and enqueues a new pending AnalysisJob (or returns an active running job).
  */
-export async function triggerRepositoryAnalysis(
+export async function enqueueAnalysisJob(
   repositoryId: string,
   userId: string,
-  githubToken: string,
-): Promise<AcquisitionSummary> {
-  // 1. Validate repository existence & ownership
+): Promise<AnalysisJob> {
   const repo = await findRepositoryById(repositoryId);
 
   if (!repo) {
@@ -58,21 +46,43 @@ export async function triggerRepositoryAnalysis(
     throw new Error(`User does not have permission to analyze repository: ${repositoryId}`);
   }
 
-  // 2. Create pending AnalysisJob
-  const job = await createAnalysisJob(repositoryId);
+  const activeJob = await findActiveAnalysisJobByRepository(repositoryId);
+  if (activeJob) {
+    return activeJob;
+  }
 
-  // Initialize GitHub client
+  return createAnalysisJob(repositoryId);
+}
+
+/**
+ * Executes repository acquisition, AST symbol extraction, file indexing, and vector chunking
+ * for a specific AnalysisJob.
+ */
+export async function executeAnalysisJob(
+  job: AnalysisJob,
+  githubToken: string,
+): Promise<AcquisitionSummary> {
+  const repositoryId = job.repositoryId;
+  const repo = await findRepositoryById(repositoryId);
+
+  if (!repo) {
+    await updateAnalysisJobStatus(job.id, {
+      status: 'failed',
+      error: `Repository not found: ${repositoryId}`,
+      finishedAt: new Date(),
+    });
+    throw new Error(`Repository not found: ${repositoryId}`);
+  }
+
   const github = createGithubClient(githubToken);
 
   try {
-    // 3. Mark job as in_progress
-    const startedAt = new Date();
+    const startedAt = job.startedAt ?? new Date();
     await updateAnalysisJobStatus(job.id, {
       status: 'in_progress',
       startedAt,
     });
 
-    // 4. Acquisition: Fetch latest commit & tree from GitHub
     const defaultBranch = repo.defaultBranch || 'main';
     const commit = await github.getCommit(repo.owner, repo.name, defaultBranch);
     const commitHash = commit.sha;
@@ -80,10 +90,8 @@ export async function triggerRepositoryAnalysis(
     const treeResponse = await github.getTree(repo.owner, repo.name, commitHash, true);
     const treeItems = treeResponse.tree || [];
 
-    // 5. Indexing: Parse file metadata, ignore rules, and language classification
     const indexing = await indexRepositoryTree(repositoryId, treeItems);
 
-    // 6. Extraction & Vector Embedding Pipeline
     const { files: indexedFiles } = await findRepositoryFiles(repositoryId, { limit: 5000 });
     const codeFiles = indexedFiles.filter(
       (f) => f.type === 'file' && f.language && (f.size ?? 0) < 500000,
@@ -102,7 +110,6 @@ export async function triggerRepositoryAnalysis(
       try {
         const content = await github.getFileContent(repo.owner, repo.name, file.path, commitHash);
         if (content) {
-          // 6a. AST Symbol & Dependency Extraction
           const res = await extractAndIndexFileSymbols(
             repositoryId,
             file.id,
@@ -114,7 +121,6 @@ export async function triggerRepositoryAnalysis(
           totalDependenciesExtracted += res.dependencyCount;
           filesParsed += 1;
 
-          // 6b. Code Chunking & Vector Embeddings Generation
           const chunkRes = await processAndStoreFileChunks(
             repositoryId,
             file.id,
@@ -153,12 +159,10 @@ export async function triggerRepositoryAnalysis(
       providerUsed: provider.name,
     };
 
-    // Calculate basic tree file statistics
     const blobs = treeItems.filter((item) => item.type === 'blob');
     const fileCount = indexing.filesIndexed;
     const totalSizeBytes = blobs.reduce((sum, item) => sum + (item.size || 0), 0);
 
-    // 7. Mark job as completed
     const finishedAt = new Date();
     const completedJob = await updateAnalysisJobStatus(job.id, {
       status: 'completed',
@@ -195,4 +199,17 @@ export async function triggerRepositoryAnalysis(
       `Repository acquisition failed for job ${job.id}: ${failedJob?.error || errorMessage}`,
     );
   }
+}
+
+/**
+ * Legacy synchronous helper that enqueues and immediately executes an analysis job.
+ * Preserves backwards compatibility for direct calls and integration test suites.
+ */
+export async function triggerRepositoryAnalysis(
+  repositoryId: string,
+  userId: string,
+  githubToken: string,
+): Promise<AcquisitionSummary> {
+  const job = await enqueueAnalysisJob(repositoryId, userId);
+  return executeAnalysisJob(job, githubToken);
 }

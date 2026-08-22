@@ -16,9 +16,10 @@ import { supabase } from '../lib/supabase.js';
 import { getEmbeddingProvider } from '../services/embeddings/index.js';
 import { getLLMProvider } from '../services/llm/index.js';
 
-// Enforce mock providers
+// Enforce mock providers & test encryption secret
 process.env['EMBEDDING_PROVIDER'] = 'mock';
 process.env['LLM_PROVIDER'] = 'mock';
+process.env['ENCRYPTION_SECRET'] = 'forgemind-test-encryption-secret-32-chars';
 
 // ── Assertion Helpers ──────────────────────────────────────────────────────────
 
@@ -473,6 +474,14 @@ globalThis.fetch = async (
     let results = Array.from(jobStore.values());
     if (where['repositoryId'])
       results = results.filter((j) => j['repositoryId'] === where['repositoryId']);
+    if (where['status']) {
+      const statusObj = where['status'] as { in?: string[] } | string;
+      if (typeof statusObj === 'string') {
+        results = results.filter((j) => j['status'] === statusObj);
+      } else if (statusObj && typeof statusObj === 'object' && statusObj.in) {
+        results = results.filter((j) => statusObj.in?.includes(j['status'] as string));
+      }
+    }
     return results[0] ?? null;
   }
   if (clientMethod === 'analysisJob.create') {
@@ -1094,10 +1103,13 @@ async function runPartC() {
     const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/analyze`, {
       token: TOKEN_USER_1,
     });
-    assertEqual(res.status, 200, 'Test 19: Analyze status 200');
+    assertEqual(res.status, 202, 'Test 19: Analyze status 202');
     assertEqual(res.body.success, true, 'Test 19: Success true');
-    assertDefined(res.body.result, 'Test 19: AcquisitionSummary present');
-    console.log('  ✅ Test 19: POST /api/v1/repositories/:repositoryId/analyze triggers analysis');
+    assertDefined(res.body.job, 'Test 19: AnalysisJob present');
+    assertEqual(res.body.job.status, 'pending', 'Test 19: Job status pending');
+    console.log(
+      '  ✅ Test 19: POST /api/v1/repositories/:repositoryId/analyze enqueues background job with status 202',
+    );
   }
 
   // 20. POST /api/v1/repositories/:repositoryId/analyze (Missing token for user)
@@ -1448,7 +1460,7 @@ async function runPartG() {
     try {
       process.env['NODE_ENV'] = 'production';
       delete process.env['ENCRYPTION_SECRET'];
-      delete process.env['SUPABASE_SERVICE_ROLE_KEY'];
+      process.env['SUPABASE_SERVICE_ROLE_KEY'] = 'some-dummy-supabase-role-key';
 
       let errorThrown = false;
       try {
@@ -1462,12 +1474,14 @@ async function runPartG() {
       }
       assert(errorThrown, 'Test 43: Production mode throws when encryption secret is missing');
       console.log(
-        '  ✅ Test 43: Production encryption fails safely when ENCRYPTION_SECRET is absent',
+        '  ✅ Test 43: Production encryption fails safely when ENCRYPTION_SECRET is absent (SUPABASE_SERVICE_ROLE_KEY ignored)',
       );
     } finally {
       process.env['NODE_ENV'] = originalEnv;
       if (originalSecret) process.env['ENCRYPTION_SECRET'] = originalSecret;
+      else delete process.env['ENCRYPTION_SECRET'];
       if (originalRoleKey) process.env['SUPABASE_SERVICE_ROLE_KEY'] = originalRoleKey;
+      else delete process.env['SUPABASE_SERVICE_ROLE_KEY'];
     }
   }
 
