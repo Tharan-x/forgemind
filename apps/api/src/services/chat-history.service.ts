@@ -2,10 +2,9 @@
 // ForgeMind API — Chat History Service
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
 import type { ChatMessage, ChatSession } from '@forgemind/types';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface ChatHistoryResult {
   session: ChatSession | null;

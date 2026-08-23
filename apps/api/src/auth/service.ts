@@ -2,9 +2,7 @@
 // ForgeMind API — Auth & User Profile Service
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface UserProfileData {
   id?: string;

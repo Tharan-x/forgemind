@@ -3,12 +3,11 @@
 // =============================================================================
 
 import type { FileDependency, RepositorySymbol, Prisma } from '@prisma/client';
-import { PrismaClient } from '@prisma/client';
 
 import { parseSourceFile } from './ast-parser.service.js';
 import type { CodeSymbolInfo } from './code-chunker.service.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface SymbolExtractionSummary {
   symbolCount: number;

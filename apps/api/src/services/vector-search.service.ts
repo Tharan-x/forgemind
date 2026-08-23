@@ -2,12 +2,11 @@
 // ForgeMind API — Vector Semantic Search & Chunk Query Service
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
 import type { CodeChunk, VectorPipelineStatus, VectorSearchResult } from '@forgemind/types';
 
 import { getEmbeddingProvider } from './embeddings/factory.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface SemanticSearchOptions {
   limit?: number;

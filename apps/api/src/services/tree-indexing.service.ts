@@ -3,11 +3,10 @@
 // =============================================================================
 
 import type { RepositoryFile } from '@prisma/client';
-import { PrismaClient } from '@prisma/client';
 
 import type { GithubTreeItem, IndexingResult } from '@forgemind/types';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 // ─── 1. Extension & Language Mapping ──────────────────────────────────────────
 

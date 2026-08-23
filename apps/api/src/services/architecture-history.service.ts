@@ -18,9 +18,8 @@ import type {
 
 import { generateArchitectureHealthReport } from './architecture-health.service.js';
 import { assertRepositoryOwnership } from './repository.service.js';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 /**
  * Retrieves historical architecture health trend points for a repository.

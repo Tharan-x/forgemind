@@ -12,7 +12,6 @@
 // It does NOT introduce new database models, duplicate RAG logic, or bypass auth.
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
 import type {
   ArchitectureOverviewResponse,
   CodeExplainRequest,
@@ -28,7 +27,7 @@ import { retrieveRepositoryContext } from './context-retrieval.service.js';
 import { getLLMProvider } from './llm/factory.js';
 import { buildRAGPrompt } from './rag-prompt.service.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers

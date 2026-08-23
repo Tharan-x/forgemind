@@ -2,12 +2,10 @@
 // ForgeMind API — GitHub Credential Management Service
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
-
 import { createGithubClient } from '../github/index.js';
 import { encryptToken, decryptToken } from '../lib/encryption.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface GitHubConnectionStatus {
   connected: boolean;

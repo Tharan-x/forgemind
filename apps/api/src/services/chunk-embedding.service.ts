@@ -2,13 +2,13 @@
 // ForgeMind API — Chunk Persistence & Vector Embedding Storage Service
 // =============================================================================
 
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { VectorIndexingResult } from '@forgemind/types';
 
 import { chunkSourceFile, type CodeSymbolInfo } from './code-chunker.service.js';
 import { getEmbeddingProvider } from './embeddings/factory.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface ProcessFileChunksResult {
   fileId: string;

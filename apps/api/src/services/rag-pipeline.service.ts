@@ -2,7 +2,6 @@
 // ForgeMind API — RAG Pipeline Orchestrator
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
 import type { RAGQueryResponse, RAGSourceCitation } from '@forgemind/types';
 
 import { retrieveRepositoryContext } from './context-retrieval.service.js';
@@ -14,7 +13,7 @@ import { reformulateQueryForRetrieval } from './query-reformulation.service.js';
 import { analyzeQueryIntent } from './query-intent.service.js';
 import { getArchitectureOverview } from './code-intelligence.service.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma.js';
 
 export interface RAGPipelineOptions {
   topK?: number;
