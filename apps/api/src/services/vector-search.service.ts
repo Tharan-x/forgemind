@@ -56,54 +56,61 @@ export async function searchSemanticCodeChunks(
   const resultMap = new Map<string, VectorSearchResult>();
 
   // 1. Vector Search Candidate Retrieval
-  try {
-    const queryVector = await provider.generateEmbedding(trimmedQuery);
-    const vectorStr = `[${queryVector.join(',')}]`;
+  if (provider.name !== 'none' && provider.name !== 'disabled') {
+    try {
+      const queryVector = await provider.generateEmbedding(trimmedQuery);
+      const vectorStr = `[${queryVector.join(',')}]`;
 
-    const rawVectorResults = await prisma.$queryRaw<RawVectorQueryResult[]>`
-      SELECT
-        c.id,
-        c.repository_id AS "repositoryId",
-        c.file_id AS "fileId",
-        c.chunk_index AS "chunkIndex",
-        c.content,
-        c.file_path AS "filePath",
-        c.language,
-        c.start_line AS "startLine",
-        c.end_line AS "endLine",
-        c.token_count AS "tokenCount",
-        c.lines_count AS "linesCount",
-        c.metadata,
-        (1 - (c.embedding <=> ${vectorStr}::vector))::float AS similarity
-      FROM "code_chunks" c
-      WHERE c.repository_id = ${repositoryId}::uuid
-        AND c.embedding IS NOT NULL
-      ORDER BY c.embedding <=> ${vectorStr}::vector ASC
-      LIMIT ${limit};
-    `;
+      const rawVectorResults = await prisma.$queryRaw<RawVectorQueryResult[]>`
+        SELECT
+          c.id,
+          c.repository_id AS "repositoryId",
+          c.file_id AS "fileId",
+          c.chunk_index AS "chunkIndex",
+          c.content,
+          c.file_path AS "filePath",
+          c.language,
+          c.start_line AS "startLine",
+          c.end_line AS "endLine",
+          c.token_count AS "tokenCount",
+          c.lines_count AS "linesCount",
+          c.metadata,
+          (1 - (c.embedding <=> ${vectorStr}::vector))::float AS similarity
+        FROM "code_chunks" c
+        WHERE c.repository_id = ${repositoryId}::uuid
+          AND c.embedding IS NOT NULL
+        ORDER BY c.embedding <=> ${vectorStr}::vector ASC
+        LIMIT ${limit};
+      `;
 
-    for (const r of rawVectorResults) {
-      if (r.similarity >= threshold) {
-        resultMap.set(r.id, {
-          id: r.id,
-          repositoryId: r.repositoryId,
-          fileId: r.fileId,
-          chunkIndex: r.chunkIndex,
-          content: r.content,
-          filePath: r.filePath,
-          language: r.language,
-          startLine: r.startLine,
-          endLine: r.endLine,
-          tokenCount: r.tokenCount,
-          linesCount: r.linesCount,
-          similarity: parseFloat(r.similarity.toFixed(4)),
-          metadata: (r.metadata as Record<string, unknown>) || null,
-        });
+      for (const r of rawVectorResults) {
+        if (r.similarity >= threshold) {
+          resultMap.set(r.id, {
+            id: r.id,
+            repositoryId: r.repositoryId,
+            fileId: r.fileId,
+            chunkIndex: r.chunkIndex,
+            content: r.content,
+            filePath: r.filePath,
+            language: r.language,
+            startLine: r.startLine,
+            endLine: r.endLine,
+            tokenCount: r.tokenCount,
+            linesCount: r.linesCount,
+            similarity: parseFloat(r.similarity.toFixed(4)),
+            metadata: (r.metadata as Record<string, unknown>) || null,
+          });
+        }
       }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[Vector Search] Vector search warning:', err);
     }
-  } catch (err) {
+  } else {
     // eslint-disable-next-line no-console
-    console.warn('[Vector Search] Vector search warning:', err);
+    console.warn(
+      `[Vector Search] Embedding provider is unconfigured ('${provider.name}'). Bypassing vector search and using lexical search.`,
+    );
   }
 
   // 2. Lexical Keyword Candidate Retrieval

@@ -13,6 +13,8 @@ import type {
 } from '@prisma/client';
 import { Prisma, PrismaClient } from '@prisma/client';
 
+process.env['EMBEDDING_PROVIDER'] = 'mock';
+
 // ── Assertion Helpers ──────────────────────────────────────────────────────────
 
 function assert(condition: boolean, message: string): void {

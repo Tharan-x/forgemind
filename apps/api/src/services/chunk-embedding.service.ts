@@ -91,14 +91,16 @@ export async function processAndStoreFileChunks(
     return `${contextHeader}${c.content}`;
   });
 
-  // Batch generate embeddings
+  // Batch generate embeddings if provider is active
   let embeddings: number[][] = [];
-  try {
-    embeddings = await provider.generateBatchEmbeddings(textsToEmbed);
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn(`[Embedding] Error generating embeddings for ${filePath}:`, err);
-    // Proceed with empty embeddings if provider fails (chunks are still saved)
+  if (provider.name !== 'none' && provider.name !== 'disabled') {
+    try {
+      embeddings = await provider.generateBatchEmbeddings(textsToEmbed);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[Embedding] Error generating embeddings for ${filePath}:`, err);
+      // Proceed with empty embeddings if provider fails (chunks are still saved)
+    }
   }
 
   let chunksCreated = 0;

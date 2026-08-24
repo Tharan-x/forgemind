@@ -24,7 +24,8 @@ export interface EmbeddingProvider {
   generateBatchEmbeddings(texts: string[]): Promise<number[][]>;
 }
 
-export type EmbeddingProviderType = 'openai' | 'gemini' | 'local-deterministic';
+export type EmbeddingProviderType =
+  'openai' | 'gemini' | 'local-deterministic' | 'mock' | 'none' | 'disabled';
 
 export interface EmbeddingProviderOptions {
   apiKey?: string;
