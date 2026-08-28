@@ -115,11 +115,52 @@ export function extractQueryKeywords(query: string): string[] {
 }
 
 /**
+ * Extracts user-named symbols from a natural language query.
+ *
+ * Matches:
+ *  - Backtick-quoted identifiers: `requireAuth`, `AuthService`, `executeRAGQuery`
+ *  - camelCase identifiers: executeRAGQuery, getLLMProvider (≥2 words, not pure lowercase)
+ *  - PascalCase identifiers: AuthService, PrismaClient
+ *
+ * These are added to symbolHints to boost chunks with exact metadata.symbolName matches.
+ * This fixes the W8 weakness where user-named symbols were not used for retrieval boosting.
+ */
+export function extractUserNamedSymbols(query: string): string[] {
+  const symbols = new Set<string>();
+
+  // 1. Backtick-quoted identifiers: `symbolName`
+  const backtickMatches = query.match(/`([a-zA-Z_][a-zA-Z0-9_]+)`/g) ?? [];
+  for (const match of backtickMatches) {
+    symbols.add(match.replace(/`/g, ''));
+  }
+
+  // 2. camelCase identifiers: at least one lowercase then uppercase transition
+  //    e.g. requireAuth, getLLMProvider, executeRAGQuery
+  const camelCaseMatches = query.match(/\b[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*\b/g) ?? [];
+  for (const match of camelCaseMatches) {
+    if (match.length >= 4) symbols.add(match);
+  }
+
+  // 3. PascalCase identifiers: starts uppercase, has lowercase chars
+  //    e.g. AuthService, PrismaClient, OpenAILLMProvider
+  const pascalCaseMatches = query.match(/\b[A-Z][a-z][a-zA-Z0-9]+\b/g) ?? [];
+  for (const match of pascalCaseMatches) {
+    if (match.length >= 4) symbols.add(match);
+  }
+
+  return Array.from(symbols);
+}
+
+/**
  * Analyzes natural language query intent and extracts target path/symbol hints.
+ * Also extracts user-named camelCase/PascalCase/backtick-quoted symbols from the query
+ * to boost retrieval of chunks matching the user's specific function or class of interest.
  */
 export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
   const lowerQuery = query.toLowerCase();
   const keywords = extractQueryKeywords(query);
+  // Extract any user-named symbols directly from the query text (e.g. `requireAuth`, AuthService)
+  const userNamedSymbols = extractUserNamedSymbols(query);
 
   // ── Flow / trace queries ────────────────────────────────────────────────────
   // Must be tested before AUTHENTICATION to capture "trace auth flow", etc.
@@ -143,14 +184,22 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
         category: 'FLOW',
         keywords: flowKeywords,
         pathHints: ['auth', 'middleware', 'routes', 'controller', 'frontend', 'client'],
-        symbolHints: ['requireAuth', 'verifyToken', 'useSession', 'createClient'],
+        symbolHints: [
+          ...new Set([
+            'requireAuth',
+            'verifyToken',
+            'useSession',
+            'createClient',
+            ...userNamedSymbols,
+          ]),
+        ],
       };
     }
     return {
       category: 'FLOW',
       keywords: flowKeywords,
       pathHints: ['routes', 'controller', 'service', 'middleware'],
-      symbolHints: [],
+      symbolHints: [...userNamedSymbols],
     };
   }
 
@@ -167,7 +216,9 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'AUTHENTICATION',
       keywords,
       pathHints: ['auth', 'user', 'credential', 'session', 'middleware'],
-      symbolHints: ['requireAuth', 'verifyToken', 'AuthService', 'User'],
+      symbolHints: [
+        ...new Set(['requireAuth', 'verifyToken', 'AuthService', 'User', ...userNamedSymbols]),
+      ],
     };
   }
 
@@ -193,7 +244,16 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       keywords,
       // Prefer datasource config files over migration DDL
       pathHints: ['schema.prisma', 'config', 'env', '.env', 'lib', 'supabase'],
-      symbolHints: ['DATABASE_URL', 'DIRECT_URL', 'datasource', 'PrismaClient', 'createClient'],
+      symbolHints: [
+        ...new Set([
+          'DATABASE_URL',
+          'DIRECT_URL',
+          'datasource',
+          'PrismaClient',
+          'createClient',
+          ...userNamedSymbols,
+        ]),
+      ],
       isConfigurationQuery: true,
       // Migration files are not database connection configuration
       lowQualityPathPatterns: ['migrations'],
@@ -213,7 +273,7 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'DATABASE',
       keywords,
       pathHints: ['prisma', 'schema', 'config', 'env', 'lib'],
-      symbolHints: ['PrismaClient', 'prisma', 'DATABASE_URL'],
+      symbolHints: [...new Set(['PrismaClient', 'prisma', 'DATABASE_URL', ...userNamedSymbols])],
     };
   }
 
@@ -228,7 +288,14 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'GITHUB_SYNC',
       keywords,
       pathHints: ['github', 'sync', 'acquisition'],
-      symbolHints: ['createGithubClient', 'syncRepositories', 'triggerRepositoryAnalysis'],
+      symbolHints: [
+        ...new Set([
+          'createGithubClient',
+          'syncRepositories',
+          'triggerRepositoryAnalysis',
+          ...userNamedSymbols,
+        ]),
+      ],
     };
   }
 
@@ -242,7 +309,14 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'AST_ANALYSIS',
       keywords,
       pathHints: ['ast', 'symbol', 'analysis', 'tree-indexing'],
-      symbolHints: ['parseSourceFile', 'extractAndIndexFileSymbols', 'indexRepositoryTree'],
+      symbolHints: [
+        ...new Set([
+          'parseSourceFile',
+          'extractAndIndexFileSymbols',
+          'indexRepositoryTree',
+          ...userNamedSymbols,
+        ]),
+      ],
     };
   }
 
@@ -256,7 +330,7 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'DEPENDENCIES',
       keywords,
       pathHints: ['package.json', 'dependencies'],
-      symbolHints: ['dependencies', 'devDependencies'],
+      symbolHints: [...new Set(['dependencies', 'devDependencies', ...userNamedSymbols])],
     };
   }
 
@@ -271,7 +345,7 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'ARCHITECTURE',
       keywords,
       pathHints: ['apps/', 'packages/', 'src/'],
-      symbolHints: [],
+      symbolHints: [...userNamedSymbols],
     };
   }
 
@@ -280,7 +354,7 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
       category: 'FILE_LOCATION',
       keywords,
       pathHints: keywords,
-      symbolHints: [],
+      symbolHints: [...userNamedSymbols],
     };
   }
 
@@ -288,6 +362,6 @@ export function analyzeQueryIntent(query: string): QueryIntentAnalysis {
     category: 'GENERAL',
     keywords,
     pathHints: keywords,
-    symbolHints: [],
+    symbolHints: [...userNamedSymbols],
   };
 }

@@ -1954,9 +1954,84 @@ export default function RepositoryDetailPage() {
                             <span className="text-sm bg-emerald-500/10 border border-emerald-500/20 p-1.5 rounded-lg text-emerald-500">
                               🤖
                             </span>
-                            <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed pt-0.5">
-                              {pair.assistant.content}
-                            </p>
+                            <div className="space-y-2.5 flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                                  ForgeMind AI Answer
+                                </span>
+                                {typeof pair.assistant.metadata?.['provider'] === 'string' && (
+                                  <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded font-mono">
+                                    via {pair.assistant.metadata['provider']}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed">
+                                {pair.assistant.content}
+                              </p>
+                              {/* Persisted Source Citations from metadata.sources */}
+                              {Array.isArray(pair.assistant.metadata?.['sources']) &&
+                                (pair.assistant.metadata['sources'] as RAGSourceCitation[]).length >
+                                  0 && (
+                                  <div className="space-y-2 pt-1">
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                                      Source Citations —{' '}
+                                      {
+                                        (pair.assistant.metadata['sources'] as RAGSourceCitation[])
+                                          .length
+                                      }{' '}
+                                      snippet
+                                      {(pair.assistant.metadata['sources'] as RAGSourceCitation[])
+                                        .length !== 1
+                                        ? 's'
+                                        : ''}
+                                    </span>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      {(
+                                        pair.assistant.metadata['sources'] as RAGSourceCitation[]
+                                      ).map((src, srcIdx) => (
+                                        <div
+                                          key={srcIdx}
+                                          className="bg-zinc-950 border border-zinc-800 hover:border-emerald-500/30 rounded-xl p-3 text-xs space-y-1.5 transition-colors"
+                                        >
+                                          <div className="flex items-start justify-between gap-2">
+                                            <span
+                                              className="font-mono font-bold text-emerald-300 break-all text-[11px] leading-snug"
+                                              title={src.filePath}
+                                            >
+                                              {src.filePath}
+                                            </span>
+                                            <span className="text-zinc-500 font-mono text-[11px] shrink-0 whitespace-nowrap">
+                                              L{src.startLine}–{src.endLine}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            {src.symbolName ? (
+                                              <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                                {src.symbolKind ?? 'symbol'}: {src.symbolName}
+                                              </span>
+                                            ) : (
+                                              <span className="text-zinc-600 text-[10px]">
+                                                Code chunk
+                                              </span>
+                                            )}
+                                            <span
+                                              className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                                                src.score >= 0.8
+                                                  ? 'bg-emerald-500/15 text-emerald-400'
+                                                  : src.score >= 0.5
+                                                    ? 'bg-amber-500/10 text-amber-400'
+                                                    : 'bg-zinc-800 text-zinc-500'
+                                              }`}
+                                            >
+                                              {(src.score * 100).toFixed(0)}% match
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                            </div>
                           </div>
                         )}
                       </div>

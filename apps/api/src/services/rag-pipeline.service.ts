@@ -2,7 +2,8 @@
 // ForgeMind API — RAG Pipeline Orchestrator
 // =============================================================================
 
-import type { RAGQueryResponse, RAGSourceCitation } from '@forgemind/types';
+import type { ConversationalMessage } from './llm/types.js';
+import type { ChatMessage, RAGQueryResponse, RAGSourceCitation } from '@forgemind/types';
 
 import { retrieveRepositoryContext } from './context-retrieval.service.js';
 import { getRecentRepositoryChatHistory } from './chat-history.service.js';
@@ -21,16 +22,73 @@ export interface RAGPipelineOptions {
 }
 
 /**
+ * Resolves the appropriate topK value for retrieval based on query intent.
+ *
+ * Intent-aware scaling:
+ *  - FLOW / ARCHITECTURE / DEPENDENCIES: 12 (cross-file questions need more sources)
+ *  - General queries: 8 (up from 5; handles multi-file questions without excess cost)
+ *  - Explicit caller override always wins.
+ */
+function resolveTopK(explicitTopK: number | undefined, intentCategory: string): number {
+  if (explicitTopK !== undefined && explicitTopK > 0) {
+    return explicitTopK;
+  }
+  if (
+    intentCategory === 'FLOW' ||
+    intentCategory === 'ARCHITECTURE' ||
+    intentCategory === 'DEPENDENCIES'
+  ) {
+    return 12;
+  }
+  return 8;
+}
+
+/**
+ * Converts a ChatMessage array (from DB) to ConversationalMessage turns for multi-turn LLM calls.
+ *
+ * Maps:
+ *  - sender='user' → role='user'
+ *  - sender='assistant' → role='assistant'
+ *  - sender='system' → skipped (handled via systemInstructions)
+ *
+ * Bounded to the most recent MAX_TURNS turns to prevent context explosion.
+ */
+const MAX_CONVERSATIONAL_TURNS = 10;
+
+function buildConversationalTurns(
+  historyMessages: ChatMessage[],
+  currentUserQuery: string,
+): ConversationalMessage[] {
+  const recent = historyMessages.slice(-MAX_CONVERSATIONAL_TURNS);
+  const turns: ConversationalMessage[] = [];
+
+  for (const msg of recent) {
+    if (msg.sender === 'system') continue;
+    turns.push({
+      role: msg.sender === 'assistant' ? 'assistant' : 'user',
+      content: msg.content,
+    });
+  }
+
+  // Always append the current user question as the final turn
+  turns.push({ role: 'user', content: currentUserQuery });
+
+  return turns;
+}
+
+/**
  * End-to-end RAG query orchestrator.
  *
  * 1. Retrieves bounded recent chat history (max 10 turns) for multi-turn context.
  * 2. Reformulates retrieval query string deterministically using context history.
- * 3. Analyzes query intent and retrieves relevant codebase context via hybrid search.
- * 4. Injects structural repository summary for architecture/module questions.
- * 5. Assembles structured, injection-resistant LLM prompt with original query.
- * 6. Synthesizes answer using server-side LLM provider (OpenAI, Gemini, or Local Fallback).
- * 7. Persists chat session and messages to database.
- * 8. Returns answer with source citations.
+ * 3. Analyzes query intent; resolves intent-aware topK (8 general, 12 for FLOW/ARCH/DEPS).
+ * 4. Retrieves relevant codebase context via hybrid search with reranking.
+ * 5. Injects structural repository summary for architecture/module/flow questions.
+ * 6. Assembles structured, injection-resistant LLM prompt.
+ * 7. Prefers native multi-turn LLM call when provider supports it and history is available.
+ *    Falls back to single-turn generateAnswer otherwise.
+ * 8. Persists chat session, user message, and assistant message (with source citations in metadata).
+ * 9. Returns answer with source citations.
  *
  * @param repositoryId Target database repository UUID
  * @param userId Authenticated user UUID
@@ -49,7 +107,7 @@ export async function executeRAGQuery(
   }
 
   // 1. Bounded Conversation History Retrieval (Last 10 messages for repository/user session)
-  let historyMessages;
+  let historyMessages: ChatMessage[] | undefined;
   try {
     historyMessages = await getRecentRepositoryChatHistory(repositoryId, userId, 10);
   } catch (histErr) {
@@ -61,14 +119,17 @@ export async function executeRAGQuery(
   // 2. Deterministic Contextual Query Reformulation (for retrieval only)
   const retrievalQuery = reformulateQueryForRetrieval(trimmedQuery, historyMessages);
 
-  // 3. Intent Analysis & Context Retrieval (Hybrid Vector + Lexical Search with Reranking)
+  // 3. Intent Analysis & topK Resolution
   const intent = analyzeQueryIntent(retrievalQuery);
+  const topK = resolveTopK(options.topK, intent.category);
+
+  // 4. Context Retrieval (Hybrid Vector + Lexical Search with Reranking)
   const contextChunks = await retrieveRepositoryContext(repositoryId, userId, retrievalQuery, {
-    topK: options.topK || 5,
+    topK,
     threshold: options.threshold,
   });
 
-  // 4. Structural Repository Summary (for ARCHITECTURE, DEPENDENCIES, FILE_LOCATION,
+  // 5. Structural Repository Summary (for ARCHITECTURE, DEPENDENCIES, FILE_LOCATION,
   //    DB_CONFIGURATION, and FLOW intent — any query asking about relationships/structure)
   let structuralContext: string | undefined;
   if (
@@ -94,24 +155,35 @@ Top External Packages: ${arch.topExternalPackages
     }
   }
 
-  // 5. Prompt Assembly (uses ORIGINAL user query + bounded history)
+  // 6. Prompt Assembly (uses ORIGINAL user query + bounded history)
   const { systemPrompt, userPrompt } = buildRAGPrompt(contextChunks, trimmedQuery, {
     structuralContext,
     historyMessages,
   });
 
-  // 3. LLM Answer Synthesis
+  // 7. LLM Answer Synthesis
+  //    Prefer native multi-turn when provider supports it AND we have conversation history.
+  //    This gives the model better conversational state tracking for follow-up questions.
   const llmProvider = getLLMProvider();
   let answer = '';
   try {
-    answer = await llmProvider.generateAnswer(systemPrompt, userPrompt);
+    const hasHistory = historyMessages && historyMessages.length > 0;
+
+    if (hasHistory && typeof llmProvider.generateConversationalAnswer === 'function') {
+      // Build structured conversation turns: history + current query
+      const conversationTurns = buildConversationalTurns(historyMessages || [], trimmedQuery);
+      answer = await llmProvider.generateConversationalAnswer(systemPrompt, conversationTurns);
+    } else {
+      // Single-turn: deterministic mock, or providers without multi-turn support
+      answer = await llmProvider.generateAnswer(systemPrompt, userPrompt);
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('[RAG Pipeline] LLM generation warning:', err);
     answer = `An error occurred while generating the AI answer. Context snippets were retrieved successfully. Please check provider logs.`;
   }
 
-  // 4. Source Citation Formatting
+  // 8. Source Citation Formatting
   const sources: RAGSourceCitation[] = contextChunks.map((chunk) => ({
     filePath: chunk.filePath,
     startLine: chunk.startLine,
@@ -125,7 +197,8 @@ Top External Packages: ${arch.topExternalPackages
     content: chunk.content,
   }));
 
-  // 5. Database Chat Session & Message Persistence
+  // 9. Database Chat Session & Message Persistence
+  //    Sources are persisted in assistant message metadata so citations survive page reload.
   try {
     let session = await prisma.chatSession.findFirst({
       where: { repositoryId, userId },
@@ -142,6 +215,17 @@ Top External Packages: ${arch.topExternalPackages
       });
     }
 
+    // Persist source citations in assistant message metadata for durable citations on reload
+    const sourcesForPersistence = sources.map((s) => ({
+      filePath: s.filePath,
+      startLine: s.startLine,
+      endLine: s.endLine,
+      score: s.score,
+      symbolName: s.symbolName,
+      symbolKind: s.symbolKind,
+      language: s.language,
+    }));
+
     await prisma.chatMessage.createMany({
       data: [
         {
@@ -156,6 +240,7 @@ Top External Packages: ${arch.topExternalPackages
           metadata: {
             sourcesCount: sources.length,
             provider: llmProvider.name,
+            sources: sourcesForPersistence,
           },
         },
       ],

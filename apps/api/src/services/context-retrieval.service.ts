@@ -13,9 +13,9 @@ export interface RetrievalOptions {
   maxTokens?: number;
 }
 
-const DEFAULT_TOP_K = 5;
+const DEFAULT_TOP_K = 8;
 const DEFAULT_HYBRID_THRESHOLD = 0.2;
-const DEFAULT_MAX_TOKENS = 3000;
+const DEFAULT_MAX_TOKENS = 4000;
 
 /**
  * Calculates a multi-factor hybrid score combining vector similarity, lexical overlap,
