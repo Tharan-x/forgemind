@@ -22,12 +22,14 @@ interface ArchitecturalHealthDashboardProps {
   repositoryId: string;
   onNavigateToGraph?: (finding: HealthFinding) => void;
   onInvestigateWithAI?: (finding: HealthFinding) => void;
+  onSelectFile?: (filePath: string) => void;
 }
 
 export function ArchitecturalHealthDashboard({
   repositoryId,
   onNavigateToGraph,
   onInvestigateWithAI,
+  onSelectFile,
 }: ArchitecturalHealthDashboardProps) {
   const [report, setReport] = useState<ArchitectureHealthReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -44,6 +46,7 @@ export function ArchitecturalHealthDashboard({
 
   // AI Drawer State
   const [activeDrawerFinding, setActiveDrawerFinding] = useState<HealthFinding | null>(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<'summary' | 'remediation'>('summary');
 
   const loadHealthReport = useCallback(async () => {
     setLoading(true);
@@ -368,9 +371,23 @@ export function ArchitecturalHealthDashboard({
                       </Button>
                     )}
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setDrawerInitialTab('remediation');
+                        setActiveDrawerFinding(finding);
+                      }}
+                      className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/40 font-semibold"
+                    >
+                      🛠 Generate Fix Plan
+                    </Button>
+                    <Button
                       variant="default"
                       size="sm"
-                      onClick={() => setActiveDrawerFinding(finding)}
+                      onClick={() => {
+                        setDrawerInitialTab('summary');
+                        setActiveDrawerFinding(finding);
+                      }}
                     >
                       ⚡ Explain & Fix with AI
                     </Button>
@@ -391,6 +408,8 @@ export function ArchitecturalHealthDashboard({
         onClose={() => setActiveDrawerFinding(null)}
         onHighlightOnGraph={onNavigateToGraph}
         onInvestigateWithAI={onInvestigateWithAI}
+        onSelectFile={onSelectFile}
+        initialTab={drawerInitialTab}
       />
     </div>
   );

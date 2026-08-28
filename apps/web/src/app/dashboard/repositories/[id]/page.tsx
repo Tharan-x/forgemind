@@ -737,6 +737,10 @@ export default function RepositoryDetailPage() {
               setInvestigationContextSource('finding');
               setActiveTab('chat');
             }}
+            onSelectFile={(path) => {
+              setFileSearch(path);
+              setActiveTab('files');
+            }}
           />
         )}
 

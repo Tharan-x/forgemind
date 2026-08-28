@@ -627,6 +627,58 @@ export interface ArchitectureHealthExplanationResponse {
   providerUsed: string;
 }
 
+export interface GenerateRefactoringPlanRequest {
+  findingId: string;
+  category?: HealthFindingCategory;
+  affectedFiles?: string[];
+}
+
+export interface StructuredRemediationPlan {
+  findingId: string;
+  category: HealthFindingCategory;
+  severity: HealthFindingSeverity;
+  title: string;
+  targetFile: string;
+  problemSummary: string;
+  rootCause: string;
+  affectedComponents: {
+    filesToModify: string[];
+    newFilesRequired: string[];
+    symbolsInvolved: string[];
+  };
+  dependencyImpact: {
+    directDependencies: string[];
+    directDependents: string[];
+    reachableBlastRadiusCount: number;
+    couplingMetrics: {
+      fanIn: number;
+      fanOut: number;
+    };
+  };
+  recommendedStrategy: string;
+  implementationSteps: Array<{
+    stepNumber: number;
+    title: string;
+    description: string;
+    targetFile?: string;
+  }>;
+  risksAndRegressions: string[];
+  testingStrategy: string[];
+  verificationChecklist: string[];
+  expectedArchitecturalImprovement: {
+    penaltyPointsRecovered: number;
+    projectedHealthScore: number;
+    summary: string;
+  };
+  evidenceGrounding: {
+    evidenceSummary: string;
+    hasSufficientEvidence: boolean;
+    insufficientEvidenceNotes?: string;
+  };
+  sources: RAGSourceCitation[];
+  providerUsed: string;
+}
+
 // ─── Architectural Risk Intelligence & Developer Action Loop (Sprint 8 Task 4) ───
 
 export type RiskImpactLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';

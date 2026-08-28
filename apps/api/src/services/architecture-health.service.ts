@@ -11,11 +11,13 @@ import type {
   ArchitectureHealthExplanationResponse,
   ArchitectureHealthReport,
   ArchitectureHealthScoreBreakdown,
+  GenerateRefactoringPlanRequest,
   HealthFinding,
   HealthFindingCategory,
   HealthFindingSeverity,
   NodeFanMetrics,
   RAGSourceCitation,
+  StructuredRemediationPlan,
 } from '@forgemind/types';
 
 import { detectCircularDependencies } from './graph-topology.service.js';
@@ -461,6 +463,237 @@ Do not hallucinate non-existent files or imports. All citations must reference t
       directDependents: blastRadius.directDependents,
       transitiveDependents: blastRadius.transitiveDependents,
       blastRadiusScore: blastRadius.blastRadiusScore,
+    },
+    sources: citations,
+    providerUsed: llm.name,
+  };
+}
+
+/**
+ * Generates a structured, repository-grounded refactoring remediation plan for a health finding.
+ */
+export async function generateStructuredRemediationPlan(
+  repositoryId: string,
+  userId: string,
+  payload: GenerateRefactoringPlanRequest,
+): Promise<StructuredRemediationPlan> {
+  await assertRepositoryOwnership(repositoryId, userId);
+
+  const report = await generateArchitectureHealthReport(repositoryId, userId);
+
+  const finding = report.findings.find(
+    (f) =>
+      f.id === payload.findingId ||
+      (payload.category &&
+        f.category === payload.category &&
+        payload.affectedFiles &&
+        f.affectedFilePaths.some((p) => payload.affectedFiles?.includes(p))),
+  );
+
+  if (!finding) {
+    const error = new Error(
+      `Finding '${payload.findingId}' not found in repository health analysis.`,
+    );
+    Object.assign(error, { statusCode: 400, code: 'INVALID_FINDING_ID' });
+    throw error;
+  }
+
+  const primaryTarget = finding.affectedFilePaths[0] || 'repository-root';
+
+  // Fetch dependencies and compute blast radius & direct impact
+  const depsResult = await findRepositoryDependencies(repositoryId, { limit: 2000 });
+  const rawDeps: RawDependency[] = depsResult.dependencies.map((d) => ({
+    sourcePath: d.sourcePath,
+    targetPath: d.targetPath,
+    isExternal: d.isExternal,
+  }));
+
+  const blastRadius = computeDeterministicBlastRadius(finding.affectedFilePaths, rawDeps);
+
+  // Direct dependencies (what affected files import)
+  const directDependencies = Array.from(
+    new Set(
+      rawDeps
+        .filter((d) => finding.affectedFilePaths.includes(d.sourcePath) && d.targetPath)
+        .map((d) => d.targetPath as string)
+        .filter((p) => !finding.affectedFilePaths.includes(p)),
+    ),
+  ).slice(0, 10);
+
+  // Direct dependents (what imports affected files)
+  const directDependents = blastRadius.directDependents.slice(0, 10);
+
+  // Fetch AST symbols extracted for affected files
+  let extractedSymbols: Array<{ name: string; kind: string; filePath: string }> = [];
+  try {
+    const symbolsResult = await findRepositorySymbols(repositoryId, { limit: 500 });
+    extractedSymbols = symbolsResult.symbols
+      .filter((s) => finding.affectedFilePaths.includes(s.filePath))
+      .map((s) => ({ name: s.name, kind: s.kind, filePath: s.filePath }));
+  } catch {
+    extractedSymbols = [];
+  }
+
+  const symbolNamesInvolved = extractedSymbols.map((s) => `${s.name} (${s.kind})`);
+
+  // Retrieve code evidence using RAG retrieval service
+  const query = `architectural refactoring remediation ${finding.category} ${finding.title} ${finding.affectedFilePaths.join(' ')}`;
+  const contextChunks = await retrieveRepositoryContext(repositoryId, userId, query, { topK: 5 });
+
+  // Map citations with secret masking
+  const citations: RAGSourceCitation[] = contextChunks.map((chunk) => ({
+    filePath: chunk.filePath,
+    startLine: chunk.startLine,
+    endLine: chunk.endLine,
+    score: chunk.similarity,
+    language: chunk.language,
+    content: chunk.content.replace(
+      /(PAT|TOKEN|SECRET|PASSWORD|KEY)\s*[:=]\s*["'][^"']+["']/gi,
+      '$1="<REDACTED>"',
+    ),
+  }));
+
+  const llm = getLLMProvider();
+
+  const formattedEvidence = citations
+    .map((c) => `[Source: ${c.filePath}:${c.startLine}-${c.endLine}]\n${c.content}`)
+    .join('\n\n');
+
+  const systemPrompt = `You are ForgeMind's Lead Software Architecture Refactoring Specialist.
+Generate a structured, evidence-grounded refactoring remediation plan to resolve an architectural finding in the codebase.
+
+GROUNDING & SAFETY RULES:
+1. Base all codebase facts strictly on the provided finding details and retrieved source code context.
+2. Explicitly distinguish supported evidence from inference or recommendations.
+3. If code evidence is limited, state "Based on the indexed repository evidence..." and avoid inventing files, symbols, or non-existent APIs.
+4. Output clear markdown text explaining the refactoring strategy.`;
+
+  const userPrompt = `FINDING CONTEXT:
+- ID: ${finding.id}
+- Title: ${finding.title}
+- Severity: ${finding.severity.toUpperCase()}
+- Category: ${finding.category}
+- Description: ${finding.description}
+- Affected Files: ${finding.affectedFilePaths.join(', ')}
+- Symbols Involved: ${symbolNamesInvolved.join(', ') || 'None extracted'}
+- Direct Dependencies: ${directDependencies.join(', ') || 'None'}
+- Direct Dependents: ${directDependents.join(', ') || 'None'}
+- Reachable Blast Radius: ${blastRadius.directDependents.length + blastRadius.transitiveDependents.length} node(s)
+
+RETRIEVED SOURCE CODE EVIDENCE:
+<repository_source_code_context>
+${formattedEvidence || 'No direct source code chunks retrieved.'}
+</repository_source_code_context>`;
+
+  let llmExplanation = '';
+  try {
+    llmExplanation = await llm.generateAnswer(systemPrompt, userPrompt);
+  } catch {
+    llmExplanation = `Based on the indexed repository evidence, resolving '${finding.title}' in '${primaryTarget}' requires isolating shared responsibilities and breaking architectural coupling.`;
+  }
+
+  const projectedScore = Math.min(100, report.healthScore + finding.penaltyPoints);
+
+  const suggestedNewFiles =
+    finding.category === 'circular_dependency'
+      ? [
+          `src/types/${
+            primaryTarget
+              .split('/')
+              .pop()
+              ?.replace(/\.[^/.]+$/, '') || 'shared'
+          }-types.ts`,
+        ]
+      : finding.category === 'layer_violation'
+        ? [
+            `src/interfaces/${
+              primaryTarget
+                .split('/')
+                .pop()
+                ?.replace(/\.[^/.]+$/, '') || 'contract'
+            }-interface.ts`,
+          ]
+        : [];
+
+  return {
+    findingId: finding.id,
+    category: finding.category,
+    severity: finding.severity,
+    title: finding.title,
+    targetFile: primaryTarget,
+    problemSummary: `Architectural finding '${finding.title}' (${finding.severity.toUpperCase()}) imposes a penalty of ${finding.penaltyPoints} points on ${primaryTarget}.`,
+    rootCause:
+      llmExplanation ||
+      `Structural anti-pattern in ${primaryTarget} violating ${finding.category} boundaries.`,
+    affectedComponents: {
+      filesToModify: finding.affectedFilePaths,
+      newFilesRequired: suggestedNewFiles,
+      symbolsInvolved:
+        symbolNamesInvolved.length > 0 ? symbolNamesInvolved : [`File module: ${primaryTarget}`],
+    },
+    dependencyImpact: {
+      directDependencies,
+      directDependents,
+      reachableBlastRadiusCount:
+        blastRadius.directDependents.length + blastRadius.transitiveDependents.length,
+      couplingMetrics: {
+        fanIn: finding.metrics.fanIn ?? directDependents.length,
+        fanOut: finding.metrics.fanOut ?? directDependencies.length,
+      },
+    },
+    recommendedStrategy: `Refactor ${primaryTarget} by extracting shared interfaces and decoupling direct imports using dependency inversion.`,
+    implementationSteps: [
+      {
+        stepNumber: 1,
+        title: `Audit and isolate dependencies in ${primaryTarget}`,
+        description: `Examine imported symbols from ${finding.affectedFilePaths.join(' and ')} to identify direct coupling points.`,
+        targetFile: primaryTarget,
+      },
+      {
+        stepNumber: 2,
+        title: `Extract shared contracts into interface abstraction`,
+        description: suggestedNewFiles[0]
+          ? `Create '${suggestedNewFiles[0]}' and define abstract interface ports.`
+          : `Define clean interface boundaries for exported functions and types.`,
+        targetFile: suggestedNewFiles[0] || primaryTarget,
+      },
+      {
+        stepNumber: 3,
+        title: `Update import statements and invert dependency directions`,
+        description: `Update dependent files (${directDependents[0] || primaryTarget}) to consume the abstract interface port.`,
+        targetFile: directDependents[0] || primaryTarget,
+      },
+      {
+        stepNumber: 4,
+        title: `Verify architectural health recovery`,
+        description: `Re-evaluate ForgeMind deterministic architecture engine to confirm penalty point removal and health score boost.`,
+      },
+    ],
+    risksAndRegressions: [
+      `Potential breaking change for direct callers of exported symbols in ${primaryTarget}.`,
+      `Requires updating call sites across ${directDependents.length} direct dependent file(s).`,
+    ],
+    testingStrategy: [
+      `Run automated unit test suite for ${primaryTarget} and dependent components.`,
+      `Verify zero circular import loops using TypeScript compiler static analysis.`,
+    ],
+    verificationChecklist: [
+      `Confirm ${finding.category} penalty is completely cleared in ForgeMind health report.`,
+      `Verify repository health score improves from ${report.healthScore} to ${projectedScore}.`,
+      `Ensure all existing unit and integration tests pass without regression.`,
+    ],
+    expectedArchitecturalImprovement: {
+      penaltyPointsRecovered: finding.penaltyPoints,
+      projectedHealthScore: projectedScore,
+      summary: `Resolving this finding recovers +${finding.penaltyPoints} penalty points, raising overall repository health score from ${report.healthScore} to ${projectedScore} (${report.grade}).`,
+    },
+    evidenceGrounding: {
+      evidenceSummary: `Based on ${citations.length} indexed repository code chunk(s) and ${finding.affectedFilePaths.length} affected file(s).`,
+      hasSufficientEvidence: citations.length > 0,
+      insufficientEvidenceNotes:
+        citations.length === 0
+          ? 'Insufficient repository code evidence retrieved for line-level diff; recommendations based on deterministic dependency analysis.'
+          : undefined,
     },
     sources: citations,
     providerUsed: llm.name,

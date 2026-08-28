@@ -3,12 +3,15 @@
 // =============================================================================
 
 import type {
+  ApiResponse,
   ArchitectureHealthReport,
   ArchitectureHealthExplainRequest,
   ArchitectureHealthExplanationResponse,
   ArchitecturalRiskIntelligenceResponse,
   ArchitectureHealthHistoryResponse,
   ArchitectureHealthComparisonResponse,
+  GenerateRefactoringPlanRequest,
+  StructuredRemediationPlan,
   RemediationExplainRequest,
   RemediationExplanationResponse,
   ArchitectureOverviewResponse,
@@ -291,5 +294,21 @@ export async function compareArchitectureHealth(
   const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
   return request<{ success: boolean; data: ArchitectureHealthComparisonResponse }>(
     `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture/compare${queryString}`,
+  );
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/health/remediation-plan
+ */
+export async function generateStructuredRemediationPlan(
+  repositoryId: string,
+  req: GenerateRefactoringPlanRequest,
+): Promise<ApiResponse<StructuredRemediationPlan>> {
+  return request<ApiResponse<StructuredRemediationPlan>>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/health/remediation-plan`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    },
   );
 }

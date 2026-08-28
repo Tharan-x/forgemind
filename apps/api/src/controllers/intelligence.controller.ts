@@ -658,15 +658,74 @@ export async function explainArchitectureFindingHandler(
     const code =
       typeof err === 'object' && err !== null && 'code' in err
         ? String((err as Record<string, unknown>).code)
-        : '';
-    if (code === 'INVALID_FINDING_ID' || message.includes('not found')) {
-      res.status(400).json({
-        success: false,
-        error: { code: 'INVALID_FINDING_ID', message },
-      });
-    } else {
-      sendInternalError(res, message);
+        : 'INTERNAL_ERROR';
+    const statusCode =
+      typeof err === 'object' && err !== null && 'statusCode' in err
+        ? Number((err as Record<string, unknown>).statusCode)
+        : 500;
+
+    res.status(statusCode).json({
+      success: false,
+      error: { code, message },
+    });
+  }
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/health/remediation-plan
+ * Generates a structured, repository-grounded refactoring remediation plan for an architectural finding.
+ */
+export async function generateStructuredRemediationPlanHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
     }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const body = (req.body || {}) as {
+      findingId?: string;
+      category?: string;
+      affectedFiles?: string[];
+    };
+
+    if (!body.findingId?.trim()) {
+      sendBadRequest(res, 'findingId is required.');
+      return;
+    }
+
+    const { generateStructuredRemediationPlan } =
+      await import('../services/architecture-health.service.js');
+
+    const plan = await generateStructuredRemediationPlan(repositoryId, user.id, {
+      findingId: body.findingId.trim(),
+      category: body.category as HealthFindingCategory | undefined,
+      affectedFiles: body.affectedFiles,
+    });
+
+    res.status(200).json({ success: true, data: plan });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as Record<string, unknown>).code)
+        : 'INTERNAL_ERROR';
+    const statusCode =
+      typeof err === 'object' && err !== null && 'statusCode' in err
+        ? Number((err as Record<string, unknown>).statusCode)
+        : 500;
+
+    res.status(statusCode).json({
+      success: false,
+      error: { code, message },
+    });
   }
 }
 

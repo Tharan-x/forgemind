@@ -10,9 +10,11 @@ import type {
   ArchitectureHealthExplanationResponse,
   ArchitectureHealthReport,
   HealthFinding,
+  StructuredRemediationPlan,
 } from '@forgemind/types';
 import { ArchitecturalHealthDashboard } from './ArchitecturalHealthDashboard';
 import { AIExplanationDrawer } from './AIExplanationDrawer';
+import { StructuredRemediationPlanView } from './StructuredRemediationPlanView';
 
 const MOCK_REPORT: ArchitectureHealthReport = {
   repositoryId: 'test-repo-1',
@@ -298,7 +300,96 @@ async function runTests(): Promise<void> {
     );
   }
 
-  console.log('\n🎉 ALL 18 ARCHITECTURAL HEALTH DASHBOARD UI TESTS PASSED SUCCESSFULLY!\n');
+  // Test 19: Generate Fix Plan button renders in AIExplanationDrawer action bar
+  {
+    const drawerHtml = renderToStaticMarkup(
+      <AIExplanationDrawer
+        repositoryId="test-repo-1"
+        finding={MOCK_FINDING}
+        isOpen={true}
+        onClose={() => {}}
+      />,
+    );
+    assert(drawerHtml.includes('Generate Fix Plan'));
+    console.log(
+      '  ✅ Test 19: Generate Fix Plan action button renders in AIExplanationDrawer action bar',
+    );
+  }
+
+  // Test 20: StructuredRemediationPlanView renders all 9 structured refactoring plan sections
+  {
+    const mockPlan: StructuredRemediationPlan = {
+      findingId: 'finding-cycle-1',
+      category: 'circular_dependency',
+      severity: 'critical',
+      title: 'Circular Import Cycle',
+      targetFile: 'src/user.service.ts',
+      problemSummary: 'Circular dependency cycle detected between user and auth services.',
+      rootCause: 'Direct import coupling between user and auth services.',
+      affectedComponents: {
+        filesToModify: ['src/user.service.ts', 'src/auth.service.ts'],
+        newFilesRequired: ['src/types/shared-types.ts'],
+        symbolsInvolved: ['UserService (class)', 'AuthService (class)'],
+      },
+      dependencyImpact: {
+        directDependencies: ['src/db.ts'],
+        directDependents: ['src/app.ts'],
+        reachableBlastRadiusCount: 4,
+        couplingMetrics: { fanIn: 2, fanOut: 3 },
+      },
+      recommendedStrategy: 'Extract shared contracts into shared-types.ts interface port.',
+      implementationSteps: [
+        {
+          stepNumber: 1,
+          title: 'Extract shared interface',
+          description: 'Define UserAuthContract interface port in shared-types.ts.',
+          targetFile: 'src/types/shared-types.ts',
+        },
+      ],
+      risksAndRegressions: ['Potential breaking change for direct callers.'],
+      testingStrategy: ['Run automated unit tests for user.service.ts.'],
+      verificationChecklist: ['Confirm circular_dependency penalty points cleared.'],
+      expectedArchitecturalImprovement: {
+        penaltyPointsRecovered: 15,
+        projectedHealthScore: 97,
+        summary: 'Recover +15 points, raising health score from 82 to 97.',
+      },
+      evidenceGrounding: {
+        evidenceSummary: 'Based on 2 indexed code chunks.',
+        hasSufficientEvidence: true,
+      },
+      sources: [
+        {
+          filePath: 'src/user.service.ts',
+          startLine: 1,
+          endLine: 20,
+          score: 0.92,
+          content: 'export class UserService {}',
+        },
+      ],
+      providerUsed: 'local-deterministic',
+    };
+
+    const planHtml = renderToStaticMarkup(
+      <StructuredRemediationPlanView plan={mockPlan} finding={MOCK_FINDING} />,
+    );
+
+    assert(planHtml.includes('Circular Import Cycle'), 'Test 20: Title present');
+    assert(planHtml.includes('CRITICAL'), 'Test 20: Severity present');
+    assert(planHtml.includes('src/user.service.ts'), 'Test 20: Target file present');
+    assert(planHtml.includes('Extract shared interface'), 'Test 20: Step title present');
+    assert(planHtml.includes('Verification Checklist'), 'Test 20: Verification checklist present');
+    assert(
+      planHtml.includes('Expected Architectural Improvement'),
+      'Test 20: Improvement summary present',
+    );
+
+    console.log(
+      '  ✅ Test 20: StructuredRemediationPlanView renders all structured refactoring plan sections cleanly',
+    );
+  }
+
+  console.log('\n🎉 ALL 20 ARCHITECTURAL HEALTH DASHBOARD UI TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runTests().catch((err) => {

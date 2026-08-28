@@ -37,6 +37,7 @@ import {
   getSharedBlueprintHandler,
   getArchitectureHealthHandler,
   explainArchitectureFindingHandler,
+  generateStructuredRemediationPlanHandler,
   getArchitecturalRiskIntelligenceHandler,
   explainRemediationActionHandler,
   getArchitectureHealthHistoryHandler,
@@ -244,6 +245,17 @@ router.post(
   requireAuth,
   heavyRouteRateLimiter,
   explainArchitectureFindingHandler,
+);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/intelligence/health/remediation-plan
+ * Generates a structured, repository-grounded refactoring remediation plan for an architectural finding.
+ */
+router.post(
+  '/:repositoryId/intelligence/health/remediation-plan',
+  requireAuth,
+  heavyRouteRateLimiter,
+  generateStructuredRemediationPlanHandler,
 );
 
 /**
