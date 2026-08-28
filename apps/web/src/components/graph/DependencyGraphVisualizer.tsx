@@ -15,6 +15,7 @@ interface DependencyGraphVisualizerProps {
   highlightNodeIds?: string[];
   onSelectNodeForImpact?: (filePath: string, symbolName?: string) => void;
   onSelectNodeForExplain?: (filePath: string, symbolName?: string) => void;
+  onSelectNodeForFiles?: (filePath: string) => void;
 }
 
 export function DependencyGraphVisualizer({
@@ -22,6 +23,7 @@ export function DependencyGraphVisualizer({
   highlightNodeIds = [],
   onSelectNodeForImpact,
   onSelectNodeForExplain,
+  onSelectNodeForFiles,
 }: DependencyGraphVisualizerProps) {
   const [data, setData] = useState<RepositoryGraphResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -36,6 +38,9 @@ export function DependencyGraphVisualizer({
   // Interaction State
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -53,6 +58,8 @@ export function DependencyGraphVisualizer({
       setData(res);
       if (res.nodes.length > 0) {
         setSelectedNode(res.nodes[0] || null);
+      } else {
+        setSelectedNode(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load graph topology.');
@@ -64,6 +71,15 @@ export function DependencyGraphVisualizer({
   useEffect(() => {
     loadGraph();
   }, [loadGraph]);
+
+  const handleResetFilters = () => {
+    setSearchFilter('');
+    setNodeType('all');
+    setDepth(3);
+    setLimit(100);
+    setZoomLevel(1.0);
+    setPanOffset({ x: 0, y: 0 });
+  };
 
   // Compute 2D node layout positions deterministically
   const nodePositions = useMemo(() => {
@@ -93,7 +109,49 @@ export function DependencyGraphVisualizer({
     return map;
   }, [data]);
 
-  // Render node network on HTML5 Canvas
+  // Compute blast radius metrics for selected node (direct & reachable dependents)
+  const blastRadiusInfo = useMemo(() => {
+    if (!data || !selectedNode) {
+      return { incoming: [], outgoing: [], reachableCount: 0 };
+    }
+
+    const incoming: GraphNode[] = [];
+    const outgoing: GraphNode[] = [];
+
+    data.edges.forEach((edge) => {
+      if (edge.target === selectedNode.id) {
+        const srcNode = data.nodes.find((n) => n.id === edge.source);
+        if (srcNode) incoming.push(srcNode);
+      }
+      if (edge.source === selectedNode.id) {
+        const tgtNode = data.nodes.find((n) => n.id === edge.target);
+        if (tgtNode) outgoing.push(tgtNode);
+      }
+    });
+
+    // BFS to find all reachable nodes (direct + transitive dependent files)
+    const visited = new Set<string>();
+    const queue = [selectedNode.id];
+    visited.add(selectedNode.id);
+
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      data.edges.forEach((edge) => {
+        if (edge.source === curr && !visited.has(edge.target)) {
+          visited.add(edge.target);
+          queue.push(edge.target);
+        }
+      });
+    }
+
+    return {
+      incoming,
+      outgoing,
+      reachableCount: Math.max(0, visited.size - 1),
+    };
+  }, [data, selectedNode]);
+
+  // Render node network on HTML5 Canvas with pan and zoom
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !data) return;
@@ -103,8 +161,8 @@ export function DependencyGraphVisualizer({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
 
-    // Scale canvas for zoom
-    ctx.translate(canvas.width / 2, canvas.height / 2);
+    // Scale & Pan canvas transformation
+    ctx.translate(canvas.width / 2 + panOffset.x, canvas.height / 2 + panOffset.y);
     ctx.scale(zoomLevel, zoomLevel);
     ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
@@ -166,7 +224,7 @@ export function DependencyGraphVisualizer({
     });
 
     ctx.restore();
-  }, [data, nodePositions, selectedNode, zoomLevel, highlightNodeIds]);
+  }, [data, nodePositions, selectedNode, zoomLevel, panOffset, highlightNodeIds]);
 
   // Export JSON topology data
   const exportGraphJson = () => {
@@ -230,6 +288,15 @@ export function DependencyGraphVisualizer({
             <option value={250}>250 Nodes</option>
             <option value={500}>500 Nodes (Max)</option>
           </select>
+
+          {(searchFilter || nodeType !== 'all' || depth !== 3 || limit !== 100) && (
+            <button
+              onClick={handleResetFilters}
+              className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium"
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
 
         {/* Zoom & Export Controls */}
@@ -237,7 +304,7 @@ export function DependencyGraphVisualizer({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setZoomLevel((z) => Math.min(2.0, z + 0.2))}
+            onClick={() => setZoomLevel((z) => Math.min(2.5, z + 0.2))}
             title="Zoom In"
           >
             +
@@ -245,12 +312,20 @@ export function DependencyGraphVisualizer({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setZoomLevel((z) => Math.max(0.5, z - 0.2))}
+            onClick={() => setZoomLevel((z) => Math.max(0.4, z - 0.2))}
             title="Zoom Out"
           >
             -
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setZoomLevel(1.0)} title="Reset Zoom">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setZoomLevel(1.0);
+              setPanOffset({ x: 0, y: 0 });
+            }}
+            title="Reset Zoom & Pan"
+          >
             Reset
           </Button>
           <Button variant="outline" size="sm" onClick={exportGraphJson}>
@@ -322,24 +397,56 @@ export function DependencyGraphVisualizer({
         <div className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-6 text-center text-sm text-rose-400">
           {error}
         </div>
+      ) : data && data.nodes.length === 0 ? (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-10 text-center space-y-3">
+          <p className="text-zinc-400 text-sm">
+            No graph nodes match your search or filter criteria.
+          </p>
+          <Button variant="outline" size="sm" onClick={handleResetFilters}>
+            Reset Search & Filters
+          </Button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-          {/* Canvas Topology View */}
-          <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/80 p-2 lg:col-span-3">
+          {/* Canvas Topology View with Drag-to-Pan */}
+          <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/80 p-2 lg:col-span-3 select-none">
             <canvas
               ref={canvasRef}
               width={800}
               height={500}
-              className="h-[500px] w-full cursor-grab active:cursor-grabbing"
+              className={`h-[500px] w-full ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+              onMouseDown={(e) => {
+                setIsPanning(true);
+                dragStartRef.current = {
+                  x: e.clientX - panOffset.x,
+                  y: e.clientY - panOffset.y,
+                };
+              }}
+              onMouseMove={(e) => {
+                if (isPanning) {
+                  setPanOffset({
+                    x: e.clientX - dragStartRef.current.x,
+                    y: e.clientY - dragStartRef.current.y,
+                  });
+                }
+              }}
+              onMouseUp={() => setIsPanning(false)}
+              onMouseLeave={() => setIsPanning(false)}
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const clickY = e.clientY - rect.top;
-                // Find clicked node
+                const rawX = e.clientX - rect.left;
+                const rawY = e.clientY - rect.top;
+
+                // Inverse matrix mapping to calculate click in graph coordinates
+                const canvasW = 800;
+                const canvasH = 500;
+                const clickX = (rawX - canvasW / 2 - panOffset.x) / zoomLevel + canvasW / 2;
+                const clickY = (rawY - canvasH / 2 - panOffset.y) / zoomLevel + canvasH / 2;
+
                 let clicked: GraphNode | null = null;
                 nodePositions.forEach((pos, id) => {
                   const dist = Math.hypot(clickX - pos.x, clickY - pos.y);
-                  if (dist <= 15) {
+                  if (dist <= 18) {
                     clicked = data?.nodes.find((n) => n.id === id) || null;
                   }
                 });
@@ -354,10 +461,14 @@ export function DependencyGraphVisualizer({
             {selectedNode ? (
               <div className="space-y-3 text-xs text-zinc-300">
                 <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                  <p className="font-semibold text-cyan-400">{selectedNode.label}</p>
-                  <p className="mt-1 text-[11px] text-zinc-400">Type: {selectedNode.type}</p>
+                  <p className="font-semibold text-cyan-400 break-all">{selectedNode.label}</p>
+                  <p className="mt-1 text-[11px] text-zinc-400 capitalize">
+                    Type: {selectedNode.type}
+                  </p>
                   {selectedNode.path && (
-                    <p className="mt-1 break-all text-[11px] text-zinc-500">{selectedNode.path}</p>
+                    <p className="mt-1 break-all text-[11px] text-zinc-500 font-mono">
+                      {selectedNode.path}
+                    </p>
                   )}
                 </div>
 
@@ -376,12 +487,74 @@ export function DependencyGraphVisualizer({
                   </div>
                 </div>
 
+                {/* Blast Radius Summary */}
+                <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-2.5 space-y-1">
+                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
+                    Blast Radius
+                  </span>
+                  <p className="text-xs text-zinc-300">
+                    <span className="font-bold text-cyan-300">
+                      {blastRadiusInfo.reachableCount}
+                    </span>{' '}
+                    reachable dependent node{blastRadiusInfo.reachableCount !== 1 ? 's' : ''}
+                  </p>
+                </div>
+
+                {/* Connected Incoming Dependents */}
+                {blastRadiusInfo.incoming.length > 0 && (
+                  <div className="space-y-1 border-t border-zinc-800 pt-2">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Imported By ({blastRadiusInfo.incoming.length})
+                    </span>
+                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                      {blastRadiusInfo.incoming.map((inc) => (
+                        <button
+                          key={inc.id}
+                          onClick={() => setSelectedNode(inc)}
+                          className="block w-full truncate text-left text-[11px] font-mono text-emerald-400 hover:underline"
+                        >
+                          {inc.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Connected Outgoing Dependencies */}
+                {blastRadiusInfo.outgoing.length > 0 && (
+                  <div className="space-y-1 border-t border-zinc-800 pt-2">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      Depends On ({blastRadiusInfo.outgoing.length})
+                    </span>
+                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                      {blastRadiusInfo.outgoing.map((out) => (
+                        <button
+                          key={out.id}
+                          onClick={() => setSelectedNode(out)}
+                          className="block w-full truncate text-left text-[11px] font-mono text-purple-300 hover:underline"
+                        >
+                          {out.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Direct Action Buttons */}
-                <div className="space-y-2 pt-2">
+                <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  {selectedNode.path && onSelectNodeForFiles && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-center text-xs h-8"
+                      onClick={() => onSelectNodeForFiles(selectedNode.path!)}
+                    >
+                      📁 View in Indexed Files
+                    </Button>
+                  )}
                   {selectedNode.path && onSelectNodeForImpact && (
                     <Button
                       variant="outline"
-                      className="w-full justify-center text-xs"
+                      className="w-full justify-center text-xs h-8"
                       onClick={() =>
                         onSelectNodeForImpact(
                           selectedNode.path!,
@@ -391,13 +564,13 @@ export function DependencyGraphVisualizer({
                         )
                       }
                     >
-                      Analyze Impact
+                      🎯 Analyze Impact
                     </Button>
                   )}
                   {selectedNode.path && onSelectNodeForExplain && (
                     <Button
                       variant="outline"
-                      className="w-full justify-center text-xs"
+                      className="w-full justify-center text-xs h-8"
                       onClick={() =>
                         onSelectNodeForExplain(
                           selectedNode.path!,
@@ -407,7 +580,7 @@ export function DependencyGraphVisualizer({
                         )
                       }
                     >
-                      Explain Code
+                      💡 Explain Code
                     </Button>
                   )}
                 </div>

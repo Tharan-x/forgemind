@@ -734,10 +734,20 @@ export default function RepositoryDetailPage() {
           <DependencyGraphVisualizer
             repositoryId={repositoryId}
             highlightNodeIds={graphHighlightNodeIds}
-            onSelectNodeForImpact={() => {
+            onSelectNodeForFiles={(path) => {
+              setFileSearch(path);
+              setActiveTab('files');
+            }}
+            onSelectNodeForImpact={(path, symbol) => {
+              setImpactFilePath(path);
+              if (symbol) setImpactSymbolName(symbol);
+              setIntelSubTab('impact');
               setActiveTab('intelligence');
             }}
-            onSelectNodeForExplain={() => {
+            onSelectNodeForExplain={(path, symbol) => {
+              setExplainFilePath(path);
+              if (symbol) setExplainSymbolName(symbol);
+              setIntelSubTab('explain');
               setActiveTab('intelligence');
             }}
           />
