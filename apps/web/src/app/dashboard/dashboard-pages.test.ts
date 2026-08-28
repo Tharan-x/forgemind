@@ -1870,6 +1870,210 @@ async function runPartE(): Promise<void> {
       '  ✅ Test 52: Task 7 suite executes in isolated test environment with zero real network/DB calls',
     );
   }
+
+  // ─── Part F — Repositories Page Client-Side Filtering (Tests 53–59) ─────────
+  console.log('\n📋 Part F — Repositories Page Client-Side Filtering (Tests 53–59)');
+
+  const mockReposForFilter: Repository[] = [
+    {
+      id: 'repo-1',
+      userId: 'user-1',
+      githubId: 101,
+      name: 'forgemind-api',
+      fullName: 'org/forgemind-api',
+      owner: 'org',
+      private: true,
+      htmlUrl: 'https://github.com/org/forgemind-api',
+      description: 'Core backend AI API service',
+      defaultBranch: 'main',
+      stars: 12,
+      forks: 2,
+      language: 'TypeScript',
+      status: 'ready',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'repo-2',
+      userId: 'user-1',
+      githubId: 102,
+      name: 'py-analytics',
+      fullName: 'org/py-analytics',
+      owner: 'org',
+      private: false,
+      htmlUrl: 'https://github.com/org/py-analytics',
+      description: 'Python data analysis pipeline',
+      defaultBranch: 'main',
+      stars: 5,
+      forks: 1,
+      language: 'Python',
+      status: 'indexing',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: 'repo-3',
+      userId: 'user-1',
+      githubId: 103,
+      name: 'go-microservice',
+      fullName: 'org/go-microservice',
+      owner: 'org',
+      private: true,
+      htmlUrl: 'https://github.com/org/go-microservice',
+      description: 'High performance Go gateway',
+      defaultBranch: 'main',
+      stars: 45,
+      forks: 8,
+      language: 'Go',
+      status: 'failed',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
+  function filterRepos(
+    repos: Repository[],
+    searchQuery: string,
+    statusFilter: string,
+    languageFilter: string,
+  ): Repository[] {
+    return repos.filter((repo) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = repo.name ? repo.name.toLowerCase().includes(q) : false;
+        const matchFullName = repo.fullName ? repo.fullName.toLowerCase().includes(q) : false;
+        const matchDesc = repo.description ? repo.description.toLowerCase().includes(q) : false;
+        if (!matchName && !matchFullName && !matchDesc) return false;
+      }
+
+      if (statusFilter) {
+        const repoStatus = repo.status || 'connected';
+        if (repoStatus !== statusFilter) return false;
+      }
+
+      if (languageFilter) {
+        if (!repo.language || repo.language.toLowerCase() !== languageFilter.toLowerCase()) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }
+
+  // Test 53: Case-insensitive search by name, fullName, and description
+  {
+    const matchName = filterRepos(mockReposForFilter, 'FORGEMIND', '', '');
+    assertEqual(matchName.length, 1, 'Test 53: Case-insensitive name match');
+    assertEqual(matchName[0]?.id, 'repo-1', 'Test 53: Matched forgemind-api');
+
+    const matchFullName = filterRepos(mockReposForFilter, 'org/py', '', '');
+    assertEqual(matchFullName.length, 1, 'Test 53: FullName match');
+    assertEqual(matchFullName[0]?.id, 'repo-2', 'Test 53: Matched py-analytics');
+
+    const matchDesc = filterRepos(mockReposForFilter, 'gateway', '', '');
+    assertEqual(matchDesc.length, 1, 'Test 53: Description match');
+    assertEqual(matchDesc[0]?.id, 'repo-3', 'Test 53: Matched go-microservice');
+
+    console.log(
+      '  ✅ Test 53: Searching by repository name/fullName/description (case-insensitive) verified',
+    );
+  }
+
+  // Test 54: Status filtering (ready, indexing, failed, connected)
+  {
+    const readyRepos = filterRepos(mockReposForFilter, '', 'ready', '');
+    assertEqual(readyRepos.length, 1, 'Test 54: Ready status filter');
+    assertEqual(readyRepos[0]?.id, 'repo-1', 'Test 54: Matched ready repo');
+
+    const indexingRepos = filterRepos(mockReposForFilter, '', 'indexing', '');
+    assertEqual(indexingRepos.length, 1, 'Test 54: Indexing status filter');
+    assertEqual(indexingRepos[0]?.id, 'repo-2', 'Test 54: Matched indexing repo');
+
+    const failedRepos = filterRepos(mockReposForFilter, '', 'failed', '');
+    assertEqual(failedRepos.length, 1, 'Test 54: Failed status filter');
+    assertEqual(failedRepos[0]?.id, 'repo-3', 'Test 54: Matched failed repo');
+
+    console.log('  ✅ Test 54: Repository status filtering verified');
+  }
+
+  // Test 55: Language filtering
+  {
+    const tsRepos = filterRepos(mockReposForFilter, '', '', 'TypeScript');
+    assertEqual(tsRepos.length, 1, 'Test 55: TypeScript language filter');
+
+    const pyRepos = filterRepos(mockReposForFilter, '', '', 'Python');
+    assertEqual(pyRepos.length, 1, 'Test 55: Python language filter');
+
+    const rustRepos = filterRepos(mockReposForFilter, '', '', 'Rust');
+    assertEqual(rustRepos.length, 0, 'Test 55: Unmatched language returns 0');
+
+    console.log('  ✅ Test 55: Repository language filtering verified');
+  }
+
+  // Test 56: Combined search + status + language filter (AND semantics)
+  {
+    const combinedMatch = filterRepos(mockReposForFilter, 'analytics', 'indexing', 'Python');
+    assertEqual(combinedMatch.length, 1, 'Test 56: All 3 criteria match repo-2');
+    assertEqual(combinedMatch[0]?.id, 'repo-2', 'Test 56: Matched repo-2');
+
+    const combinedMismatch = filterRepos(mockReposForFilter, 'analytics', 'ready', 'Python');
+    assertEqual(combinedMismatch.length, 0, 'Test 56: Mismatched status fails filter');
+
+    console.log('  ✅ Test 56: Combined search + status + language filters (AND) verified');
+  }
+
+  // Test 57: Clearing filters restores complete repository list
+  {
+    let search = 'forgemind';
+    let status = 'ready';
+    let lang = 'TypeScript';
+
+    let filtered = filterRepos(mockReposForFilter, search, status, lang);
+    assertEqual(filtered.length, 1, 'Test 57: Filtered down to 1');
+
+    // Reset filters
+    search = '';
+    status = '';
+    lang = '';
+    filtered = filterRepos(mockReposForFilter, search, status, lang);
+    assertEqual(filtered.length, 3, 'Test 57: Reset restores all 3 repositories');
+
+    console.log('  ✅ Test 57: Clearing filters restores full repository inventory');
+  }
+
+  // Test 58: No-match empty state condition
+  {
+    const noMatch = filterRepos(mockReposForFilter, 'non-existent-keyword', '', '');
+    assertEqual(noMatch.length, 0, 'Test 58: Zero matches triggers no-match state');
+    console.log('  ✅ Test 58: No-match empty state condition verified');
+  }
+
+  // Test 59: Robust handling of sparse/missing repository properties during filtering
+  {
+    const sparseRepo: Repository = {
+      id: 'repo-sparse',
+      userId: 'user-1',
+      githubId: 999,
+      name: '',
+      fullName: '',
+      owner: 'org',
+      private: false,
+      htmlUrl: 'https://github.com/org/sparse',
+      defaultBranch: 'main',
+      stars: 0,
+      forks: 0,
+      language: null,
+      description: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const sparseList = [sparseRepo];
+    const res = filterRepos(sparseList, 'test', 'ready', 'TypeScript');
+    assertEqual(res.length, 0, 'Test 59: Sparse repo handled safely without throwing');
+    console.log('  ✅ Test 59: Filtering logic handles null/empty repository fields safely');
+  }
 }
 
 // ─── Execute Test Suite ───────────────────────────────────────────────────────
