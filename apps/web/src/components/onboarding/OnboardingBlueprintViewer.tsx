@@ -8,9 +8,14 @@ import React, { useState, useEffect } from 'react';
 import type { OnboardingBlueprint, BlueprintTourStep, RAGSourceCitation } from '@forgemind/types';
 import { askOnboardingStepQuestion, shareOnboardingBlueprint } from '../../lib/intelligence.api';
 
-interface OnboardingBlueprintViewerProps {
+export interface OnboardingBlueprintViewerProps {
   blueprint: OnboardingBlueprint;
   onFileSelect?: (filePath: string) => void;
+  onOpenGraph?: (filePath?: string) => void;
+  onExplainCode?: (filePath: string) => void;
+  onInvestigateAI?: (queryOrFile?: string) => void;
+  onViewRemediation?: (findingIdOrFile?: string) => void;
+  onNavigateToHealth?: () => void;
 }
 
 interface StepQAThreadItem {
@@ -26,6 +31,11 @@ interface StepQAThreadItem {
 export function OnboardingBlueprintViewer({
   blueprint,
   onFileSelect,
+  onOpenGraph,
+  onExplainCode,
+  onInvestigateAI,
+  onViewRemediation,
+  onNavigateToHealth,
 }: OnboardingBlueprintViewerProps): React.JSX.Element {
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
 
@@ -204,6 +214,34 @@ export function OnboardingBlueprintViewer({
   };
 
   const handleExportMarkdown = () => {
+    let healthMd = '';
+    if (blueprint.healthSummary) {
+      healthMd = `\n## 🛡️ Architectural Health Snapshot\n- **Health Score**: ${blueprint.healthSummary.healthScore}/100\n- **Grade**: ${blueprint.healthSummary.grade}\n- **Total Findings**: ${blueprint.healthSummary.totalFindings}\n- **Critical Findings**: ${blueprint.healthSummary.criticalFindingsCount}\n`;
+    }
+
+    let startHereMd = '';
+    if (blueprint.startHereFiles && blueprint.startHereFiles.length > 0) {
+      startHereMd =
+        `\n## 🌟 Recommended Start-Here Files\n` +
+        blueprint.startHereFiles
+          .map((f) => `- \`${f.path}\` (${f.category}): ${f.reason} [Fan-In: ${f.fanInCount}]`)
+          .join('\n') +
+        '\n';
+    }
+
+    let tasksMd = '';
+    if (blueprint.firstExplorationTasks && blueprint.firstExplorationTasks.length > 0) {
+      tasksMd =
+        `\n## 🎯 First Exploration Tasks\n` +
+        blueprint.firstExplorationTasks
+          .map(
+            (t) =>
+              `- **${t.title}** (${t.category}): ${t.description}${t.targetFile ? ` [\`${t.targetFile}\`]` : ''}`,
+          )
+          .join('\n') +
+        '\n';
+    }
+
     const tourMarkdown = blueprint.guidedTour
       .map((s) => {
         const isDone = completedSteps.has(s.stepNumber);
@@ -232,7 +270,7 @@ export function OnboardingBlueprintViewer({
 
 ## 📌 Executive Summary
 ${blueprint.summary}
-
+${healthMd}${startHereMd}${tasksMd}
 ## 🚀 Key Entry Points
 ${blueprint.entryPoints.map((e) => `- \`${e.path}\` (${e.name}): ${e.description}`).join('\n')}
 
@@ -315,6 +353,228 @@ ${blueprint.quickstart.setupCommands.join('\n')}
           </div>
         </div>
       </div>
+
+      {/* HEALTH SNAPSHOT CARD (Task 2) */}
+      {blueprint.healthSummary && (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-md backdrop-blur-sm">
+          <div className="flex items-center gap-4">
+            <div
+              className={`flex h-12 w-12 items-center justify-center rounded-xl font-bold text-lg border ${
+                ['A+', 'A'].includes(blueprint.healthSummary.grade)
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : ['B+', 'B'].includes(blueprint.healthSummary.grade)
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    : 'bg-red-500/10 text-red-400 border-red-500/30'
+              }`}
+            >
+              {blueprint.healthSummary.grade}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Architectural Health Snapshot</h3>
+                <span className="text-xs text-slate-400">
+                  Score: {blueprint.healthSummary.healthScore}/100
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-300">
+                <span>
+                  Total Findings:{' '}
+                  <strong className="text-zinc-200">{blueprint.healthSummary.totalFindings}</strong>
+                </span>
+                {blueprint.healthSummary.criticalFindingsCount > 0 && (
+                  <span className="font-semibold text-red-400">
+                    ⚠️ {blueprint.healthSummary.criticalFindingsCount} Critical
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          {(onNavigateToHealth || onViewRemediation) && (
+            <button
+              onClick={() => (onNavigateToHealth ? onNavigateToHealth() : onViewRemediation?.())}
+              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-1.5 text-xs font-semibold text-amber-300 transition-all hover:bg-amber-500/20"
+            >
+              🛠 View Architecture Health
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* START HERE RECOMMENDED FILES (Task 3) */}
+      {blueprint.startHereFiles && blueprint.startHereFiles.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              🌟 Recommended Start Here Files ({blueprint.startHereFiles.length})
+            </h3>
+            <span className="text-[11px] text-slate-500">Ranked by architectural centrality</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {blueprint.startHereFiles.slice(0, 5).map((file) => {
+              const categoryColors: Record<string, string> = {
+                bootstrap: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
+                data_model: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+                api_gateway: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                ui: 'bg-pink-500/10 text-pink-300 border-pink-500/30',
+                core_logic: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+              };
+
+              const canView = Boolean(onFileSelect || onExplainCode);
+
+              return (
+                <div
+                  key={file.path}
+                  className="flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-950/60 p-4 transition-all hover:border-slate-700"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          categoryColors[file.category] || categoryColors.core_logic
+                        }`}
+                      >
+                        {file.category.replace('_', ' ')}
+                      </span>
+                      {file.fanInCount > 0 && (
+                        <span className="text-[10px] font-mono text-cyan-400">
+                          ⚡ {file.fanInCount} dependent{file.fanInCount === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="mt-2 text-sm font-bold text-white truncate" title={file.name}>
+                      {file.name}
+                    </h4>
+                    <p
+                      className="mt-0.5 text-[11px] font-mono text-cyan-400/80 truncate"
+                      title={file.path}
+                    >
+                      {file.path}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-300 line-clamp-2">{file.reason}</p>
+                  </div>
+                  {canView && (
+                    <div className="mt-3 border-t border-slate-800/80 pt-2.5">
+                      <button
+                        onClick={() => {
+                          if (onFileSelect) {
+                            onFileSelect(file.path);
+                          } else if (onExplainCode) {
+                            onExplainCode(file.path);
+                          }
+                        }}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 transition-all hover:bg-slate-800 hover:text-white"
+                      >
+                        📄 View File
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* FIRST EXPLORATION TASKS (Task 4 & 5) */}
+      {blueprint.firstExplorationTasks && blueprint.firstExplorationTasks.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              🎯 First Exploration Tasks ({blueprint.firstExplorationTasks.length})
+            </h3>
+            <span className="text-[11px] text-slate-500">Guided codebase actions</span>
+          </div>
+          <div className="space-y-2.5">
+            {blueprint.firstExplorationTasks.map((task) => {
+              const categoryBadges: Record<string, string> = {
+                setup: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                code_flow: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+                architecture: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
+                health_fix: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+              };
+
+              let actionLabel = 'View File';
+              let actionIcon = '📄';
+              let handler: (() => void) | undefined = undefined;
+
+              if (task.actionType === 'view_file') {
+                actionLabel = 'View File';
+                actionIcon = '📄';
+                if (task.targetFile && onFileSelect) {
+                  handler = () => onFileSelect(task.targetFile!);
+                } else if (task.targetFile && onExplainCode) {
+                  handler = () => onExplainCode(task.targetFile!);
+                }
+              } else if (task.actionType === 'open_graph') {
+                actionLabel = 'Open Graph';
+                actionIcon = '🔍';
+                if (onOpenGraph) {
+                  handler = () => onOpenGraph(task.targetFile);
+                }
+              } else if (task.actionType === 'explain_code') {
+                actionLabel = 'Explain Code';
+                actionIcon = '⚡';
+                if (task.targetFile && onExplainCode) {
+                  handler = () => onExplainCode(task.targetFile!);
+                } else if (task.targetFile && onFileSelect) {
+                  handler = () => onFileSelect(task.targetFile!);
+                }
+              } else if (task.actionType === 'investigate_ai') {
+                actionLabel = 'Investigate with AI';
+                actionIcon = '🤖';
+                if (onInvestigateAI) {
+                  handler = () => onInvestigateAI(task.targetFile);
+                }
+              } else if (task.actionType === 'view_remediation') {
+                actionLabel = 'View Fix Plan';
+                actionIcon = '🛠';
+                if (onViewRemediation) {
+                  handler = () => onViewRemediation(task.targetFile);
+                } else if (onNavigateToHealth) {
+                  handler = () => onNavigateToHealth();
+                }
+              }
+
+              return (
+                <div
+                  key={task.taskId}
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 transition-all hover:border-slate-700 sm:flex-row sm:items-center"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          categoryBadges[task.category] || categoryBadges.architecture
+                        }`}
+                      >
+                        {task.category.replace('_', ' ')}
+                      </span>
+                      {task.targetFile && (
+                        <span className="text-[11px] font-mono text-cyan-400">
+                          {task.targetFile}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="text-sm font-bold text-white">{task.title}</h4>
+                    <p className="text-xs text-slate-300">{task.description}</p>
+                  </div>
+                  {handler && (
+                    <div className="shrink-0">
+                      <button
+                        onClick={handler}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 transition-all hover:bg-slate-800 hover:text-white shadow-sm"
+                      >
+                        <span>{actionIcon}</span>
+                        <span>{actionLabel}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Navigation Sub-Tabs */}
       <div className="flex border-b border-slate-800">

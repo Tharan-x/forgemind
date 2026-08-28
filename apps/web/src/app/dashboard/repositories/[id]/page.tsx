@@ -96,7 +96,7 @@ export default function RepositoryDetailPage() {
   const [chatClearing, setChatClearing] = useState<boolean>(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [investigationContextSource, setInvestigationContextSource] = useState<
-    'finding' | 'graph' | null
+    'finding' | 'graph' | 'onboarding' | null
   >(null);
   // Reconstructed message thread from DB history + in-session queries
   const [chatDbMessages, setChatDbMessages] = useState<ChatMessage[]>([]);
@@ -1337,8 +1337,38 @@ export default function RepositoryDetailPage() {
                   <OnboardingBlueprintViewer
                     blueprint={blueprint}
                     onFileSelect={(path) => {
+                      setFileSearch(path);
+                      setActiveTab('files');
+                    }}
+                    onOpenGraph={(path) => {
+                      if (path) {
+                        setGraphHighlightNodeIds([path]);
+                      }
+                      setActiveTab('graph');
+                    }}
+                    onExplainCode={(path) => {
                       setExplainFilePath(path);
                       setIntelSubTab('explain');
+                      setActiveTab('intelligence');
+                    }}
+                    onInvestigateAI={(targetFile) => {
+                      if (targetFile) {
+                        setChatQuery(
+                          `Investigate repository architecture, dependencies, and code flow for file: ${targetFile}`,
+                        );
+                      } else {
+                        setChatQuery(
+                          `Investigate overall repository architecture and component boundaries`,
+                        );
+                      }
+                      setInvestigationContextSource('onboarding');
+                      setActiveTab('chat');
+                    }}
+                    onViewRemediation={() => {
+                      setActiveTab('health');
+                    }}
+                    onNavigateToHealth={() => {
+                      setActiveTab('health');
                     }}
                   />
                 ) : (
