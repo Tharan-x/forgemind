@@ -858,6 +858,7 @@ export default function RepositoryDetailPage() {
                         <th className="py-3 px-4">Type</th>
                         <th className="py-3 px-4">Language</th>
                         <th className="py-3 px-4 text-right">Size</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/60 font-mono text-zinc-300">
@@ -880,6 +881,19 @@ export default function RepositoryDetailPage() {
                           </td>
                           <td className="py-3 px-4 text-right font-sans text-zinc-400">
                             {file.size ? `${(file.size / 1024).toFixed(1)} KB` : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-right font-sans">
+                            <button
+                              onClick={() => {
+                                setChatQuery(
+                                  `Explain the purpose, structure, and exports of ${file.path}`,
+                                );
+                                setActiveTab('chat');
+                              }}
+                              className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-1 rounded transition-colors"
+                            >
+                              Ask AI 🤖
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -937,7 +951,8 @@ export default function RepositoryDetailPage() {
                         <th className="py-3 px-4">Kind</th>
                         <th className="py-3 px-4">Defined In File</th>
                         <th className="py-3 px-4">Line Range</th>
-                        <th className="py-3 px-4 text-right">Exported</th>
+                        <th className="py-3 px-4">Exported</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
@@ -959,7 +974,7 @@ export default function RepositoryDetailPage() {
                               ? `L${sym.startLine}–L${sym.endLine || sym.startLine}`
                               : '—'}
                           </td>
-                          <td className="py-3 px-4 text-right font-sans">
+                          <td className="py-3 px-4 font-sans">
                             {sym.exported ? (
                               <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-semibold">
                                 Exported
@@ -967,6 +982,19 @@ export default function RepositoryDetailPage() {
                             ) : (
                               <span className="text-zinc-600 text-[10px]">Local</span>
                             )}
+                          </td>
+                          <td className="py-3 px-4 text-right font-sans">
+                            <button
+                              onClick={() => {
+                                setExplainFilePath(sym.filePath);
+                                setExplainSymbolName(sym.name);
+                                setIntelSubTab('explain');
+                                setActiveTab('intelligence');
+                              }}
+                              className="text-[11px] font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 px-2.5 py-1 rounded transition-colors"
+                            >
+                              Explain 🧠
+                            </button>
                           </td>
                         </tr>
                       ))}

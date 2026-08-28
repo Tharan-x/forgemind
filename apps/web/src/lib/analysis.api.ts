@@ -1,7 +1,3 @@
-// =============================================================================
-// ForgeMind Web — Repository Analysis API Client
-// =============================================================================
-
 import type {
   AnalysisJob,
   FileDependency,
@@ -9,6 +5,7 @@ import type {
   RepositorySymbol,
 } from '@forgemind/types';
 
+import { getDeviceId } from './device.api';
 import { supabase } from './supabase';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? '';
@@ -24,12 +21,14 @@ async function getAccessToken(): Promise<string> {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getAccessToken();
+  const deviceId = getDeviceId();
 
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Device-Id': deviceId,
       ...(options.headers as Record<string, string>),
     },
   });
@@ -159,4 +158,27 @@ export async function getRepositoryDependencies(
     total: number;
   }>(`/repositories/${encodeURIComponent(repositoryId)}/dependencies${query}`);
   return { dependencies: data.dependencies, total: data.total };
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/vector-status
+ *
+ * Returns vector indexing pipeline status and coverage metrics for the given repository.
+ */
+export async function getVectorStatus(repositoryId: string): Promise<{
+  totalChunks: number;
+  embeddedChunks: number;
+  coveragePercentage: number;
+  providerUsed: string;
+}> {
+  const data = await request<{
+    success: boolean;
+    status: {
+      totalChunks: number;
+      embeddedChunks: number;
+      coveragePercentage: number;
+      providerUsed: string;
+    };
+  }>(`/repositories/${encodeURIComponent(repositoryId)}/vector-status`);
+  return data.status;
 }
