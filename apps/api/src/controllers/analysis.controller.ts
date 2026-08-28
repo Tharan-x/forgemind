@@ -95,6 +95,57 @@ export async function triggerAnalysis(req: AnalysisRequest, res: Response): Prom
 }
 
 /**
+ * POST /repositories/:repositoryId/retry
+ *
+ * Retries an analysis job for a repository by enqueueing a new pending AnalysisJob.
+ * Requires authenticated user ownership.
+ * Returns HTTP 202 Accepted with job metadata.
+ */
+export async function retryAnalysis(req: AnalysisRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const repo = await findRepositoryById(repositoryId);
+
+    if (!repo) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Repository not found.' },
+      });
+      return;
+    }
+
+    if (repo.userId !== user.id) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied.' },
+      });
+      return;
+    }
+
+    const job = await enqueueAnalysisJob(repositoryId, user.id);
+
+    res.status(202).json({
+      success: true,
+      job,
+      result: { job },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+/**
  * GET /repositories/:repositoryId/analysis
  *
  * Returns the latest analysis job for the specified repository.

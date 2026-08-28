@@ -164,62 +164,92 @@ export default function RepositoriesPage() {
         {/* Repository Grid / List */}
         {!loading && !error && repositories.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {repositories.map((repo) => (
-              <div
-                key={repo.id}
-                className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors rounded-xl p-5 flex flex-col justify-between space-y-4"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <a
-                      href={repo.htmlUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-base font-bold text-white hover:text-emerald-400 transition-colors truncate"
+            {repositories.map((repo) => {
+              const status = repo.status || 'connected';
+              const statusBadge =
+                status === 'ready' ? (
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-medium shrink-0 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Ready
+                  </span>
+                ) : status === 'indexing' ? (
+                  <span className="text-[10px] bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded font-medium shrink-0 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping" />{' '}
+                    Indexing...
+                  </span>
+                ) : status === 'queued' ? (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-medium shrink-0">
+                    Queued
+                  </span>
+                ) : status === 'failed' ? (
+                  <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-medium shrink-0">
+                    Ingestion Failed
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 rounded font-medium shrink-0">
+                    Connected
+                  </span>
+                );
+
+              return (
+                <div
+                  key={repo.id}
+                  className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-colors rounded-xl p-5 flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <a
+                        href={repo.htmlUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-base font-bold text-white hover:text-emerald-400 transition-colors truncate"
+                      >
+                        {repo.fullName || repo.name}
+                      </a>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {statusBadge}
+                        {repo.private && (
+                          <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded font-medium shrink-0">
+                            Private
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {repo.description && (
+                      <p className="text-zinc-400 text-xs line-clamp-2 leading-relaxed">
+                        {repo.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-400 pt-3 border-t border-zinc-800/80">
+                    <div className="flex items-center gap-4">
+                      {repo.language && (
+                        <span className="flex items-center gap-1.5 font-medium text-zinc-300">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
+                          {repo.language}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <span>★</span>
+                        <span>{repo.stars}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span>⌥</span>
+                        <span>{repo.forks}</span>
+                      </span>
+                    </div>
+
+                    <Link
+                      href={`/dashboard/repositories/${repo.id}`}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg"
                     >
-                      {repo.fullName || repo.name}
-                    </a>
-                    {repo.private && (
-                      <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded font-medium shrink-0">
-                        Private
-                      </span>
-                    )}
+                      <span>Explore Intelligence</span>
+                      <span>→</span>
+                    </Link>
                   </div>
-                  {repo.description && (
-                    <p className="text-zinc-400 text-xs line-clamp-2 leading-relaxed">
-                      {repo.description}
-                    </p>
-                  )}
                 </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-400 pt-3 border-t border-zinc-800/80">
-                  <div className="flex items-center gap-4">
-                    {repo.language && (
-                      <span className="flex items-center gap-1.5 font-medium text-zinc-300">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
-                        {repo.language}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <span>★</span>
-                      <span>{repo.stars}</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span>⌥</span>
-                      <span>{repo.forks}</span>
-                    </span>
-                  </div>
-
-                  <Link
-                    href={`/dashboard/repositories/${repo.id}`}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg"
-                  >
-                    <span>Explore Intelligence</span>
-                    <span>→</span>
-                  </Link>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

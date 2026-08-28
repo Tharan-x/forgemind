@@ -11,6 +11,7 @@ import {
   findRepositoryById,
   deleteRepository as deleteRepoService,
   getDecryptedGitHubToken,
+  enrichRepositoryWithStatus,
 } from '../services/index.js';
 
 // ─── Extended Request Types ───────────────────────────────────────────────────
@@ -91,7 +92,7 @@ export async function syncRepositories(req: RepositoryRequest, res: Response): P
 /**
  * GET /repositories
  *
- * Returns all repositories owned by the authenticated user.
+ * Returns all repositories owned by the authenticated user with status metadata.
  */
 export async function getRepositories(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -105,7 +106,10 @@ export async function getRepositories(req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const repositories = await findRepositoriesByUser(user.id);
+    const rawRepositories = await findRepositoriesByUser(user.id);
+    const repositories = await Promise.all(
+      rawRepositories.map((repo) => enrichRepositoryWithStatus(repo)),
+    );
 
     res.status(200).json({ success: true, repositories });
   } catch {
@@ -117,7 +121,7 @@ export async function getRepositories(req: AuthenticatedRequest, res: Response):
  * GET /repositories/:id
  *
  * Returns a single repository by its database UUID.
- * Enforces repository ownership by the authenticated user.
+ * Enforces repository ownership by the authenticated user and enriches status metadata.
  */
 export async function getRepository(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -132,9 +136,9 @@ export async function getRepository(req: AuthenticatedRequest, res: Response): P
     }
 
     const { id } = req.params as { id: string };
-    const repository = await findRepositoryById(id);
+    const repo = await findRepositoryById(id);
 
-    if (!repository) {
+    if (!repo) {
       res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'Repository not found.' },
@@ -142,13 +146,15 @@ export async function getRepository(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    if (repository.userId !== user.id) {
+    if (repo.userId !== user.id) {
       res.status(403).json({
         success: false,
         error: { code: 'FORBIDDEN', message: 'Access denied.' },
       });
       return;
     }
+
+    const repository = await enrichRepositoryWithStatus(repo);
 
     res.status(200).json({ success: true, repository });
   } catch {

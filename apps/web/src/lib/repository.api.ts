@@ -1,7 +1,4 @@
-// =============================================================================
-// ForgeMind Web — Repository API Client
-// =============================================================================
-
+import { getDeviceId } from './device.api';
 import { supabase } from './supabase';
 
 // ─── Base URL ─────────────────────────────────────────────────────────────────
@@ -9,6 +6,16 @@ import { supabase } from './supabase';
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? '';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface AnalysisJobInfo {
+  id: string;
+  repositoryId: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  commitHash?: string | null;
+  error?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
 
 export interface Repository {
   id: string;
@@ -26,6 +33,9 @@ export interface Repository {
   htmlUrl: string;
   createdAt: string;
   updatedAt: string;
+  status?: 'connected' | 'queued' | 'indexing' | 'ready' | 'failed';
+  latestJob?: AnalysisJobInfo | null;
+  fileCount?: number;
 }
 
 export interface SyncResult {
@@ -51,15 +61,18 @@ async function getAccessToken(): Promise<string> {
 
 /**
  * Sends an authenticated request to the ForgeMind API.
+ * Includes Authorization header and X-Device-Id header for Trusted Device security.
  */
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getAccessToken();
+  const deviceId = getDeviceId();
 
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Device-Id': deviceId,
       ...(options.headers as Record<string, string>),
     },
   });
@@ -85,7 +98,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
  * POST /api/v1/repositories/sync
  *
  * Triggers a full GitHub → database repository sync for the authenticated user.
- * Requires the user to have a GitHub token stored on their session.
  */
 export async function syncRepositories(): Promise<SyncResult> {
   const data = await request<{ success: boolean; result: SyncResult }>('/repositories/sync', {
@@ -97,7 +109,7 @@ export async function syncRepositories(): Promise<SyncResult> {
 /**
  * GET /api/v1/repositories
  *
- * Returns all repositories owned by the authenticated user.
+ * Returns all repositories owned by the authenticated user with status metadata.
  */
 export async function getRepositories(): Promise<Repository[]> {
   const data = await request<{ success: boolean; repositories: Repository[] }>('/repositories');
@@ -107,7 +119,7 @@ export async function getRepositories(): Promise<Repository[]> {
 /**
  * GET /api/v1/repositories/:id
  *
- * Returns a single repository by its database UUID.
+ * Returns a single repository by its database UUID with status metadata.
  */
 export async function getRepository(id: string): Promise<Repository> {
   const data = await request<{ success: boolean; repository: Repository }>(
@@ -120,7 +132,6 @@ export async function getRepository(id: string): Promise<Repository> {
  * DELETE /api/v1/repositories/:id
  *
  * Deletes a repository record by its database UUID.
- * Returns the deleted repository.
  */
 export async function deleteRepository(id: string): Promise<Repository> {
   const data = await request<{ success: boolean; repository: Repository }>(
@@ -128,4 +139,42 @@ export async function deleteRepository(id: string): Promise<Repository> {
     { method: 'DELETE' },
   );
   return data.repository;
+}
+
+/**
+ * POST /api/v1/repositories/:id/analyze
+ *
+ * Enqueues a repository acquisition & analysis job.
+ */
+export async function triggerAnalysis(repositoryId: string): Promise<AnalysisJobInfo> {
+  const data = await request<{ success: boolean; job: AnalysisJobInfo }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/analyze`,
+    { method: 'POST' },
+  );
+  return data.job;
+}
+
+/**
+ * POST /api/v1/repositories/:id/retry
+ *
+ * Retries a failed analysis job for the repository.
+ */
+export async function retryAnalysis(repositoryId: string): Promise<AnalysisJobInfo> {
+  const data = await request<{ success: boolean; job: AnalysisJobInfo }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/retry`,
+    { method: 'POST' },
+  );
+  return data.job;
+}
+
+/**
+ * GET /api/v1/repositories/:id/analysis
+ *
+ * Returns the latest analysis job status for the repository.
+ */
+export async function getLatestAnalysis(repositoryId: string): Promise<AnalysisJobInfo | null> {
+  const data = await request<{ success: boolean; job: AnalysisJobInfo | null }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/analysis`,
+  );
+  return data.job;
 }

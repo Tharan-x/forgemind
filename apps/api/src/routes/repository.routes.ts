@@ -14,6 +14,7 @@ import {
 } from '../controllers/repository.controller.js';
 import {
   triggerAnalysis,
+  retryAnalysis,
   getLatestAnalysis,
   getAnalysisHistory,
   getRepositoryFiles,
@@ -74,6 +75,12 @@ router.delete('/:id', requireAuth, deleteRepository);
  * Triggers repository acquisition and analysis job execution.
  */
 router.post('/:repositoryId/analyze', requireAuth, heavyRouteRateLimiter, triggerAnalysis);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/retry
+ * Retries a failed analysis job for the given repository.
+ */
+router.post('/:repositoryId/retry', requireAuth, retryAnalysis);
 
 /**
  * GET /api/v1/repositories/:repositoryId/analysis

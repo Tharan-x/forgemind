@@ -2299,6 +2299,77 @@ async function runPartI() {
       '  ✅ Test 83: POST /account/devices/trust (trust=false) succeeds without password (HTTP 200)',
     );
   }
+
+  // ── Part J — Repository Connection, Status Lifecycle & Retry (Tests 84–88) ──
+  console.log('\n📋 Part J — Repository Connection, Status Lifecycle & Retry (Tests 84–88)');
+
+  // Test 84: GET /api/v1/repositories returns repositories enriched with status metadata
+  {
+    const res = await apiRequest('GET', '/api/v1/repositories', { token: TOKEN_USER_1 });
+    assert(res.status === 200, 'Test 84: Status 200 for GET /repositories');
+    assert(Array.isArray((res.body as any)?.repositories), 'Test 84: repositories is an array');
+    const repo1 = (res.body as any).repositories.find((r: any) => r.id === REPO_ID_1);
+    assertDefined(repo1, 'Test 84: REPO_ID_1 found in list');
+    assert(typeof repo1.status === 'string', 'Test 84: repo status is string');
+    console.log(
+      '  ✅ Test 84: GET /api/v1/repositories returns repositories enriched with status metadata',
+    );
+  }
+
+  // Test 85: GET /api/v1/repositories/:id returns repository with status and fileCount
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 85: Status 200 for GET /repositories/:id');
+    const repo = (res.body as any)?.repository;
+    assertDefined(repo, 'Test 85: Repository defined');
+    assertEqual(repo.id, REPO_ID_1, 'Test 85: Repository ID matches');
+    assert(typeof repo.status === 'string', 'Test 85: Repository status present');
+    console.log(
+      '  ✅ Test 85: GET /api/v1/repositories/:id returns single repository enriched with status metadata',
+    );
+  }
+
+  // Test 86: POST /api/v1/repositories/:id/retry enqueues a new pending analysis job (HTTP 202)
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/retry`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 202, 'Test 86: Status 202 Accepted for retry');
+    assert((res.body as any)?.success === true, 'Test 86: success is true');
+    assertDefined((res.body as any)?.job, 'Test 86: Enqueued job returned');
+    assertEqual(
+      (res.body as any)?.job?.repositoryId,
+      REPO_ID_1,
+      'Test 86: Job repositoryId matches',
+    );
+    console.log(
+      '  ✅ Test 86: POST /api/v1/repositories/:id/retry enqueues a new analysis job (HTTP 202)',
+    );
+  }
+
+  // Test 87: POST /api/v1/repositories/:id/retry for non-existent repository returns HTTP 404
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${NON_EXISTENT_REPO_ID}/retry`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 404, 'Test 87: Status 404 for non-existent repository');
+    console.log(
+      '  ✅ Test 87: POST /api/v1/repositories/:id/retry for non-existent repository returns HTTP 404',
+    );
+  }
+
+  // Test 88: POST /api/v1/repositories/:id/retry by unauthorized user returns HTTP 403
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/retry`, {
+      token: TOKEN_USER_2,
+    });
+    assert(res.status === 403, 'Test 88: Status 403 for unauthorized repository retry');
+    console.log(
+      '  ✅ Test 88: POST /api/v1/repositories/:id/retry by unauthorized user returns HTTP 403',
+    );
+  }
 }
 
 // Execute test suite

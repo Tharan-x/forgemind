@@ -120,3 +120,42 @@ export async function countRepositories(userId: string): Promise<number> {
     where: { userId },
   });
 }
+
+// ─── Repository Status Enrichment ──────────────────────────────────────────────
+
+export type RepositoryStatus = 'connected' | 'queued' | 'indexing' | 'ready' | 'failed';
+
+export interface EnrichedRepository extends Repository {
+  status: RepositoryStatus;
+  latestJob: Record<string, unknown> | null;
+  fileCount: number;
+}
+
+/**
+ * Enriches a repository record with status metadata, latest analysis job, and file count.
+ */
+export async function enrichRepositoryWithStatus(repo: Repository): Promise<EnrichedRepository> {
+  const latestJob = await prisma.analysisJob.findFirst({
+    where: { repositoryId: repo.id },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const fileCount = await prisma.repositoryFile.count({
+    where: { repositoryId: repo.id, type: 'file' },
+  });
+
+  let status: RepositoryStatus = 'connected';
+  if (latestJob) {
+    if (latestJob.status === 'pending') status = 'queued';
+    else if (latestJob.status === 'in_progress') status = 'indexing';
+    else if (latestJob.status === 'completed') status = 'ready';
+    else if (latestJob.status === 'failed') status = 'failed';
+  }
+
+  return {
+    ...repo,
+    status,
+    latestJob,
+    fileCount,
+  };
+}
