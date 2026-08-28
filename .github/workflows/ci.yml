@@ -126,6 +126,11 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @forgemind/api db:generate
 
+      - name: Enable pgvector extension
+        run: |
+          PGPASSWORD=forgemind_local_password psql -h 127.0.0.1 -U forgemind -d forgemind -c "CREATE EXTENSION IF NOT EXISTS vector;" || \
+          docker exec $(docker ps -q -f "ancestor=pgvector/pgvector:pg16") psql -U forgemind -d forgemind -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
       - name: Push Database Schema
         run: pnpm --filter @forgemind/api db:push
 
