@@ -18,11 +18,21 @@ import type {
   BlueprintStepQARequest,
   BlueprintStepQAResponse,
   BlueprintTourStep,
+  ArchitectureHealthReport,
+  HealthFinding,
   OnboardingBlueprint,
+  OnboardingExplorationTask,
+  OnboardingStartHereCategory,
+  OnboardingStartHereFile,
   RAGSourceCitation,
   SharedBlueprintView,
 } from '@forgemind/types';
 
+import {
+  computeFanMetrics,
+  generateArchitectureHealthReport,
+  type RawDependency,
+} from './architecture-health.service.js';
 import { retrieveRepositoryContext } from './context-retrieval.service.js';
 import { getLLMProvider } from './llm/factory.js';
 import { buildRAGPrompt } from './rag-prompt.service.js';
@@ -44,8 +54,264 @@ async function assertRepositoryOwnership(repositoryId: string, userId: string): 
 }
 
 /**
- * Detects key entry points in the repository based on file paths and conventions.
+ * Ranks up to 5 architecturally central "Start Here" files using fan-in metrics.
  */
+function generateStartHereFiles(
+  files: Array<{ path: string; name: string }>,
+  rawDeps: RawDependency[],
+): OnboardingStartHereFile[] {
+  const fanMetrics = computeFanMetrics(files, rawDeps);
+  const sorted = [...fanMetrics].sort((a, b) => {
+    if (b.fanIn !== a.fanIn) return b.fanIn - a.fanIn;
+    return b.totalDegree - a.totalDegree;
+  });
+
+  const results: OnboardingStartHereFile[] = [];
+  const selectedPaths = new Set<string>();
+
+  for (const item of sorted) {
+    if (results.length >= 5) break;
+    const fileObj = files.find((f) => f.path === item.filePath);
+    if (!fileObj || selectedPaths.has(fileObj.path)) continue;
+
+    const pathLower = fileObj.path.toLowerCase();
+    let category: OnboardingStartHereCategory = 'core_logic';
+    if (
+      pathLower.includes('schema.prisma') ||
+      pathLower.includes('/db/') ||
+      pathLower.includes('/models/')
+    ) {
+      category = 'data_model';
+    } else if (
+      pathLower.includes('/controllers/') ||
+      pathLower.includes('/routes/') ||
+      pathLower.includes('/endpoints/')
+    ) {
+      category = 'api_gateway';
+    } else if (
+      pathLower.includes('/components/') ||
+      pathLower.includes('/pages/') ||
+      pathLower.includes('/app/') ||
+      pathLower.includes('/hooks/')
+    ) {
+      category = 'ui';
+    } else if (
+      pathLower.endsWith('index.ts') ||
+      pathLower.endsWith('main.ts') ||
+      pathLower.endsWith('server.ts') ||
+      pathLower.includes('package.json')
+    ) {
+      category = 'bootstrap';
+    }
+
+    const reason =
+      item.fanIn > 0
+        ? `Architectural hub imported by ${item.fanIn} internal module${item.fanIn === 1 ? '' : 's'}.`
+        : item.totalDegree > 0
+          ? `Core structural component with ${item.totalDegree} total dependency relationship${item.totalDegree === 1 ? '' : 's'}.`
+          : `Primary entry file for repository navigation.`;
+
+    results.push({
+      path: fileObj.path,
+      name: fileObj.name,
+      category,
+      reason,
+      fanInCount: item.fanIn,
+    });
+    selectedPaths.add(fileObj.path);
+  }
+
+  if (results.length === 0 && files.length > 0) {
+    for (const f of files.slice(0, 5)) {
+      results.push({
+        path: f.path,
+        name: f.name,
+        category: 'core_logic',
+        reason: 'Primary source file for codebase exploration.',
+        fanInCount: 0,
+      });
+    }
+  }
+
+  return results.slice(0, 5);
+}
+
+/**
+ * Generates 3 to 5 actionable first exploration tasks grounded in codebase evidence.
+ */
+function generateFirstExplorationTasks(
+  entryPoints: BlueprintEntryPoint[],
+  startHereFiles: OnboardingStartHereFile[],
+  healthReport?: ArchitectureHealthReport | null,
+): OnboardingExplorationTask[] {
+  const tasks: OnboardingExplorationTask[] = [];
+
+  tasks.push({
+    taskId: 'task-1-setup',
+    title: 'Review environment setup & quickstart commands',
+    category: 'setup',
+    description:
+      'Verify Node.js prerequisites, package manager installation, and dev server start scripts.',
+    targetFile: entryPoints[0]?.path || 'package.json',
+    actionType: 'view_file',
+  });
+
+  if (entryPoints[0]) {
+    tasks.push({
+      taskId: 'task-2-entry-flow',
+      title: `Inspect entry point: ${entryPoints[0].name}`,
+      category: 'code_flow',
+      description: `Analyze application initialization and server bootstrap logic in ${entryPoints[0].path}.`,
+      targetFile: entryPoints[0].path,
+      actionType: 'explain_code',
+    });
+  }
+
+  if (startHereFiles[0]) {
+    tasks.push({
+      taskId: 'task-3-topology',
+      title: `Explore dependency graph for ${startHereFiles[0].name}`,
+      category: 'architecture',
+      description: `Inspect topological relationships and blast radius for ${startHereFiles[0].path} (${startHereFiles[0].reason}).`,
+      targetFile: startHereFiles[0].path,
+      actionType: 'open_graph',
+    });
+  }
+
+  if (healthReport && healthReport.findings.length > 0) {
+    const topFinding = healthReport.findings[0];
+    if (topFinding) {
+      const isCritical = topFinding.severity === 'critical';
+      tasks.push({
+        taskId: 'task-4-health',
+        title: `Investigate architectural finding: ${topFinding.title}`,
+        category: 'health_fix',
+        description: `Review ${topFinding.severity.toUpperCase()} finding (${topFinding.penaltyPoints} penalty points) affecting ${topFinding.affectedFilePaths[0] || 'codebase'}.`,
+        targetFile: topFinding.affectedFilePaths[0],
+        actionType: isCritical ? 'view_remediation' : 'investigate_ai',
+      });
+    }
+  } else if (startHereFiles[1]) {
+    tasks.push({
+      taskId: 'task-4-domain',
+      title: `Analyze core logic in ${startHereFiles[1].name}`,
+      category: 'code_flow',
+      description: `Examine business rules and symbol definitions in ${startHereFiles[1].path}.`,
+      targetFile: startHereFiles[1].path,
+      actionType: 'explain_code',
+    });
+  }
+
+  tasks.push({
+    taskId: 'task-5-ai-investigate',
+    title: 'Investigate repository architecture with AI Assistant',
+    category: 'architecture',
+    description: 'Ask questions about codebase structure, RAG citations, and component boundaries.',
+    targetFile: startHereFiles[0]?.path || entryPoints[0]?.path,
+    actionType: 'investigate_ai',
+  });
+
+  return tasks.slice(0, 5);
+}
+
+/**
+ * Generates an automated onboarding blueprint for a given repository.
+ */
+export async function generateOnboardingBlueprint(
+  repositoryId: string,
+  userId: string,
+): Promise<OnboardingBlueprint> {
+  await assertRepositoryOwnership(repositoryId, userId);
+
+  const repo = await findRepositoryById(repositoryId);
+
+  // Fetch repository metadata
+  const filesResult = await findRepositoryFiles(repositoryId, { limit: 200 });
+  const symbolsResult = await findRepositorySymbols(repositoryId, { limit: 100 });
+  const depsResult = await findRepositoryDependencies(repositoryId, { limit: 2000 });
+
+  const files = filesResult.files.map((f) => ({ path: f.path, name: f.name }));
+  const symbols = symbolsResult.symbols.map((s) => ({
+    name: s.name,
+    filePath: s.filePath,
+    kind: s.kind,
+  }));
+  const rawDeps: RawDependency[] = depsResult.dependencies.map((d) => ({
+    sourcePath: d.sourcePath,
+    targetPath: d.targetPath,
+    isExternal: d.isExternal,
+  }));
+
+  const entryPoints = detectEntryPoints(files);
+  const sections = categorizeArchitecturalSections(files);
+  const guidedTour = buildGuidedTour(entryPoints, files, symbols);
+  const quickstart = buildQuickstart(files);
+
+  const startHereFiles = generateStartHereFiles(files, rawDeps);
+
+  let healthReport: ArchitectureHealthReport | null = null;
+  let healthSummary = {
+    healthScore: 100,
+    grade: 'A',
+    totalFindings: 0,
+    criticalFindingsCount: 0,
+  };
+
+  try {
+    healthReport = await generateArchitectureHealthReport(repositoryId, userId);
+    healthSummary = {
+      healthScore: healthReport.healthScore,
+      grade: healthReport.grade,
+      totalFindings: healthReport.findings.length,
+      criticalFindingsCount: healthReport.findings.filter(
+        (f: HealthFinding) => f.severity === 'critical',
+      ).length,
+    };
+  } catch {
+    // Health report fallback for edge cases
+  }
+
+  const firstExplorationTasks = generateFirstExplorationTasks(
+    entryPoints,
+    startHereFiles,
+    healthReport,
+  );
+
+  // Generate high-level summary narrative via LLM or deterministic fallback
+  let summary = `Welcome to **${repo?.name || 'this repository'}**! This repository is organized as a ${files.length > 50 ? 'multi-package modular' : 'streamlined'} application containing ${files.length} indexed source files, ${symbols.length} code symbols, and ${sections.length} main architectural layers. Follow this 5-step guided tour to quickly onboard into the codebase and run your local environment.`;
+
+  let providerUsed = 'deterministic-ast-analysis';
+
+  try {
+    const llmProvider = getLLMProvider();
+    const prompt = `Provide a 2-paragraph professional onboarding overview for the GitHub repository "${repo?.fullName || repo?.name}". Key files include: ${entryPoints.map((e) => e.path).join(', ')}. Language: ${repo?.language || 'TypeScript'}.`;
+    const aiSummary = await llmProvider.generateAnswer(
+      'You are a senior staff software engineer writing onboarding documentation for new developers.',
+      prompt,
+    );
+    if (aiSummary && aiSummary.trim().length > 50) {
+      summary = aiSummary.trim();
+      providerUsed = llmProvider.name;
+    }
+  } catch {
+    // Graceful fallback to deterministic summary
+  }
+
+  return {
+    repositoryId,
+    repositoryName: repo?.name || 'repository',
+    generatedAt: new Date().toISOString(),
+    summary,
+    entryPoints,
+    guidedTour,
+    architecturalSections: sections,
+    quickstart,
+    healthSummary,
+    startHereFiles,
+    firstExplorationTasks,
+    providerUsed,
+  };
+}
 function detectEntryPoints(files: Array<{ path: string; name: string }>): BlueprintEntryPoint[] {
   const entryPoints: BlueprintEntryPoint[] = [];
 
@@ -351,67 +617,6 @@ function buildQuickstart(files: Array<{ path: string }>): BlueprintQuickstart {
 }
 
 /**
- * Generates an automated onboarding blueprint for a given repository.
- */
-export async function generateOnboardingBlueprint(
-  repositoryId: string,
-  userId: string,
-): Promise<OnboardingBlueprint> {
-  await assertRepositoryOwnership(repositoryId, userId);
-
-  const repo = await findRepositoryById(repositoryId);
-
-  // Fetch repository metadata
-  const filesResult = await findRepositoryFiles(repositoryId, { limit: 200 });
-  const symbolsResult = await findRepositorySymbols(repositoryId, { limit: 100 });
-  await findRepositoryDependencies(repositoryId, { limit: 100 });
-
-  const files = filesResult.files.map((f) => ({ path: f.path, name: f.name }));
-  const symbols = symbolsResult.symbols.map((s) => ({
-    name: s.name,
-    filePath: s.filePath,
-    kind: s.kind,
-  }));
-
-  const entryPoints = detectEntryPoints(files);
-  const sections = categorizeArchitecturalSections(files);
-  const guidedTour = buildGuidedTour(entryPoints, files, symbols);
-  const quickstart = buildQuickstart(files);
-
-  // Generate high-level summary narrative via LLM or deterministic fallback
-  let summary = `Welcome to **${repo?.name || 'this repository'}**! This repository is organized as a ${files.length > 50 ? 'multi-package modular' : 'streamlined'} application containing ${files.length} indexed source files, ${symbols.length} code symbols, and ${sections.length} main architectural layers. Follow this 5-step guided tour to quickly onboard into the codebase and run your local environment.`;
-
-  let providerUsed = 'deterministic-ast-analysis';
-
-  try {
-    const llmProvider = getLLMProvider();
-    const prompt = `Provide a 2-paragraph professional onboarding overview for the GitHub repository "${repo?.fullName || repo?.name}". Key files include: ${entryPoints.map((e) => e.path).join(', ')}. Language: ${repo?.language || 'TypeScript'}.`;
-    const aiSummary = await llmProvider.generateAnswer(
-      'You are a senior staff software engineer writing onboarding documentation for new developers.',
-      prompt,
-    );
-    if (aiSummary && aiSummary.trim().length > 50) {
-      summary = aiSummary.trim();
-      providerUsed = llmProvider.name;
-    }
-  } catch {
-    // Graceful fallback to deterministic summary
-  }
-
-  return {
-    repositoryId,
-    repositoryName: repo?.name || 'repository',
-    generatedAt: new Date().toISOString(),
-    summary,
-    entryPoints,
-    guidedTour,
-    architecturalSections: sections,
-    quickstart,
-    providerUsed,
-  };
-}
-
-/**
  * Answers a developer's question grounded in a specific onboarding tour step and target file.
  */
 export async function askOnboardingStepQuestion(
@@ -626,6 +831,9 @@ export async function resolveSharedBlueprint(
       }),
       devServerCommand: blueprint.quickstart.devServerCommand,
     },
+    healthSummary: blueprint.healthSummary,
+    startHereFiles: blueprint.startHereFiles,
+    firstExplorationTasks: blueprint.firstExplorationTasks,
   };
 
   if (payload.customNotes) {

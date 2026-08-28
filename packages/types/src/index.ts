@@ -483,6 +483,31 @@ export interface BlueprintQuickstart {
   devServerCommand: string;
 }
 
+export type OnboardingStartHereCategory =
+  'bootstrap' | 'core_logic' | 'data_model' | 'api_gateway' | 'ui';
+
+export interface OnboardingStartHereFile {
+  path: string;
+  name: string;
+  category: OnboardingStartHereCategory;
+  reason: string;
+  fanInCount: number;
+}
+
+export type OnboardingExplorationCategory = 'architecture' | 'setup' | 'health_fix' | 'code_flow';
+
+export type OnboardingExplorationActionType =
+  'view_file' | 'open_graph' | 'explain_code' | 'investigate_ai' | 'view_remediation';
+
+export interface OnboardingExplorationTask {
+  taskId: string;
+  title: string;
+  category: OnboardingExplorationCategory;
+  description: string;
+  targetFile?: string;
+  actionType: OnboardingExplorationActionType;
+}
+
 export interface OnboardingBlueprint {
   repositoryId: string;
   repositoryName: string;
@@ -492,6 +517,14 @@ export interface OnboardingBlueprint {
   guidedTour: BlueprintTourStep[];
   architecturalSections: BlueprintSection[];
   quickstart: BlueprintQuickstart;
+  healthSummary?: {
+    healthScore: number;
+    grade: string;
+    totalFindings: number;
+    criticalFindingsCount: number;
+  };
+  startHereFiles?: OnboardingStartHereFile[];
+  firstExplorationTasks?: OnboardingExplorationTask[];
   providerUsed: string;
 }
 
@@ -540,6 +573,14 @@ export interface SharedBlueprintView {
   guidedTour: BlueprintTourStep[];
   architecturalSections: BlueprintSection[];
   quickstart: BlueprintQuickstart;
+  healthSummary?: {
+    healthScore: number;
+    grade: string;
+    totalFindings: number;
+    criticalFindingsCount: number;
+  };
+  startHereFiles?: OnboardingStartHereFile[];
+  firstExplorationTasks?: OnboardingExplorationTask[];
   customNotes?: string;
   qaThreads?: Record<number, SharedBlueprintQAItem[]>;
 }

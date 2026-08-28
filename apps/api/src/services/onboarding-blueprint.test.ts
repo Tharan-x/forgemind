@@ -194,6 +194,81 @@ async function runTests(): Promise<void> {
     console.log('  ✅ Test 3 Passed: Non-existent repository correctly caught');
   }
 
+  // Test 4: Verify startHereFiles enrichment (max 5, ranked deterministically)
+  console.log('📋 Test 4: Verify startHereFiles ranking & count limit');
+  assert(Array.isArray(blueprint.startHereFiles), 'Test 4: startHereFiles is an array');
+  const startHereList = blueprint.startHereFiles ?? [];
+  assert(startHereList.length <= 5, 'Test 4: startHereFiles length <= 5');
+  assert(startHereList.length >= 1, 'Test 4: At least 1 startHereFile returned');
+  const firstStartFile = startHereList[0];
+  assert(Boolean(firstStartFile), 'Test 4: firstStartFile exists');
+  assert(typeof firstStartFile?.path === 'string', 'Test 4: startHereFile has path');
+  assert(typeof firstStartFile?.category === 'string', 'Test 4: startHereFile has category');
+  assert(typeof firstStartFile?.reason === 'string', 'Test 4: startHereFile has reason');
+  assert(typeof firstStartFile?.fanInCount === 'number', 'Test 4: startHereFile has fanInCount');
+  console.log('  ✅ Test 4 Passed: startHereFiles validated');
+
+  // Test 5: Verify healthSummary enrichment
+  console.log('📋 Test 5: Verify healthSummary structure');
+  assert(blueprint.healthSummary !== undefined, 'Test 5: healthSummary defined');
+  assert(typeof blueprint.healthSummary?.healthScore === 'number', 'Test 5: healthScore is number');
+  assert(typeof blueprint.healthSummary?.grade === 'string', 'Test 5: grade is string');
+  assert(
+    typeof blueprint.healthSummary?.totalFindings === 'number',
+    'Test 5: totalFindings is number',
+  );
+  assert(
+    typeof blueprint.healthSummary?.criticalFindingsCount === 'number',
+    'Test 5: criticalFindingsCount is number',
+  );
+  console.log('  ✅ Test 5 Passed: healthSummary validated');
+
+  // Test 6: Verify firstExplorationTasks enrichment (3-5 tasks, valid categories & actionTypes)
+  console.log('📋 Test 6: Verify firstExplorationTasks structure & action types');
+  const explorationTasks = blueprint.firstExplorationTasks ?? [];
+  assert(Array.isArray(blueprint.firstExplorationTasks), 'Test 6: firstExplorationTasks is array');
+  assert(
+    explorationTasks.length >= 3 && explorationTasks.length <= 5,
+    'Test 6: 3 to 5 exploration tasks returned',
+  );
+  const validActionTypes = new Set([
+    'view_file',
+    'open_graph',
+    'explain_code',
+    'investigate_ai',
+    'view_remediation',
+  ]);
+  const validCategories = new Set(['architecture', 'setup', 'health_fix', 'code_flow']);
+  for (const t of explorationTasks) {
+    assert(typeof t.taskId === 'string', 'Test 6: taskId is string');
+    assert(typeof t.title === 'string', 'Test 6: title is string');
+    assert(validCategories.has(t.category), `Test 6: category ${t.category} is valid`);
+    assert(validActionTypes.has(t.actionType), `Test 6: actionType ${t.actionType} is valid`);
+  }
+  console.log('  ✅ Test 6 Passed: firstExplorationTasks validated');
+
+  // Test 7: Empty repository fallback does not crash
+  console.log('📋 Test 7: Empty repository blueprint generation');
+  const EMPTY_REPO_ID = makeUuid(7009);
+  const emptyRepo: Repository = {
+    ...repo,
+    id: EMPTY_REPO_ID,
+    name: 'empty-repo',
+  };
+  repositoryStore.set(EMPTY_REPO_ID, emptyRepo);
+  const emptyBp = await generateOnboardingBlueprint(EMPTY_REPO_ID, USER_ID_1);
+  assert(emptyBp.repositoryId === EMPTY_REPO_ID, 'Test 7: Empty repo blueprint returned');
+  assert(
+    emptyBp.guidedTour.length === 5,
+    'Test 7: Empty repo guided tour returned 5 fallback steps',
+  );
+  assert(Array.isArray(emptyBp.startHereFiles), 'Test 7: Empty repo startHereFiles is array');
+  assert(
+    Array.isArray(emptyBp.firstExplorationTasks),
+    'Test 7: Empty repo exploration tasks is array',
+  );
+  console.log('  ✅ Test 7 Passed: Empty repository handled safely');
+
   console.log('\n🎉 ALL ONBOARDING BLUEPRINT SERVICE TESTS PASSED SUCCESSFULLY!\n');
 }
 
