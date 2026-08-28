@@ -10,7 +10,7 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",
-    "test": "tsx --env-file=.env.test src/lib/web-client-api.test.ts && tsx --env-file=.env.test src/context/web-context-guards.test.ts && tsx --env-file=.env.test src/app/dashboard/dashboard-pages.test.ts && tsx --env-file=.env.test src/components/health/ArchitecturalHealthDashboard.test.tsx && tsx --env-file=.env.test src/components/onboarding/OnboardingBlueprintViewer.test.tsx",
+    "test": "tsx --env-file=.env.test src/lib/web-client-api.test.ts && tsx --env-file=.env.test src/context/web-context-guards.test.ts && tsx --env-file=.env.test src/app/dashboard/dashboard-pages.test.ts && tsx --env-file=.env.test src/components/health/ArchitecturalHealthDashboard.test.tsx && tsx --env-file=.env.test src/components/onboarding/OnboardingBlueprintViewer.test.tsx && tsx --env-file=.env.test src/components/onboarding/SharedBlueprintViewer.test.tsx",
     "clean": "rimraf .next dist"
   },
   "dependencies": {
