@@ -81,6 +81,7 @@ const chunkStore = new Map<string, Record<string, unknown>>();
 const jobStore = new Map<string, Record<string, unknown>>();
 const sessionStore = new Map<string, Record<string, unknown>>();
 const messageStore = new Map<string, Record<string, unknown>>();
+const userDeviceStore = new Map<string, Record<string, unknown>>();
 
 function resetAllStores(): void {
   userStore.clear();
@@ -93,6 +94,7 @@ function resetAllStores(): void {
   jobStore.clear();
   sessionStore.clear();
   messageStore.clear();
+  userDeviceStore.clear();
 }
 
 // Seed Users
@@ -157,6 +159,19 @@ supabase.auth.getUser = (async (token: string) => {
     error: new Error('Invalid authentication token'),
   };
 }) as unknown as typeof supabase.auth.getUser;
+
+supabase.auth.signInWithPassword = (async ({
+  email,
+  password,
+}: {
+  email: string;
+  password?: string;
+}) => {
+  if (password === 'correct-password-123') {
+    return { data: { user: { id: USER_ID_1, email } }, error: null };
+  }
+  return { data: { user: null }, error: new Error('Invalid credentials') };
+}) as unknown as typeof supabase.auth.signInWithPassword;
 
 // ── Intercept GitHub API via globalThis.fetch ──────────────────────────────────
 
@@ -278,6 +293,73 @@ globalThis.fetch = async (
     };
     userStore.set(id, record);
     return record;
+  }
+
+  // ── userDevice ──
+  if (clientMethod === 'userDevice.findUnique' || clientMethod === 'userDevice.findFirst') {
+    const userId_deviceId = where['userId_deviceId'] as
+      { userId: string; deviceId: string } | undefined;
+    const userId = userId_deviceId?.userId || (where['userId'] as string | undefined);
+    const deviceId = userId_deviceId?.deviceId || (where['deviceId'] as string | undefined);
+    const id = where['id'] as string | undefined;
+
+    const results = Array.from(userDeviceStore.values());
+    return (
+      results.find(
+        (d) =>
+          (id && d['id'] === id) ||
+          (userId && deviceId && d['userId'] === userId && d['deviceId'] === deviceId),
+      ) ?? null
+    );
+  }
+  if (clientMethod === 'userDevice.upsert') {
+    const whereCompound = where['userId_deviceId'] as { userId: string; deviceId: string };
+    const userId = whereCompound.userId;
+    const deviceId = whereCompound.deviceId;
+    const key = `${userId}:${deviceId}`;
+    const existing = userDeviceStore.get(key);
+    const record = {
+      id: existing?.['id'] || makeUuid(Math.floor(Math.random() * 10000)),
+      userId,
+      deviceId,
+      deviceName: (create['deviceName'] || update['deviceName'] || 'Browser') as string,
+      browser: (create['browser'] || update['browser']) as string | undefined,
+      os: (create['os'] || update['os']) as string | undefined,
+      isTrusted: (create['isTrusted'] ?? update['isTrusted'] ?? false) as boolean,
+      trustedUntil: (create['trustedUntil'] ?? update['trustedUntil'] ?? null) as Date | null,
+      lastActiveAt: new Date(),
+      createdAt: existing?.['createdAt'] || new Date(),
+      updatedAt: new Date(),
+    };
+    userDeviceStore.set(key, record);
+    return record;
+  }
+  if (clientMethod === 'userDevice.update') {
+    const id = where['id'] as string;
+    const results = Array.from(userDeviceStore.values());
+    const existing = results.find((d) => d['id'] === id);
+    if (existing) {
+      if ('lastActiveAt' in data) existing['lastActiveAt'] = data['lastActiveAt'];
+      if ('isTrusted' in data) existing['isTrusted'] = data['isTrusted'];
+      if ('trustedUntil' in data) existing['trustedUntil'] = data['trustedUntil'];
+      existing['updatedAt'] = new Date();
+    }
+    return existing ?? null;
+  }
+  if (clientMethod === 'userDevice.findMany') {
+    const userId = where['userId'] as string | undefined;
+    let results = Array.from(userDeviceStore.values());
+    if (userId) results = results.filter((d) => d['userId'] === userId);
+    return results;
+  }
+  if (clientMethod === 'userDevice.delete') {
+    const id = where['id'] as string;
+    const results = Array.from(userDeviceStore.values());
+    const existing = results.find((d) => d['id'] === id);
+    if (existing) {
+      userDeviceStore.delete(`${existing['userId']}:${existing['deviceId']}`);
+    }
+    return existing ?? { id };
   }
 
   // ── userGitHubCredential ──
@@ -649,6 +731,31 @@ function seedInitialData(): void {
     updatedAt: new Date(),
   });
 
+  // User 1 & 2 Devices
+  userDeviceStore.set(`${USER_ID_1}:test-device-uuid-1`, {
+    id: makeUuid(901),
+    userId: USER_ID_1,
+    deviceId: 'test-device-uuid-1',
+    deviceName: 'Test Browser 1',
+    isTrusted: true,
+    trustedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    lastActiveAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  userDeviceStore.set(`${USER_ID_2}:test-device-uuid-2`, {
+    id: makeUuid(902),
+    userId: USER_ID_2,
+    deviceId: 'test-device-uuid-2',
+    deviceName: 'Test Browser 2',
+    isTrusted: true,
+    trustedUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    lastActiveAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
   // User 1 GitHub Credential
   ghCredStore.set(USER_ID_1, {
     id: makeUuid(1),
@@ -830,14 +937,26 @@ interface ApiResponsePayload {
 async function apiRequest(
   method: string,
   path: string,
-  options: { token?: string; body?: unknown } = {},
+  options: { token?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<{ status: number; body: ApiResponsePayload }> {
+  const customHeaders = options.headers || {};
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+
+  const hasDeviceHeader = Object.keys(customHeaders).some((h) => h.toLowerCase() === 'x-device-id');
+
+  if (!hasDeviceHeader) {
+    const defaultDeviceId =
+      options.token === TOKEN_USER_2 ? 'test-device-uuid-2' : 'test-device-uuid-1';
+    headers['X-Device-Id'] = defaultDeviceId;
+  }
+
   if (options.token) {
     headers['Authorization'] = `Bearer ${options.token}`;
   }
+
+  Object.assign(headers, customHeaders);
 
   const res = await fetch(`${baseUrl}${path}`, {
     method,
@@ -881,6 +1000,7 @@ async function runTests() {
     await runPartE();
     await runPartF();
     await runPartH();
+    await runPartI();
 
     console.log('\n🎉 ALL CONTROLLER & ROUTE INTEGRATION TESTS PASSED SUCCESSFULLY!\n');
   } finally {
@@ -2011,6 +2131,172 @@ async function runPartH() {
     assert(res.status === 403, 'Test 72: Status 403');
     console.log(
       '  ✅ Test 72: GET Compare Architecture Snapshots cross-user access rejected with 403',
+    );
+  }
+}
+
+async function runPartI() {
+  console.log('\n📋 Part I — Trusted Device & Session Security Integration Tests (Tests 73–83)');
+
+  // Test 73: Protected route + valid JWT + missing X-Device-Id header returns HTTP 403
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': '' },
+    });
+    assert(res.status === 403, 'Test 73: Status 403 for missing X-Device-Id');
+    assert((res.body as any)?.error?.code === 'FORBIDDEN', 'Test 73: Code FORBIDDEN');
+    console.log('  ✅ Test 73: Valid JWT + missing X-Device-Id header returns HTTP 403');
+  }
+
+  // Test 74: Protected route + valid JWT + whitespace-only X-Device-Id returns HTTP 403
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': '   ' },
+    });
+    assert(res.status === 403, 'Test 74: Status 403 for whitespace X-Device-Id');
+    assert((res.body as any)?.error?.code === 'FORBIDDEN', 'Test 74: Code FORBIDDEN');
+    console.log('  ✅ Test 74: Valid JWT + whitespace-only X-Device-Id returns HTTP 403');
+  }
+
+  // Test 75: Protected route + valid JWT + unknown device ID returns HTTP 403
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': 'unknown-device-uuid-999' },
+    });
+    assert(res.status === 403, 'Test 75: Status 403 for unknown device');
+    assert((res.body as any)?.error?.code === 'FORBIDDEN', 'Test 75: Code FORBIDDEN');
+    console.log('  ✅ Test 75: Valid JWT + unknown device ID returns HTTP 403');
+  }
+
+  // Test 76: Protected route + valid JWT + revoked device ID returns HTTP 403
+  {
+    userDeviceStore.delete(`${USER_ID_1}:revoked-device-uuid`);
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': 'revoked-device-uuid' },
+    });
+    assert(res.status === 403, 'Test 76: Status 403 for revoked device');
+    console.log('  ✅ Test 76: Valid JWT + revoked device ID returns HTTP 403');
+  }
+
+  // Test 77: Protected route + valid JWT + expired device ID returns HTTP 403
+  {
+    userDeviceStore.set(`${USER_ID_1}:expired-device-uuid`, {
+      id: makeUuid(905),
+      userId: USER_ID_1,
+      deviceId: 'expired-device-uuid',
+      deviceName: 'Old Phone',
+      isTrusted: true,
+      trustedUntil: new Date(Date.now() - 10000),
+      lastActiveAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': 'expired-device-uuid' },
+    });
+    assert(res.status === 403, 'Test 77: Status 403 for expired device');
+    assert(
+      (res.body as any)?.error?.message?.includes('expired'),
+      'Test 77: Error message specifies expired',
+    );
+    console.log('  ✅ Test 77: Valid JWT + expired device ID returns HTTP 403');
+  }
+
+  // Test 78: Protected route + valid JWT + trusted device ID proceeds (HTTP 200)
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}`, {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': 'test-device-uuid-1' },
+    });
+    assert(res.status === 200, 'Test 78: Status 200 for trusted device');
+    console.log('  ✅ Test 78: Valid JWT + trusted device ID allowed (HTTP 200)');
+  }
+
+  // Test 79: /api/v1/account/devices/* exempt route allows status check without X-Device-Id
+  {
+    const res = await apiRequest('GET', '/api/v1/account/devices/check', {
+      token: TOKEN_USER_1,
+      headers: { 'X-Device-Id': '' },
+    });
+    assert(res.status === 200, 'Test 79: Status check route exempt from mandatory header');
+    console.log(
+      '  ✅ Test 79: /account/devices status/registration routes remain exempt from mandatory header',
+    );
+  }
+
+  // Test 80: POST /api/v1/account/devices/trust (trust=true) WITHOUT password returns HTTP 403 STEP_UP_REQUIRED
+  {
+    const res = await apiRequest('POST', '/api/v1/account/devices/trust', {
+      token: TOKEN_USER_1,
+      body: {
+        deviceId: 'new-device-id-80',
+        deviceName: 'Chrome on Windows',
+        trust: true,
+      },
+    });
+    assert(res.status === 403, 'Test 80: Status 403 for missing step-up password');
+    assert((res.body as any)?.error?.code === 'STEP_UP_REQUIRED', 'Test 80: Code STEP_UP_REQUIRED');
+    console.log(
+      '  ✅ Test 80: POST /account/devices/trust (trust=true) without password returns HTTP 403 STEP_UP_REQUIRED',
+    );
+  }
+
+  // Test 81: POST /api/v1/account/devices/trust (trust=true) AND invalid password returns HTTP 403 STEP_UP_REQUIRED
+  {
+    const res = await apiRequest('POST', '/api/v1/account/devices/trust', {
+      token: TOKEN_USER_1,
+      body: {
+        deviceId: 'new-device-id-81',
+        deviceName: 'Chrome on Windows',
+        trust: true,
+        password: 'wrong-password-xyz',
+      },
+    });
+    assert(res.status === 403, 'Test 81: Status 403 for invalid password');
+    assert((res.body as any)?.error?.code === 'STEP_UP_REQUIRED', 'Test 81: Code STEP_UP_REQUIRED');
+    console.log(
+      '  ✅ Test 81: POST /account/devices/trust (trust=true) with invalid password returns HTTP 403 STEP_UP_REQUIRED',
+    );
+  }
+
+  // Test 82: POST /api/v1/account/devices/trust (trust=true) AND valid password succeeds (HTTP 200)
+  {
+    const res = await apiRequest('POST', '/api/v1/account/devices/trust', {
+      token: TOKEN_USER_1,
+      body: {
+        deviceId: 'new-device-id-82',
+        deviceName: 'Chrome on Windows',
+        trust: true,
+        password: 'correct-password-123',
+      },
+    });
+    assert(res.status === 200, 'Test 82: Status 200 for valid password step-up');
+    assert((res.body as any)?.data?.device?.isTrusted === true, 'Test 82: Device is trusted');
+    console.log(
+      '  ✅ Test 82: POST /account/devices/trust (trust=true) with valid password succeeds (HTTP 200)',
+    );
+  }
+
+  // Test 83: POST /api/v1/account/devices/trust (trust=false) WITHOUT password succeeds (HTTP 200)
+  {
+    const res = await apiRequest('POST', '/api/v1/account/devices/trust', {
+      token: TOKEN_USER_1,
+      body: {
+        deviceId: 'untrusted-device-id-83',
+        deviceName: 'Public Library Computer',
+        trust: false,
+      },
+    });
+    assert(res.status === 200, 'Test 83: Status 200 for trust=false without password');
+    assert((res.body as any)?.data?.device?.isTrusted === false, 'Test 83: Device is untrusted');
+    console.log(
+      '  ✅ Test 83: POST /account/devices/trust (trust=false) succeeds without password (HTTP 200)',
     );
   }
 }

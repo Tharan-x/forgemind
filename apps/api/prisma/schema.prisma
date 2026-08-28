@@ -26,6 +26,7 @@ model User {
   repositoryMembers RepositoryMember[]
   chatSessions      ChatSession[]
   githubCredential  UserGitHubCredential?
+  devices           UserDevice[]
 
   @@map("users")
 }
@@ -128,6 +129,7 @@ model ChatSession {
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages   ChatMessage[]
 
+  @@index([repositoryId, userId])
   @@map("chat_sessions")
 }
 
@@ -239,5 +241,27 @@ model CodeChunk {
   @@index([fileId])
   @@index([checksum])
   @@map("code_chunks")
+}
+
+// ─── 11. User Devices Model ───────────────────────────────────────────────────
+
+model UserDevice {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  deviceId     String    @map("device_id")
+  deviceName   String    @map("device_name")
+  browser      String?
+  os           String?
+  isTrusted    Boolean   @default(false) @map("is_trusted")
+  trustedUntil DateTime? @map("trusted_until")
+  lastActiveAt DateTime  @default(now()) @map("last_active_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("user_devices")
 }
 

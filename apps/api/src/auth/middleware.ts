@@ -74,6 +74,41 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       avatarUrl: dbUser.avatarUrl,
     };
 
+    // Server-side Device Authorization & Revocation Check
+    const rawDeviceId = req.headers['x-device-id'] as string | undefined;
+    const deviceId = typeof rawDeviceId === 'string' ? rawDeviceId.trim() : '';
+    const isDeviceRoute = (req.originalUrl || req.url || '').includes('/account/devices');
+
+    if (!isDeviceRoute) {
+      if (!deviceId) {
+        res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Device identification header (X-Device-Id) is required.',
+          },
+        });
+        return;
+      }
+
+      const { checkDeviceTrustStatus } = await import('../services/device-management.service.js');
+      const trustStatus = await checkDeviceTrustStatus(dbUser.id, deviceId);
+
+      // Require active device trust for protected application endpoints
+      if (!trustStatus.isTrusted) {
+        res.status(403).json({
+          success: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: trustStatus.isExpired
+              ? 'Device trust has expired. Re-authentication required.'
+              : 'Device access revoked or untrusted. Authentication required.',
+          },
+        });
+        return;
+      }
+    }
+
     next();
   } catch {
     res.status(401).json({

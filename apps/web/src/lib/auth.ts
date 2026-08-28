@@ -61,6 +61,22 @@ export async function signInWithGithub() {
 }
 
 /**
+ * Sign in with Google OAuth provider.
+ */
+export async function signInWithGoogle() {
+  const redirectTo =
+    typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined;
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Send password reset email.
  */
 export async function resetPasswordForEmail(email: string) {

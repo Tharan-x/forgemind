@@ -1,7 +1,7 @@
 'use client';
 
 // =============================================================================
-// ForgeMind Web — Account Settings Page
+// ForgeMind Web — Account Settings Page (with Sessions & Trusted Devices)
 // =============================================================================
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -12,6 +12,7 @@ import { ProtectedLayout } from '@/components/dashboard/ProtectedLayout';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { fetchUserDevices, getDeviceId, type UserDevice } from '@/lib/device.api';
 import {
   getGitHubConnection,
   connectGitHub,
@@ -20,7 +21,17 @@ import {
 } from '@/lib/github-credential.api';
 
 export default function SettingsPage() {
-  const { user, updateProfile, resetPassword, logout } = useAuth();
+  const {
+    user,
+    updateProfile,
+    resetPassword,
+    logout,
+    trustDevice,
+    revokeDevice,
+    reauthenticate,
+    isReauthenticatedRecently,
+    isDeviceTrusted,
+  } = useAuth();
   const { addToast } = useToast();
 
   const currentName =
@@ -44,7 +55,30 @@ export default function SettingsPage() {
   const [savingGithub, setSavingGithub] = useState<boolean>(false);
   const [disconnectingGithub, setDisconnectingGithub] = useState<boolean>(false);
 
+  const [devices, setDevices] = useState<UserDevice[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState<boolean>(true);
+  const [updatingDevice, setUpdatingDevice] = useState<string | null>(null);
+
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Step-up Re-authentication Modal State
+  const [reauthModalOpen, setReauthModalOpen] = useState(false);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [reauthSubmitting, setReauthSubmitting] = useState(false);
+  const [reauthError, setReauthError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      setLoadingDevices(true);
+      const list = await fetchUserDevices();
+      setDevices(list);
+    } catch {
+      // Ignore device fetch error on initial load
+    } finally {
+      setLoadingDevices(false);
+    }
+  }, []);
 
   const fetchGitHubStatus = useCallback(async () => {
     try {
@@ -60,7 +94,47 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetchGitHubStatus();
-  }, [fetchGitHubStatus]);
+    loadDevices();
+  }, [fetchGitHubStatus, loadDevices]);
+
+  /**
+   * Enforces Step-Up Re-Authentication (15-min grace period) before proceeding with a sensitive action.
+   */
+  const executeWithStepUp = (action: () => Promise<void>) => {
+    if (isReauthenticatedRecently()) {
+      action();
+    } else {
+      setPendingAction(() => action);
+      setReauthPassword('');
+      setReauthError(null);
+      setReauthModalOpen(true);
+    }
+  };
+
+  const handleReauthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reauthPassword) {
+      setReauthError('Please enter your password.');
+      return;
+    }
+
+    try {
+      setReauthError(null);
+      setReauthSubmitting(true);
+      await reauthenticate(reauthPassword);
+      setReauthModalOpen(false);
+      if (pendingAction) {
+        await pendingAction();
+        setPendingAction(null);
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Authentication failed. Incorrect password.';
+      setReauthError(message);
+    } finally {
+      setReauthSubmitting(false);
+    }
+  };
 
   // 1. Profile Update
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -77,8 +151,8 @@ export default function SettingsPage() {
     }
   };
 
-  // 2. Password Change
-  const handleChangePassword = async (e: React.FormEvent) => {
+  // 2. Password Change (Sensitive)
+  const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword) {
       addToast('Please enter a new password.', 'error');
@@ -93,64 +167,105 @@ export default function SettingsPage() {
       return;
     }
 
-    try {
-      setSavingPassword(true);
-      await resetPassword(newPassword);
-      addToast('Password changed successfully!', 'success');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to change password.';
-      addToast(message, 'error');
-    } finally {
-      setSavingPassword(false);
-    }
+    executeWithStepUp(async () => {
+      try {
+        setSavingPassword(true);
+        await resetPassword(newPassword);
+        addToast('Password changed successfully!', 'success');
+        setNewPassword('');
+        setConfirmPassword('');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to change password.';
+        addToast(message, 'error');
+      } finally {
+        setSavingPassword(false);
+      }
+    });
   };
 
-  // 3. GitHub Credential Connect / Update
-  const handleConnectGitHub = async (e: React.FormEvent) => {
+  // 3. GitHub Credential Connect / Update (Sensitive)
+  const handleConnectGitHub = (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubTokenInput.trim()) {
       addToast('Please enter a GitHub Personal Access Token.', 'error');
       return;
     }
 
+    executeWithStepUp(async () => {
+      try {
+        setSavingGithub(true);
+        const updatedConn = await connectGitHub(githubTokenInput.trim());
+        setGithubConn(updatedConn);
+        setGithubTokenInput('');
+        addToast('GitHub credential connected successfully!', 'success');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to connect GitHub token.';
+        addToast(message, 'error');
+      } finally {
+        setSavingGithub(false);
+      }
+    });
+  };
+
+  // 4. GitHub Credential Disconnect (Sensitive)
+  const handleDisconnectGitHub = () => {
+    executeWithStepUp(async () => {
+      try {
+        setDisconnectingGithub(true);
+        await disconnectGitHub();
+        setGithubConn({
+          connected: false,
+          githubUsername: null,
+          githubAvatarUrl: null,
+          updatedAt: null,
+        });
+        addToast('GitHub credential disconnected.', 'info');
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to disconnect GitHub credential.';
+        addToast(message, 'error');
+      } finally {
+        setDisconnectingGithub(false);
+      }
+    });
+  };
+
+  // 5. Device Trust Toggle
+  const handleToggleCurrentDeviceTrust = async (trust: boolean) => {
     try {
-      setSavingGithub(true);
-      const updatedConn = await connectGitHub(githubTokenInput.trim());
-      setGithubConn(updatedConn);
-      setGithubTokenInput('');
-      addToast('GitHub credential connected successfully!', 'success');
+      setUpdatingDevice('current');
+      await trustDevice(trust);
+      await loadDevices();
+      addToast(
+        trust ? 'This device is now trusted for 30 days.' : 'Device trust revoked.',
+        trust ? 'success' : 'info',
+      );
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to connect GitHub token.';
+      const message = err instanceof Error ? err.message : 'Failed to update device trust.';
       addToast(message, 'error');
     } finally {
-      setSavingGithub(false);
+      setUpdatingDevice(null);
     }
   };
 
-  // 4. GitHub Credential Disconnect
-  const handleDisconnectGitHub = async () => {
-    try {
-      setDisconnectingGithub(true);
-      await disconnectGitHub();
-      setGithubConn({
-        connected: false,
-        githubUsername: null,
-        githubAvatarUrl: null,
-        updatedAt: null,
-      });
-      addToast('GitHub credential disconnected.', 'info');
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to disconnect GitHub credential.';
-      addToast(message, 'error');
-    } finally {
-      setDisconnectingGithub(false);
-    }
+  // 6. Revoke Device (Sensitive)
+  const handleRevokeDevice = (targetId: string, deviceName: string) => {
+    executeWithStepUp(async () => {
+      try {
+        setUpdatingDevice(targetId);
+        await revokeDevice(targetId);
+        await loadDevices();
+        addToast(`Access revoked for device "${deviceName}".`, 'info');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to revoke device access.';
+        addToast(message, 'error');
+      } finally {
+        setUpdatingDevice(null);
+      }
+    });
   };
 
-  // 5. Sign Out
+  // 7. Sign Out
   const handleSignOut = async () => {
     try {
       setLoggingOut(true);
@@ -162,7 +277,6 @@ export default function SettingsPage() {
     }
   };
 
-  // Formatted User Information (Task 2)
   const provider = user?.app_metadata?.provider || 'email';
   const isEmailVerified = Boolean(user?.email_confirmed_at);
   const createdAtFormatted = user?.created_at
@@ -180,11 +294,11 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Account Settings</h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Manage your personal profile, credentials, and account details
+            Manage your personal profile, security credentials, and active session devices
           </p>
         </div>
 
-        {/* User Info Overview Banner (Task 2) */}
+        {/* User Info Overview Banner */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6">
           <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-widest">
             Authenticated Profile Overview
@@ -217,7 +331,125 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Section 1: GitHub Integration (Sprint 4 Task 4.1) */}
+        {/* Section 1: Sessions & Trusted Devices (NEW) */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-white">Sessions &amp; Trusted Devices</h2>
+              <p className="text-xs text-zinc-400 mt-1">
+                Manage personal devices trusted for 30-day session continuation and revoke remote
+                access.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={loadDevices}
+              disabled={loadingDevices}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs h-9 px-3 self-start sm:self-auto"
+            >
+              {loadingDevices ? 'Refreshing...' : 'Refresh Devices'}
+            </Button>
+          </div>
+
+          {loadingDevices ? (
+            <div className="text-center py-6 text-xs text-zinc-500">
+              Loading sessions &amp; device inventory...
+            </div>
+          ) : devices.length === 0 ? (
+            <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-6 text-center space-y-3">
+              <p className="text-xs text-zinc-400">No registered devices found.</p>
+              <Button
+                onClick={() => handleToggleCurrentDeviceTrust(true)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-9 px-4"
+              >
+                Trust This Current Device
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {devices.map((device) => {
+                const isCurrent = device.isCurrentDevice || device.deviceId === getDeviceId();
+                return (
+                  <div
+                    key={device.id}
+                    className={`border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
+                      isCurrent
+                        ? 'bg-emerald-950/20 border-emerald-500/30'
+                        : 'bg-zinc-950/60 border-zinc-800'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">
+                          {device.deviceName}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 px-2 py-0.5 rounded font-bold">
+                            ★ Current Device
+                          </span>
+                        )}
+                        {device.isTrusted ? (
+                          <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded font-medium">
+                            ✓ Trusted
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-2 py-0.5 rounded font-medium">
+                            Untrusted / Shared
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-zinc-400">
+                        {device.browser || 'Browser'} on {device.os || 'OS'} • Last active:{' '}
+                        {new Date(device.lastActiveAt).toLocaleString()}
+                      </p>
+
+                      {device.isTrusted && device.trustedUntil && (
+                        <p className="text-[11px] text-zinc-500">
+                          Trust valid until: {new Date(device.trustedUntil).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                      {isCurrent ? (
+                        isDeviceTrusted ? (
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleToggleCurrentDeviceTrust(false)}
+                            disabled={updatingDevice === 'current'}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 text-xs h-8 px-3"
+                          >
+                            Revoke Trust
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => handleToggleCurrentDeviceTrust(true)}
+                            disabled={updatingDevice === 'current'}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-8 px-3"
+                          >
+                            Trust This Device (30 Days)
+                          </Button>
+                        )
+                      ) : (
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleRevokeDevice(device.id, device.deviceName)}
+                          disabled={updatingDevice === device.id}
+                          className="bg-red-950/60 hover:bg-red-900 border border-red-800/80 text-red-300 text-xs h-8 px-3"
+                        >
+                          Revoke Access
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Section 2: GitHub Integration */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -324,7 +556,7 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* Section 2: Update Profile Details */}
+        {/* Section 3: Update Profile Details */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div>
             <h2 className="text-lg font-bold text-white">Profile Details</h2>
@@ -372,7 +604,7 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* Section 3: Change Password */}
+        {/* Section 4: Change Password */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div>
             <h2 className="text-lg font-bold text-white">Security &amp; Password</h2>
@@ -426,7 +658,7 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* Section 4: Sign Out & Session */}
+        {/* Section 5: Sign Out & Session */}
         <div className="bg-zinc-900 border border-red-500/20 rounded-2xl p-6 shadow-xl flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold text-white">Sign Out of Session</h2>
@@ -442,6 +674,69 @@ export default function SettingsPage() {
             {loggingOut ? 'Signing Out...' : 'Sign Out Account'}
           </Button>
         </div>
+
+        {/* Step-Up Re-Authentication Modal */}
+        {reauthModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-white">Confirm Password Required</h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  For security, sensitive actions require recent authentication. Enter your current
+                  password to continue.
+                </p>
+              </div>
+
+              {reauthError && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg p-3 text-center">
+                  {reauthError}
+                </div>
+              )}
+
+              <form onSubmit={handleReauthSubmit} className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="reauthPassword"
+                    className="block text-xs font-medium text-zinc-400 mb-1.5"
+                  >
+                    Current Password
+                  </label>
+                  <input
+                    id="reauthPassword"
+                    type="password"
+                    required
+                    autoFocus
+                    value={reauthPassword}
+                    onChange={(e) => setReauthPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setReauthModalOpen(false);
+                      setPendingAction(null);
+                    }}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs h-9 px-4"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={reauthSubmitting}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold text-xs h-9 px-5"
+                  >
+                    {reauthSubmitting ? 'Verifying...' : 'Confirm & Proceed'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </ProtectedLayout>
   );

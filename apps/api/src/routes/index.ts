@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 
 import { healthHandler } from './health.js';
 import { authRouter } from './auth.js';
+import { accountRouter } from './account.routes.js';
 import { repositoryRouter, onboardingShareRouter } from './repository.routes.js';
 
 const router: IRouter = Router();
@@ -9,8 +10,9 @@ const router: IRouter = Router();
 // Health check
 router.get('/health', healthHandler);
 
-// Auth endpoints
+// Auth & Account endpoints
 router.use('/auth', authRouter);
+router.use('/account', accountRouter);
 
 // Repository endpoints
 router.use('/repositories', repositoryRouter);

@@ -28,3 +28,4 @@ export * from './onboarding-blueprint.service.js';
 export * from './architecture-health.service.js';
 export * from './architecture-risk.service.js';
 export * from './architecture-history.service.js';
+export * from './device-management.service.js';

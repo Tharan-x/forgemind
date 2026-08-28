@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, prefer-const */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 // =============================================================================
 // ForgeMind Web — Web Application Dashboard Pages Integration Test Suite
 // (Sprint 4 Task 7)
@@ -190,13 +190,21 @@ function setupComponentDispatcher(options: DispatcherOptions) {
     user: options.user !== undefined ? options.user : MOCK_USER,
     session: options.session !== undefined ? options.session : MOCK_SESSION,
     loading: options.loading !== undefined ? options.loading : false,
+    isDeviceTrusted: true,
+    deviceLoading: false,
+    lastReauthenticatedAt: Date.now(),
     login: async () => {},
     signup: async () => {},
     logout: async () => {},
     loginWithGithub: async () => {},
+    loginWithGoogle: async () => {},
     forgotPassword: async () => {},
     resetPassword: async () => {},
     updateProfile: async () => {},
+    trustDevice: async () => {},
+    revokeDevice: async () => {},
+    reauthenticate: async () => true,
+    isReauthenticatedRecently: () => true,
     ...options.authOverride,
   };
 
@@ -711,11 +719,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const githubSection = rendered.props.children.props.children[2];
+    const githubSection = rendered.props.children.props.children[3];
 
     const headerBadge =
       githubSection.props.children[0].props.children[0].props.children[0].props.children[1];
@@ -762,11 +778,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const githubSection = rendered.props.children.props.children[2];
+    const githubSection = rendered.props.children.props.children[3];
 
     const headerBadge =
       githubSection.props.children[0].props.children[0].props.children[0].props.children[1];
@@ -790,7 +814,7 @@ async function runPartC(): Promise<void> {
         }
       },
       authOverride: {
-        updateProfile: async (name, avatarUrl) => {
+        updateProfile: async (name) => {
           updateProfileCalled = true;
           assertEqual(name, 'Updated Engineer', 'Test 20: Name passed');
         },
@@ -807,12 +831,20 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
 
     const rendered = SettingsPage();
-    const profileForm = rendered.props.children.props.children[3].props.children[1];
+    const profileForm = rendered.props.children.props.children[4].props.children[1];
 
     await profileForm.props.onSubmit({ preventDefault: () => {} });
 
@@ -842,7 +874,7 @@ async function runPartC(): Promise<void> {
     });
 
     const rendered = SettingsPage();
-    const profileForm = rendered.props.children.props.children[3].props.children[1];
+    const profileForm = rendered.props.children.props.children[4].props.children[1];
 
     await profileForm.props.onSubmit({ preventDefault: () => {} });
     assert(errorToastFired, 'Test 21: error toast fired on profile update failure');
@@ -869,11 +901,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const pwdForm = rendered.props.children.props.children[4].props.children[1];
+    const pwdForm = rendered.props.children.props.children[5].props.children[1];
 
     await pwdForm.props.onSubmit({ preventDefault: () => {} });
     assertEqual(toastMsg, 'Please enter a new password.', 'Test 22: Empty password toast message');
@@ -900,11 +940,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const pwdForm = rendered.props.children.props.children[4].props.children[1];
+    const pwdForm = rendered.props.children.props.children[5].props.children[1];
 
     await pwdForm.props.onSubmit({ preventDefault: () => {} });
     assertEqual(
@@ -935,11 +983,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const pwdForm = rendered.props.children.props.children[4].props.children[1];
+    const pwdForm = rendered.props.children.props.children[5].props.children[1];
 
     await pwdForm.props.onSubmit({ preventDefault: () => {} });
     assertEqual(toastMsg, 'Passwords do not match.', 'Test 24: Password mismatch toast message');
@@ -974,11 +1030,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const pwdForm = rendered.props.children.props.children[4].props.children[1];
+    const pwdForm = rendered.props.children.props.children[5].props.children[1];
 
     await pwdForm.props.onSubmit({ preventDefault: () => {} });
     assert(resetCalled, 'Test 25: resetPassword called');
@@ -1006,11 +1070,19 @@ async function runPartC(): Promise<void> {
         '   ',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const githubSection = rendered.props.children.props.children[2];
+    const githubSection = rendered.props.children.props.children[3];
     const form = githubSection.props.children[githubSection.props.children.length - 1];
 
     await form.props.onSubmit({ preventDefault: () => {} });
@@ -1024,7 +1096,6 @@ async function runPartC(): Promise<void> {
 
   // Test 27: Disconnect GitHub PAT credential calls disconnectGitHub API
   {
-    let disconnectClicked = false;
     setupComponentDispatcher({
       user: MOCK_USER,
       stateOverrides: [
@@ -1039,11 +1110,19 @@ async function runPartC(): Promise<void> {
         '',
         false,
         false,
+        [],
         false,
+        null,
+        false,
+        false,
+        '',
+        false,
+        null,
+        null,
       ],
     });
     const rendered = SettingsPage();
-    const githubSection = rendered.props.children.props.children[2];
+    const githubSection = rendered.props.children.props.children[3];
 
     const disconnectBtn = githubSection.props.children[0].props.children[1];
     assertEqual(
@@ -1075,7 +1154,7 @@ async function runPartC(): Promise<void> {
     });
 
     const rendered = SettingsPage();
-    const signOutSection = rendered.props.children.props.children[5];
+    const signOutSection = rendered.props.children.props.children[6];
 
     const signOutBtn = signOutSection.props.children[1];
     assertEqual(signOutBtn.props.children, 'Sign Out Account', 'Test 28: Sign out button text');
@@ -1111,7 +1190,7 @@ async function runPartC(): Promise<void> {
       ],
     });
     const rendered = SettingsPage();
-    const profileSection = rendered.props.children.props.children[3];
+    const profileSection = rendered.props.children.props.children[4];
     const avatarInput = profileSection.props.children[1].props.children[1].props.children[1];
 
     assertEqual(
@@ -1126,7 +1205,7 @@ async function runPartC(): Promise<void> {
   {
     setupComponentDispatcher({ user: MOCK_USER });
     const rendered = SettingsPage();
-    const githubSection = rendered.props.children.props.children[2];
+    const githubSection = rendered.props.children.props.children[3];
     const form = githubSection.props.children[githubSection.props.children.length - 1];
     const securityP = form.props.children[0].props.children[2];
 
