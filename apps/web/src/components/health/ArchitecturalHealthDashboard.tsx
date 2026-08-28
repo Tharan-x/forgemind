@@ -21,11 +21,13 @@ import { ArchitecturalHealthHistoryTrend } from './ArchitecturalHealthHistoryTre
 interface ArchitecturalHealthDashboardProps {
   repositoryId: string;
   onNavigateToGraph?: (finding: HealthFinding) => void;
+  onInvestigateWithAI?: (finding: HealthFinding) => void;
 }
 
 export function ArchitecturalHealthDashboard({
   repositoryId,
   onNavigateToGraph,
+  onInvestigateWithAI,
 }: ArchitecturalHealthDashboardProps) {
   const [report, setReport] = useState<ArchitectureHealthReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -355,6 +357,16 @@ export function ArchitecturalHealthDashboard({
                         🔍 Highlight on Graph
                       </Button>
                     )}
+                    {onInvestigateWithAI && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onInvestigateWithAI(finding)}
+                        className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40"
+                      >
+                        🤖 Investigate with AI
+                      </Button>
+                    )}
                     <Button
                       variant="default"
                       size="sm"
@@ -378,6 +390,7 @@ export function ArchitecturalHealthDashboard({
         isOpen={Boolean(activeDrawerFinding)}
         onClose={() => setActiveDrawerFinding(null)}
         onHighlightOnGraph={onNavigateToGraph}
+        onInvestigateWithAI={onInvestigateWithAI}
       />
     </div>
   );

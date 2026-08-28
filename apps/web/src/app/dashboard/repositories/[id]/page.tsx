@@ -95,6 +95,9 @@ export default function RepositoryDetailPage() {
   const [chatHistoryLoading, setChatHistoryLoading] = useState<boolean>(false);
   const [chatClearing, setChatClearing] = useState<boolean>(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [investigationContextSource, setInvestigationContextSource] = useState<
+    'finding' | 'graph' | null
+  >(null);
   // Reconstructed message thread from DB history + in-session queries
   const [chatDbMessages, setChatDbMessages] = useState<ChatMessage[]>([]);
   const [chatMessages, setChatMessages] = useState<
@@ -726,6 +729,14 @@ export default function RepositoryDetailPage() {
               setGraphHighlightNodeIds(finding.affectedNodeIds);
               setActiveTab('graph');
             }}
+            onInvestigateWithAI={(finding) => {
+              const primaryFile = finding.affectedFilePaths[0] || 'codebase';
+              setChatQuery(
+                `Investigate the architectural risk in ${primaryFile}: '${finding.title}' (${finding.severity.toUpperCase()} - ${finding.category}). Description: ${finding.description}. Explain the main causes of this issue, identify the most important dependencies contributing to it, describe the likely blast radius of a refactor, and suggest practical refactoring approaches.`,
+              );
+              setInvestigationContextSource('finding');
+              setActiveTab('chat');
+            }}
           />
         )}
 
@@ -749,6 +760,26 @@ export default function RepositoryDetailPage() {
               if (symbol) setExplainSymbolName(symbol);
               setIntelSubTab('explain');
               setActiveTab('intelligence');
+            }}
+            onSelectNodeForAIInvestigation={(node, blastRadiusInfo) => {
+              let prompt = '';
+              if (node.type === 'symbol') {
+                const symbolParts = node.label.split(' ');
+                const symbolName = symbolParts[0] || node.label;
+                const kindText = symbolParts[1] ? ` ${symbolParts[1]}` : '';
+                prompt = `Investigate AST symbol '${symbolName}'${kindText} defined in ${node.path || 'the repository'} (in-degree: ${node.metrics.inDegree}, out-degree: ${node.metrics.outDegree}, reachable blast radius: ${blastRadiusInfo.reachableCount} node(s)). Explain what uses this symbol, its dependency contract, risks of modifying its signature, and recommended refactoring steps.`;
+              } else if (node.type === 'file') {
+                prompt = `Investigate file ${node.path || node.label} (${node.metrics.inDegree} incoming dependent(s), ${node.metrics.outDegree} outgoing dependency(ies), reachable blast radius of ${blastRadiusInfo.reachableCount} node(s)). Explain what depends on this file, what it imports, refactoring risks, and key architectural considerations.`;
+              } else if (node.type === 'module') {
+                prompt = `Investigate module directory ${node.path || node.label} (${node.metrics.inDegree} incoming link(s), ${node.metrics.outDegree} outgoing link(s), reachable blast radius of ${blastRadiusInfo.reachableCount} node(s)). Explain module boundaries, coupling with other modules, and architectural health considerations.`;
+              } else if (node.type === 'package') {
+                prompt = `Investigate external package dependency '${node.label}' (${node.metrics.inDegree} file(s) importing it). Explain its usage across the repository and risks or alternatives for upgrading or replacing it.`;
+              } else {
+                prompt = `Investigate ${node.path || node.label} (${node.type}) and its dependency relationships. It has ${node.metrics.inDegree} incoming dependent(s), ${node.metrics.outDegree} outgoing dependency(ies), and a reachable blast radius of ${blastRadiusInfo.reachableCount} node(s). Explain what depends on this node, what it depends on, the risks of modifying it, and key architectural considerations.`;
+              }
+              setChatQuery(prompt);
+              setInvestigationContextSource('graph');
+              setActiveTab('chat');
             }}
           />
         )}
@@ -1970,6 +2001,31 @@ export default function RepositoryDetailPage() {
                   </button>
                 ))}
               </div>
+
+              {/* Pre-populated Context Banner */}
+              {investigationContextSource && (
+                <div className="flex items-center justify-between bg-cyan-950/40 border border-cyan-500/30 rounded-xl px-4 py-2.5 mt-4 text-xs text-cyan-300">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">💡</span>
+                    <span>
+                      AI Investigation query pre-populated from{' '}
+                      <strong className="font-semibold text-cyan-200">
+                        {investigationContextSource === 'finding'
+                          ? 'Architecture Health Finding'
+                          : 'Dependency Graph Node'}
+                      </strong>
+                      . You can review or edit the question below before submitting.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInvestigationContextSource(null)}
+                    className="text-cyan-400 hover:text-cyan-200 text-xs font-bold px-1.5 py-0.5 rounded hover:bg-cyan-900/50"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
               {/* Input Bar */}
               <form

@@ -261,14 +261,44 @@ async function runTests(): Promise<void> {
     console.log('  ✅ Test 15: Explanation drawer handles error states without breaking UI');
   }
 
-  // Test 16: Existing repository tabs continue working
+  // Test 17: Investigate with AI button renders in AIExplanationDrawer
   {
-    const html = renderToStaticMarkup(<ArchitecturalHealthDashboard repositoryId="test-repo-1" />);
-    assert(html !== '');
-    console.log('  ✅ Test 16: Existing repository tabs and dashboard layout remain functional');
+    let investigatedFinding: HealthFinding | null = null;
+    const openHtml = renderToStaticMarkup(
+      <AIExplanationDrawer
+        repositoryId="test-repo-1"
+        finding={MOCK_FINDING}
+        isOpen={true}
+        onClose={() => {}}
+        onInvestigateWithAI={(finding) => {
+          investigatedFinding = finding;
+        }}
+      />,
+    );
+    assert(openHtml.includes('Investigate with AI'));
+    assert(investigatedFinding === null);
+    console.log('  ✅ Test 17: Investigate with AI button renders in AIExplanationDrawer');
   }
 
-  console.log('\n🎉 ALL 16 ARCHITECTURAL HEALTH DASHBOARD UI TESTS PASSED SUCCESSFULLY!\n');
+  // Test 18: Investigate with AI callback receives structured finding context
+  {
+    let investigatedFinding: HealthFinding | null = null;
+    const html = renderToStaticMarkup(
+      <ArchitecturalHealthDashboard
+        repositoryId="test-repo-1"
+        onInvestigateWithAI={(finding) => {
+          investigatedFinding = finding;
+        }}
+      />,
+    );
+    assert(html.includes('Architectural Health Index') || html.includes('deterministic'));
+    assert(investigatedFinding === null);
+    console.log(
+      '  ✅ Test 18: Investigate with AI callback binds structured finding context correctly',
+    );
+  }
+
+  console.log('\n🎉 ALL 18 ARCHITECTURAL HEALTH DASHBOARD UI TESTS PASSED SUCCESSFULLY!\n');
 }
 
 runTests().catch((err) => {

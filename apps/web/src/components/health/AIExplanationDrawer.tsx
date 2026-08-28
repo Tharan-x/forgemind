@@ -16,6 +16,7 @@ interface AIExplanationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onHighlightOnGraph?: (finding: HealthFinding) => void;
+  onInvestigateWithAI?: (finding: HealthFinding) => void;
 }
 
 export function AIExplanationDrawer({
@@ -24,6 +25,7 @@ export function AIExplanationDrawer({
   isOpen,
   onClose,
   onHighlightOnGraph,
+  onInvestigateWithAI,
 }: AIExplanationDrawerProps) {
   const [data, setData] = useState<ArchitectureHealthExplanationResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -116,6 +118,19 @@ export function AIExplanationDrawer({
                 }}
               >
                 🔍 Highlight on Graph
+              </Button>
+            )}
+            {onInvestigateWithAI && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onInvestigateWithAI(finding);
+                  onClose();
+                }}
+                className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 font-semibold"
+              >
+                🤖 Investigate with AI
               </Button>
             )}
           </div>

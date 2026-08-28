@@ -16,6 +16,10 @@ interface DependencyGraphVisualizerProps {
   onSelectNodeForImpact?: (filePath: string, symbolName?: string) => void;
   onSelectNodeForExplain?: (filePath: string, symbolName?: string) => void;
   onSelectNodeForFiles?: (filePath: string) => void;
+  onSelectNodeForAIInvestigation?: (
+    node: GraphNode,
+    blastRadiusInfo: { incoming: GraphNode[]; outgoing: GraphNode[]; reachableCount: number },
+  ) => void;
 }
 
 export function DependencyGraphVisualizer({
@@ -24,6 +28,7 @@ export function DependencyGraphVisualizer({
   onSelectNodeForImpact,
   onSelectNodeForExplain,
   onSelectNodeForFiles,
+  onSelectNodeForAIInvestigation,
 }: DependencyGraphVisualizerProps) {
   const [data, setData] = useState<RepositoryGraphResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -542,6 +547,15 @@ export function DependencyGraphVisualizer({
 
                 {/* Direct Action Buttons */}
                 <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  {onSelectNodeForAIInvestigation && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-center text-xs h-8 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 font-semibold"
+                      onClick={() => onSelectNodeForAIInvestigation(selectedNode, blastRadiusInfo)}
+                    >
+                      🤖 Investigate with AI
+                    </Button>
+                  )}
                   {selectedNode.path && onSelectNodeForFiles && (
                     <Button
                       variant="outline"
