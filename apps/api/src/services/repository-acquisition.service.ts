@@ -80,6 +80,8 @@ export async function executeAnalysisJob(
     const startedAt = job.startedAt ?? new Date();
     await updateAnalysisJobStatus(job.id, {
       status: 'in_progress',
+      stage: 'fetching',
+      stageLabel: 'Fetching repository tree from GitHub',
       startedAt,
     });
 
@@ -89,6 +91,13 @@ export async function executeAnalysisJob(
 
     const treeResponse = await github.getTree(repo.owner, repo.name, commitHash, true);
     const treeItems = treeResponse.tree || [];
+
+    await updateAnalysisJobStatus(job.id, {
+      stage: 'indexing_files',
+      stageLabel: 'Indexing repository files',
+      processedCount: 0,
+      totalCount: treeItems.length,
+    });
 
     const indexing = await indexRepositoryTree(repositoryId, treeItems);
 
@@ -106,7 +115,16 @@ export async function executeAnalysisJob(
     let totalChunksEmbedded = 0;
     let chunksSkippedUnchanged = 0;
 
-    for (const file of codeFiles) {
+    await updateAnalysisJobStatus(job.id, {
+      stage: 'processing_code',
+      stageLabel: 'Processing code, symbols & embeddings',
+      processedCount: 0,
+      totalCount: codeFiles.length,
+    });
+
+    for (let i = 0; i < codeFiles.length; i++) {
+      const file = codeFiles[i];
+      if (!file) continue;
       try {
         const content = await github.getFileContent(repo.owner, repo.name, file.path, commitHash);
         if (content) {
@@ -142,6 +160,14 @@ export async function executeAnalysisJob(
         // eslint-disable-next-line no-console
         console.warn(`[Analysis] Skipping file ${file.path} due to processing error:`, fileErr);
       }
+
+      // Update progress every 5 files or on the final file to avoid tight DB loop writes
+      if ((i + 1) % 5 === 0 || i === codeFiles.length - 1) {
+        await updateAnalysisJobStatus(job.id, {
+          processedCount: i + 1,
+          totalCount: codeFiles.length,
+        });
+      }
     }
 
     const extraction: ExtractionResult = {
@@ -166,6 +192,10 @@ export async function executeAnalysisJob(
     const finishedAt = new Date();
     const completedJob = await updateAnalysisJobStatus(job.id, {
       status: 'completed',
+      stage: 'completed',
+      stageLabel: 'Analysis completed successfully',
+      processedCount: codeFiles.length,
+      totalCount: codeFiles.length,
       commitHash,
       finishedAt,
     });
@@ -174,6 +204,10 @@ export async function executeAnalysisJob(
       job: completedJob || {
         ...job,
         status: 'completed',
+        stage: 'completed',
+        stageLabel: 'Analysis completed successfully',
+        processedCount: codeFiles.length,
+        totalCount: codeFiles.length,
         commitHash,
         startedAt,
         finishedAt,
@@ -191,6 +225,8 @@ export async function executeAnalysisJob(
 
     const failedJob = await updateAnalysisJobStatus(job.id, {
       status: 'failed',
+      stage: 'failed',
+      stageLabel: 'Ingestion failed',
       error: errorMessage,
       finishedAt,
     });

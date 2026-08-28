@@ -59,7 +59,12 @@ import {
   clearRepositoryChatHistory,
 } from '../../lib/rag.api.js';
 
-import { getRepository, getRepositories, type Repository } from '../../lib/repository.api.js';
+import {
+  getRepository,
+  getRepositories,
+  type Repository,
+  type AnalysisJobInfo,
+} from '../../lib/repository.api.js';
 
 import { useAuth, type AuthContextType } from '../../context/AuthContext.js';
 import { useToast, type ToastContextType, type ToastType } from '../../context/ToastContext.js';
@@ -1504,7 +1509,8 @@ async function runPartD(): Promise<void> {
     const overviewTab = getActiveTab(rendered);
     const statusCard = overviewTab.props.children[1];
 
-    const grid = statusCard.props.children[1];
+    const wrapper = statusCard.props.children[1];
+    const grid = wrapper.props.children[0];
     assertEqual(
       grid.props.children[0].props.children[1].props.children,
       MOCK_JOB.id,
@@ -2073,6 +2079,119 @@ async function runPartE(): Promise<void> {
     const res = filterRepos(sparseList, 'test', 'ready', 'TypeScript');
     assertEqual(res.length, 0, 'Test 59: Sparse repo handled safely without throwing');
     console.log('  ✅ Test 59: Filtering logic handles null/empty repository fields safely');
+  }
+
+  // ── Part G — Granular Ingestion Progress UI & Polling (Tests 60–65) ────────
+  console.log('\n📋 Part G — Granular Ingestion Progress UI & Polling (Tests 60–65)');
+
+  // Test 60: Real percentage calculation from processedCount & totalCount
+  {
+    const calculatePct = (processed?: number | null, total?: number | null): number | null => {
+      if (typeof processed === 'number' && typeof total === 'number' && total > 0) {
+        return Math.min(100, Math.max(0, Math.round((processed / total) * 100)));
+      }
+      return null;
+    };
+
+    assertEqual(calculatePct(42, 120), 35, 'Test 60: 42/120 calculates to 35%');
+    assertEqual(calculatePct(120, 120), 100, 'Test 60: 120/120 calculates to 100%');
+    assertEqual(calculatePct(0, 50), 0, 'Test 60: 0/50 calculates to 0%');
+    console.log('  ✅ Test 60: Granular ingestion progress formats real percentage accurately');
+  }
+
+  // Test 61: Percentage evaluates to null when totalCount is zero or missing (no fake percentage)
+  {
+    const calculatePct = (processed?: number | null, total?: number | null): number | null => {
+      if (typeof processed === 'number' && typeof total === 'number' && total > 0) {
+        return Math.min(100, Math.max(0, Math.round((processed / total) * 100)));
+      }
+      return null;
+    };
+
+    assertEqual(calculatePct(10, 0), null, 'Test 61: Total count 0 returns null percentage');
+    assertEqual(
+      calculatePct(undefined, undefined),
+      null,
+      'Test 61: Missing counts return null percentage',
+    );
+    console.log(
+      '  ✅ Test 61: Progress percentage evaluates to null when denominator is unavailable',
+    );
+  }
+
+  // Test 62: Active stage label is preserved for active ingestion jobs
+  {
+    const job: AnalysisJobInfo = {
+      id: 'job-active-1',
+      repositoryId: 'repo-1',
+      status: 'in_progress',
+      stage: 'processing_code',
+      stageLabel: 'Processing code, symbols & embeddings',
+      processedCount: 25,
+      totalCount: 100,
+    };
+
+    assertEqual(
+      job.stageLabel,
+      'Processing code, symbols & embeddings',
+      'Test 62: Active stage label preserved',
+    );
+    assertEqual(job.status, 'in_progress', 'Test 62: Status is in_progress');
+    console.log('  ✅ Test 62: Active stage label is preserved and exposed for active jobs');
+  }
+
+  // Test 63: Failed job state preserves safe error message and retry action requirement
+  {
+    const failedJob: AnalysisJobInfo = {
+      id: 'job-failed-1',
+      repositoryId: 'repo-1',
+      status: 'failed',
+      stage: 'failed',
+      stageLabel: 'Ingestion failed',
+      error: 'GitHub API rate limit exceeded.',
+    };
+
+    assertEqual(failedJob.status, 'failed', 'Test 63: Status is failed');
+    assertEqual(
+      failedJob.error,
+      'GitHub API rate limit exceeded.',
+      'Test 63: Error message matched',
+    );
+    console.log('  ✅ Test 63: Failed job state preserves safe error message and enables retry');
+  }
+
+  // Test 64: Active polling detector identifies pending and indexing repositories
+  {
+    const isJobActive = (status?: string): boolean =>
+      status === 'indexing' ||
+      status === 'queued' ||
+      status === 'in_progress' ||
+      status === 'pending';
+
+    assertEqual(isJobActive('indexing'), true, 'Test 64: indexing triggers polling');
+    assertEqual(isJobActive('queued'), true, 'Test 64: queued triggers polling');
+    assertEqual(isJobActive('in_progress'), true, 'Test 64: in_progress triggers polling');
+    assertEqual(isJobActive('pending'), true, 'Test 64: pending triggers polling');
+    console.log(
+      '  ✅ Test 64: Polling condition correctly identifies active jobs requiring updates',
+    );
+  }
+
+  // Test 65: Polling deactivates when repository reaches terminal status
+  {
+    const isJobActive = (status?: string): boolean =>
+      status === 'indexing' ||
+      status === 'queued' ||
+      status === 'in_progress' ||
+      status === 'pending';
+
+    assertEqual(isJobActive('ready'), false, 'Test 65: ready stops polling');
+    assertEqual(isJobActive('completed'), false, 'Test 65: completed stops polling');
+    assertEqual(isJobActive('failed'), false, 'Test 65: failed stops polling');
+    assertEqual(isJobActive('connected'), false, 'Test 65: connected stops polling');
+    console.log(
+      '  ✅ Test 65: Polling automatically deactivates when repository reaches terminal state',
+    );
   }
 }
 

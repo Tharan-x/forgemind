@@ -98,15 +98,19 @@ model RepositoryMember {
 // ─── 4. Analysis Jobs Model ───────────────────────────────────────────────────
 
 model AnalysisJob {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  repositoryId String    @map("repository_id") @db.Uuid
-  status       String    @default("pending")
-  commitHash   String?   @map("commit_hash")
-  error        String?
-  startedAt    DateTime? @map("started_at")
-  finishedAt   DateTime? @map("finished_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId   String    @map("repository_id") @db.Uuid
+  status         String    @default("pending")
+  stage          String?   @default("queued")
+  stageLabel     String?   @map("stage_label")
+  processedCount Int?      @map("processed_count")
+  totalCount     Int?      @map("total_count")
+  commitHash     String?   @map("commit_hash")
+  error          String?
+  startedAt      DateTime? @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 

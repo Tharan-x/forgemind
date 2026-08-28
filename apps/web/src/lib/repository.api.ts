@@ -11,6 +11,10 @@ export interface AnalysisJobInfo {
   id: string;
   repositoryId: string;
   status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  stage?: string | null;
+  stageLabel?: string | null;
+  processedCount?: number | null;
+  totalCount?: number | null;
   commitHash?: string | null;
   error?: string | null;
   startedAt?: string | null;

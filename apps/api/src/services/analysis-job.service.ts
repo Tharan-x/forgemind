@@ -9,6 +9,10 @@ import { prisma } from '../lib/prisma.js';
 
 export interface UpdateAnalysisJobOptions {
   status?: string;
+  stage?: string | null;
+  stageLabel?: string | null;
+  processedCount?: number | null;
+  totalCount?: number | null;
   commitHash?: string | null;
   error?: string | null;
   startedAt?: Date | null;
@@ -26,13 +30,15 @@ export async function createAnalysisJob(
     data: {
       repositoryId,
       status: 'pending',
+      stage: 'queued',
+      stageLabel: 'Queued in worker pipeline',
       commitHash: commitHash ?? null,
     },
   });
 }
 
 /**
- * Updates an analysis job status and optional parameters (error, commitHash, timestamps).
+ * Updates an analysis job status and optional parameters (error, commitHash, timestamps, stage, counts).
  */
 export async function updateAnalysisJobStatus(
   id: string,
@@ -42,6 +48,10 @@ export async function updateAnalysisJobStatus(
     const data: Prisma.AnalysisJobUpdateInput = {};
 
     if (options.status !== undefined) data.status = options.status;
+    if (options.stage !== undefined) data.stage = options.stage;
+    if (options.stageLabel !== undefined) data.stageLabel = options.stageLabel;
+    if (options.processedCount !== undefined) data.processedCount = options.processedCount;
+    if (options.totalCount !== undefined) data.totalCount = options.totalCount;
     if (options.commitHash !== undefined) data.commitHash = options.commitHash;
     if (options.error !== undefined) data.error = options.error;
     if (options.startedAt !== undefined) data.startedAt = options.startedAt;

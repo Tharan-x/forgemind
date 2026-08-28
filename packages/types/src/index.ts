@@ -120,6 +120,10 @@ export interface AnalysisJob {
   id: string;
   repositoryId: string;
   status: AnalysisJobStatus | string;
+  stage?: string | null;
+  stageLabel?: string | null;
+  processedCount?: number | null;
+  totalCount?: number | null;
   commitHash: string | null;
   error: string | null;
   startedAt: string | null;

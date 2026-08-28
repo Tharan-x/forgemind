@@ -329,9 +329,40 @@ export default function RepositoryDetailPage() {
     }
   }, [repositoryId]);
 
+  const fetchRepoDataSilently = useCallback(async () => {
+    if (!repositoryId) return;
+    try {
+      const [repo, job] = await Promise.all([
+        getRepository(repositoryId),
+        getLatestAnalysisJob(repositoryId).catch(() => null),
+      ]);
+      if (repo) setRepository(repo);
+      if (job) setLatestJob(job);
+    } catch {
+      // Swallowed silently during polling
+    }
+  }, [repositoryId]);
+
   useEffect(() => {
     fetchRepoData();
   }, [fetchRepoData]);
+
+  // Live polling for active analysis progress
+  useEffect(() => {
+    const isProcessing =
+      repository?.status === 'indexing' ||
+      repository?.status === 'queued' ||
+      latestJob?.status === 'pending' ||
+      latestJob?.status === 'in_progress';
+
+    if (!isProcessing) return;
+
+    const intervalId = setInterval(() => {
+      fetchRepoDataSilently();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [repository?.status, latestJob?.status, fetchRepoDataSilently]);
 
   // Load Files
   const fetchFiles = useCallback(async () => {
@@ -754,40 +785,135 @@ export default function RepositoryDetailPage() {
 
             {/* Analysis Job Status Log Card */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <span>⚡</span>
-                <span>Analysis Engine Status</span>
+              <h3 className="text-base font-bold text-white flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <span>⚡</span>
+                  <span>Analysis Engine Status</span>
+                </span>
+                {latestJob?.stageLabel && (
+                  <span className="text-xs text-sky-400 bg-sky-500/10 border border-sky-500/20 px-3 py-1 rounded-full font-medium">
+                    {latestJob.stageLabel}
+                  </span>
+                )}
               </h3>
 
               {latestJob ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-zinc-950 border border-zinc-800/80 rounded-xl p-4 text-xs">
-                  <div>
-                    <span className="text-zinc-500 block font-medium">Job ID</span>
-                    <span className="font-mono text-zinc-300 truncate block">{latestJob.id}</span>
+                <div className="space-y-4 bg-zinc-950 border border-zinc-800/80 rounded-xl p-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <span className="text-zinc-500 block font-medium">Job ID</span>
+                      <span className="font-mono text-zinc-300 truncate block">{latestJob.id}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-zinc-500 block font-medium">Status</span>
+                      <span
+                        className={`font-semibold capitalize ${
+                          latestJob.status === 'completed'
+                            ? 'text-emerald-400'
+                            : latestJob.status === 'in_progress'
+                              ? 'text-sky-400'
+                              : latestJob.status === 'failed'
+                                ? 'text-red-400'
+                                : 'text-amber-400'
+                        }`}
+                      >
+                        {latestJob.status === 'in_progress' ? 'Indexing' : latestJob.status}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-zinc-500 block font-medium">Started At</span>
+                      <span className="text-zinc-300">
+                        {latestJob.startedAt
+                          ? new Date(latestJob.startedAt).toLocaleString()
+                          : 'N/A'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-zinc-500 block font-medium">Finished At</span>
+                      <span className="text-zinc-300">
+                        {latestJob.finishedAt
+                          ? new Date(latestJob.finishedAt).toLocaleString()
+                          : 'N/A'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div>
-                    <span className="text-zinc-500 block font-medium">Status</span>
-                    <span className="font-semibold text-emerald-400 capitalize">
-                      {latestJob.status}
-                    </span>
-                  </div>
+                  {/* Progress Bar & Real Denominator Count */}
+                  {(latestJob.status === 'in_progress' || latestJob.status === 'pending') && (
+                    <div className="pt-2 border-t border-zinc-800/60 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-400 font-medium">
+                          {latestJob.stageLabel || 'Processing repository data...'}
+                        </span>
+                        {typeof latestJob.processedCount === 'number' &&
+                          typeof latestJob.totalCount === 'number' &&
+                          latestJob.totalCount > 0 && (
+                            <span className="font-mono text-emerald-400 font-bold">
+                              {latestJob.processedCount} / {latestJob.totalCount} files (
+                              {Math.min(
+                                100,
+                                Math.max(
+                                  0,
+                                  Math.round(
+                                    (latestJob.processedCount / latestJob.totalCount) * 100,
+                                  ),
+                                ),
+                              )}
+                              %)
+                            </span>
+                          )}
+                      </div>
 
-                  <div>
-                    <span className="text-zinc-500 block font-medium">Started At</span>
-                    <span className="text-zinc-300">
-                      {latestJob.startedAt ? new Date(latestJob.startedAt).toLocaleString() : 'N/A'}
-                    </span>
-                  </div>
+                      {typeof latestJob.processedCount === 'number' &&
+                        typeof latestJob.totalCount === 'number' &&
+                        latestJob.totalCount > 0 && (
+                          <div className="w-full bg-zinc-900 border border-zinc-800 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="bg-emerald-500 h-2 transition-all duration-300 rounded-full"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    Math.round(
+                                      (latestJob.processedCount / latestJob.totalCount) * 100,
+                                    ),
+                                  ),
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                    </div>
+                  )}
 
-                  <div>
-                    <span className="text-zinc-500 block font-medium">Finished At</span>
-                    <span className="text-zinc-300">
-                      {latestJob.finishedAt
-                        ? new Date(latestJob.finishedAt).toLocaleString()
-                        : 'N/A'}
-                    </span>
-                  </div>
+                  {/* Failure State & Safe Error Presentation */}
+                  {latestJob.status === 'failed' && (
+                    <div className="pt-2 border-t border-zinc-800/60 space-y-2">
+                      <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <span className="text-red-400 font-bold block">
+                            Analysis Ingestion Failed
+                          </span>
+                          <p className="text-red-300/80 text-xs mt-0.5">
+                            {latestJob.error ||
+                              'An unexpected error occurred during repository ingestion.'}
+                          </p>
+                        </div>
+                        <Button
+                          variant="default"
+                          onClick={handleTriggerAnalysis}
+                          disabled={analyzing}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs h-8 px-3 shrink-0"
+                        >
+                          Retry Analysis
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-6 text-center space-y-3">

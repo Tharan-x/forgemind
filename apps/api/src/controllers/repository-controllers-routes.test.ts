@@ -572,6 +572,10 @@ globalThis.fetch = async (
       id,
       repositoryId: data['repositoryId'],
       status: data['status'] || 'pending',
+      stage: data['stage'] || 'queued',
+      stageLabel: data['stageLabel'] || 'Queued in worker pipeline',
+      processedCount: data['processedCount'] ?? null,
+      totalCount: data['totalCount'] ?? null,
       commitHash: data['commitHash'] || 'sha-123',
       fileCount: data['fileCount'] || 0,
       symbolCount: data['symbolCount'] || 0,
@@ -2368,6 +2372,167 @@ async function runPartI() {
     assert(res.status === 403, 'Test 88: Status 403 for unauthorized repository retry');
     console.log(
       '  ✅ Test 88: POST /api/v1/repositories/:id/retry by unauthorized user returns HTTP 403',
+    );
+  }
+
+  // ── Part K — Granular Ingestion Progress Lifecycle (Tests 89–94) ────────────
+  console.log('\n📋 Part K — Granular Ingestion Progress Lifecycle (Tests 89–94)');
+
+  // Test 89: Enqueued analysis job contains pending status and queued stage metadata
+  {
+    // Clear existing jobs for REPO_ID_1 so enqueueAnalysisJob creates a fresh pending job
+    for (const [id, job] of Array.from(jobStore.entries())) {
+      if (job['repositoryId'] === REPO_ID_1) {
+        jobStore.delete(id);
+      }
+    }
+
+    const res = await apiRequest('POST', `/api/v1/repositories/${REPO_ID_1}/retry`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 202, 'Test 89: Status 202 for analyze enqueue');
+    const job = (res.body as any)?.job;
+    assertDefined(job, 'Test 89: Analysis job defined');
+    assertEqual(job.status, 'pending', 'Test 89: Status is pending');
+    assertEqual(job.stage, 'queued', 'Test 89: Stage is queued');
+    assert(typeof job.stageLabel === 'string', 'Test 89: Human readable stage label present');
+    console.log('  ✅ Test 89: Enqueued analysis job contains pending status and queued stage');
+  }
+
+  // Test 90: Active analysis job progress includes stage, stageLabel, processedCount, and totalCount
+  {
+    for (const [id, job] of Array.from(jobStore.entries())) {
+      if (job['repositoryId'] === REPO_ID_1) {
+        jobStore.delete(id);
+      }
+    }
+
+    const activeJobId = makeUuid(790);
+    jobStore.set(activeJobId, {
+      id: activeJobId,
+      repositoryId: REPO_ID_1,
+      status: 'in_progress',
+      stage: 'processing_code',
+      stageLabel: 'Processing code, symbols & embeddings',
+      processedCount: 42,
+      totalCount: 120,
+      startedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/analysis`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 90: Status 200 for GET latest analysis');
+    const job = (res.body as any)?.job;
+    assertDefined(job, 'Test 90: Active job returned');
+    assertEqual(job.status, 'in_progress', 'Test 90: Active job status in_progress');
+    assertEqual(job.stage, 'processing_code', 'Test 90: Active job stage processing_code');
+    assertEqual(job.processedCount, 42, 'Test 90: processedCount matches 42');
+    assertEqual(job.totalCount, 120, 'Test 90: totalCount matches 120');
+    console.log(
+      '  ✅ Test 90: Active analysis job exposes stage, stageLabel, processedCount, and totalCount',
+    );
+  }
+
+  // Test 91: Terminal completed analysis job returns finishedAt timestamp & completed stage
+  {
+    for (const [id, job] of Array.from(jobStore.entries())) {
+      if (job['repositoryId'] === REPO_ID_1) {
+        jobStore.delete(id);
+      }
+    }
+
+    const completedJobId = makeUuid(791);
+    jobStore.set(completedJobId, {
+      id: completedJobId,
+      repositoryId: REPO_ID_1,
+      status: 'completed',
+      stage: 'completed',
+      stageLabel: 'Analysis completed successfully',
+      processedCount: 120,
+      totalCount: 120,
+      commitHash: 'commit-sha-999',
+      startedAt: new Date(Date.now() - 5000),
+      finishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/analysis`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 91: Status 200 for completed job');
+    const job = (res.body as any)?.job;
+    assertDefined(job, 'Test 91: Completed job returned');
+    assertEqual(job.status, 'completed', 'Test 91: Completed status verified');
+    assertEqual(job.stage, 'completed', 'Test 91: Completed stage verified');
+    assertDefined(job.finishedAt, 'Test 91: finishedAt timestamp present');
+    console.log(
+      '  ✅ Test 91: Terminal completed analysis job returns finishedAt & completed stage',
+    );
+  }
+
+  // Test 92: Failed analysis job presents safe error message without credential leaks
+  {
+    for (const [id, job] of Array.from(jobStore.entries())) {
+      if (job['repositoryId'] === REPO_ID_1) {
+        jobStore.delete(id);
+      }
+    }
+
+    const failedJobId = makeUuid(792);
+    const safeError = 'GitHub API rate limit exceeded during repository acquisition.';
+    jobStore.set(failedJobId, {
+      id: failedJobId,
+      repositoryId: REPO_ID_1,
+      status: 'failed',
+      stage: 'failed',
+      stageLabel: 'Ingestion failed',
+      error: safeError,
+      startedAt: new Date(Date.now() - 3000),
+      finishedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/analysis`, {
+      token: TOKEN_USER_1,
+    });
+    assert(res.status === 200, 'Test 92: Status 200 for failed analysis query');
+    const job = (res.body as any)?.job;
+    assertDefined(job, 'Test 92: Failed job returned');
+    assertEqual(job.status, 'failed', 'Test 92: Status is failed');
+    assertEqual(job.error, safeError, 'Test 92: Safe error message matched');
+    assert(!String(job.error).includes('token'), 'Test 92: No sensitive token leaked in error');
+    console.log(
+      '  ✅ Test 92: Failed analysis job presents safe error message without credential leaks',
+    );
+  }
+
+  // Test 93: Analysis progress query by unauthorized user enforces tenant isolation (HTTP 403)
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${REPO_ID_1}/analysis`, {
+      token: TOKEN_USER_2,
+    });
+    assert(res.status === 403, 'Test 93: Status 403 Forbidden for cross-tenant analysis query');
+    console.log(
+      '  ✅ Test 93: Analysis progress query by unauthorized user enforces tenant isolation (HTTP 403)',
+    );
+  }
+
+  // Test 94: Analysis progress query for non-existent repository returns HTTP 404
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${NON_EXISTENT_REPO_ID}/analysis`, {
+      token: TOKEN_USER_1,
+    });
+    assert(
+      res.status === 404,
+      'Test 94: Status 404 Not Found for non-existent repository analysis',
+    );
+    console.log(
+      '  ✅ Test 94: Analysis progress query for non-existent repository returns HTTP 404',
     );
   }
 }

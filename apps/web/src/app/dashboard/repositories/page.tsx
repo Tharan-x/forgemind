@@ -42,9 +42,32 @@ export default function RepositoriesPage() {
     }
   }, []);
 
+  const fetchRepositoriesSilently = useCallback(async () => {
+    try {
+      const data = await getRepositories();
+      setRepositories(data);
+    } catch {
+      // Swallowed silently during polling
+    }
+  }, []);
+
   useEffect(() => {
     fetchRepositories();
   }, [fetchRepositories]);
+
+  // Live polling for active analysis progress across repositories
+  useEffect(() => {
+    const hasActiveIndexing = repositories.some(
+      (r) => r.status === 'indexing' || r.status === 'queued',
+    );
+    if (!hasActiveIndexing) return;
+
+    const intervalId = setInterval(() => {
+      fetchRepositoriesSilently();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [repositories, fetchRepositoriesSilently]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -331,6 +354,60 @@ export default function RepositoriesPage() {
                       <p className="text-zinc-400 text-xs line-clamp-2 leading-relaxed">
                         {repo.description}
                       </p>
+                    )}
+
+                    {/* Active Ingestion Progress Bar & Stage */}
+                    {(status === 'indexing' || status === 'queued') && (
+                      <div className="pt-2 border-t border-zinc-800/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-sky-400 font-medium truncate">
+                            {repo.latestJob?.stageLabel ||
+                              (status === 'queued'
+                                ? 'Queued in worker pipeline'
+                                : 'Indexing repository data...')}
+                          </span>
+                          {typeof repo.latestJob?.processedCount === 'number' &&
+                            typeof repo.latestJob?.totalCount === 'number' &&
+                            repo.latestJob.totalCount > 0 && (
+                              <span className="font-mono text-emerald-400 font-semibold shrink-0 ml-2">
+                                {repo.latestJob.processedCount} / {repo.latestJob.totalCount} (
+                                {Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    Math.round(
+                                      (repo.latestJob.processedCount / repo.latestJob.totalCount) *
+                                        100,
+                                    ),
+                                  ),
+                                )}
+                                %)
+                              </span>
+                            )}
+                        </div>
+                        {typeof repo.latestJob?.processedCount === 'number' &&
+                          typeof repo.latestJob?.totalCount === 'number' &&
+                          repo.latestJob.totalCount > 0 && (
+                            <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className="bg-sky-400 h-1.5 transition-all duration-300 rounded-full"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    Math.max(
+                                      0,
+                                      Math.round(
+                                        (repo.latestJob.processedCount /
+                                          repo.latestJob.totalCount) *
+                                          100,
+                                      ),
+                                    ),
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          )}
+                      </div>
                     )}
                   </div>
 
