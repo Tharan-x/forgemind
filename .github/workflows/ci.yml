@@ -83,10 +83,25 @@ jobs:
       - lint
       - type-check
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: forgemind
+          POSTGRES_PASSWORD: forgemind_local_password
+          POSTGRES_DB: forgemind
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U forgemind -d forgemind"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       NODE_ENV: 'test'
-      DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
-      DIRECT_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+      DATABASE_URL: 'postgresql://forgemind:forgemind_local_password@localhost:5432/forgemind'
+      DIRECT_URL: 'postgresql://forgemind:forgemind_local_password@localhost:5432/forgemind'
       SUPABASE_URL: 'https://placeholder.supabase.co'
       SUPABASE_ANON_KEY: 'placeholder'
 
@@ -110,6 +125,9 @@ jobs:
 
       - name: Generate Prisma Client
         run: pnpm --filter @forgemind/api db:generate
+
+      - name: Push Database Schema
+        run: pnpm --filter @forgemind/api db:push
 
       - name: Run API integration test suite
         run: pnpm --filter @forgemind/api test
