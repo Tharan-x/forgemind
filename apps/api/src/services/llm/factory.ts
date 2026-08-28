@@ -25,9 +25,9 @@ export function getLLMProvider(options: LLMProviderOptions = {}): LLMProvider {
 
   const requested = process.env['LLM_PROVIDER']?.toLowerCase();
 
-  if (requested === 'openai' || (!requested && process.env['OPENAI_API_KEY'])) {
+  if (requested === 'gemini' || (!requested && process.env['GEMINI_API_KEY'])) {
     try {
-      const provider = new OpenAILLMProvider(options);
+      const provider = new GeminiLLMProvider(options);
       if (!options.apiKey) cachedLLMProvider = provider;
       return provider;
     } catch {
@@ -35,9 +35,9 @@ export function getLLMProvider(options: LLMProviderOptions = {}): LLMProvider {
     }
   }
 
-  if (requested === 'gemini' || (!requested && process.env['GEMINI_API_KEY'])) {
+  if (requested === 'openai' || (!requested && process.env['OPENAI_API_KEY'])) {
     try {
-      const provider = new GeminiLLMProvider(options);
+      const provider = new OpenAILLMProvider(options);
       if (!options.apiKey) cachedLLMProvider = provider;
       return provider;
     } catch {

@@ -15,7 +15,7 @@ export class GeminiLLMProvider implements LLMProvider {
       throw new Error('GEMINI_API_KEY environment variable or options.apiKey is required.');
     }
     this.apiKey = key;
-    this.model = options.model || 'gemini-1.5-flash';
+    this.model = options.model || process.env['GEMINI_MODEL'] || 'gemini-2.5-flash';
   }
 
   async generateAnswer(systemPrompt: string, userPrompt: string): Promise<string> {

@@ -51,9 +51,9 @@ export function getEmbeddingProvider(options: EmbeddingProviderOptions = {}): Em
   }
 
   // Auto-detection when no explicit provider setting is present
-  if (options.apiKey || process.env['OPENAI_API_KEY']) {
+  if (options.apiKey || process.env['GEMINI_API_KEY']) {
     try {
-      const provider = new OpenAIEmbeddingProvider(options);
+      const provider = new GeminiEmbeddingProvider(options);
       if (!options.apiKey) cachedProvider = provider;
       return provider;
     } catch {
@@ -61,9 +61,9 @@ export function getEmbeddingProvider(options: EmbeddingProviderOptions = {}): Em
     }
   }
 
-  if (options.apiKey || process.env['GEMINI_API_KEY']) {
+  if (options.apiKey || process.env['OPENAI_API_KEY']) {
     try {
-      const provider = new GeminiEmbeddingProvider(options);
+      const provider = new OpenAIEmbeddingProvider(options);
       if (!options.apiKey) cachedProvider = provider;
       return provider;
     } catch {

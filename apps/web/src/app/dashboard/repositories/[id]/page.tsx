@@ -2145,7 +2145,11 @@ export default function RepositoryDetailPage() {
                                       ).map((src, srcIdx) => (
                                         <div
                                           key={srcIdx}
-                                          className="bg-zinc-950 border border-zinc-800 hover:border-emerald-500/30 rounded-xl p-3 text-xs space-y-1.5 transition-colors"
+                                          onClick={() => {
+                                            setFileSearch(src.filePath);
+                                            setActiveTab('files');
+                                          }}
+                                          className="bg-zinc-950 border border-zinc-800 hover:border-emerald-500/50 rounded-xl p-3 text-xs space-y-1.5 transition-colors cursor-pointer"
                                         >
                                           <div className="flex items-start justify-between gap-2">
                                             <span
@@ -2252,7 +2256,11 @@ export default function RepositoryDetailPage() {
                               {msg.sources.map((src, idx) => (
                                 <div
                                   key={idx}
-                                  className="group bg-zinc-950 border border-zinc-800 hover:border-emerald-500/30 rounded-xl p-3 text-xs space-y-1.5 transition-colors"
+                                  onClick={() => {
+                                    setFileSearch(src.filePath);
+                                    setActiveTab('files');
+                                  }}
+                                  className="group bg-zinc-950 border border-zinc-800 hover:border-emerald-500/50 rounded-xl p-3 text-xs space-y-1.5 transition-colors cursor-pointer"
                                 >
                                   {/* File path + line range */}
                                   <div className="flex items-start justify-between gap-2">
