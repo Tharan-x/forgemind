@@ -30,6 +30,11 @@ export const env = {
   SUPABASE_ANON_KEY: optionalEnv('SUPABASE_ANON_KEY', ''),
   SUPABASE_SERVICE_ROLE_KEY: optionalEnv('SUPABASE_SERVICE_ROLE_KEY', ''),
 
+  // GitHub Webhooks
+  // Required for HMAC-SHA256 webhook signature verification.
+  // Generate a strong random secret (e.g. openssl rand -hex 32) and set the same value in GitHub.
+  GITHUB_WEBHOOK_SECRET: optionalEnv('GITHUB_WEBHOOK_SECRET', ''),
+
   // Helpers
   get isDevelopment() {
     return this.NODE_ENV === 'development';
