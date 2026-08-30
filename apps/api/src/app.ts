@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { env } from './config/env.js';
 import { globalRateLimiter } from './lib/rate-limiter.js';
 import { router } from './routes/index.js';
+import { webhookRouter } from './routes/webhook.routes.js';
 
 // ─── App Factory ─────────────────────────────────────────────────────────────
 
@@ -34,7 +35,17 @@ export function createApp(): express.Application {
     app.use(morgan(env.isDevelopment ? 'dev' : 'combined'));
   }
 
-  // ── Body parsing ─────────────────────────────────────────────────────────
+  // ── GitHub Webhook Raw Body Route ────────────────────────────────────────
+  // MUST be registered BEFORE global express.json() so the raw request body
+  // Buffer is preserved for HMAC-SHA256 signature verification.
+  app.use(
+    '/api/v1/github/webhooks',
+    globalRateLimiter,
+    express.raw({ type: '*/*', limit: '10mb' }),
+    webhookRouter,
+  );
+
+  // ── Body parsing for standard JSON/URL-encoded API endpoints ─────────────
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 

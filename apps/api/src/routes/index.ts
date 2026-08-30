@@ -18,9 +18,6 @@ router.use('/account', accountRouter);
 // Repository endpoints
 router.use('/repositories', repositoryRouter);
 
-// GitHub Webhook endpoints (no auth — HMAC-verified)
-router.use('/github/webhooks', webhookRouter);
-
 // Public onboarding share endpoints (no auth required — token self-validates)
 router.use('/onboarding/share', onboardingShareRouter);
 

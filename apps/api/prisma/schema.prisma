@@ -108,6 +108,11 @@ model AnalysisJob {
   processedCount Int?      @map("processed_count")
   totalCount     Int?      @map("total_count")
   commitHash     String?   @map("commit_hash")
+  triggerSource  String?   @default("manual") @map("trigger_source")
+  prNumber       Int?      @map("pr_number")
+  headSha        String?   @map("head_sha")
+  baseSha        String?   @map("base_sha")
+  targetRef      String?   @map("target_ref")
   error          String?
   startedAt      DateTime? @map("started_at")
   finishedAt     DateTime? @map("finished_at")
@@ -119,6 +124,7 @@ model AnalysisJob {
 
   @@index([status])
   @@index([repositoryId, status])
+  @@index([repositoryId, prNumber, headSha])
   @@map("analysis_jobs")
 }
 

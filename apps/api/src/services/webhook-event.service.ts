@@ -5,6 +5,8 @@
 import { Prisma, type WebhookDelivery } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 
+import { createAnalysisJob, findActivePRAnalysisJob } from './analysis-job.service.js';
+
 export interface NormalizedPREvent {
   deliveryId: string;
   eventType: 'pull_request';
@@ -247,6 +249,21 @@ export async function processWebhookDelivery(options: {
     status: 'processed',
     processedAt: new Date(),
   });
+
+  // 6. Enqueue PR AnalysisJob if event is not stale and no active job exists for this PR head SHA
+  if (!isStale) {
+    const existingActiveJob = await findActivePRAnalysisJob(repo.id, event.prNumber, event.headSha);
+    if (!existingActiveJob) {
+      await createAnalysisJob(repo.id, {
+        triggerSource: 'pull_request',
+        prNumber: event.prNumber,
+        headSha: event.headSha,
+        baseSha: event.baseSha,
+        targetRef: event.baseRef,
+        commitHash: event.headSha,
+      });
+    }
+  }
 
   return {
     status: 'processed',

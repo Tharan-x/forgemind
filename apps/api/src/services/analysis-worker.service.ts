@@ -4,8 +4,10 @@
 
 import { claimNextAnalysisJob, updateAnalysisJobStatus } from './analysis-job.service.js';
 import { getDecryptedGitHubToken } from './github-credential.service.js';
+import { computePRArchitectureSnapshot } from './pr-analysis.service.js';
 import { executeAnalysisJob } from './repository-acquisition.service.js';
 import { findRepositoryById } from './repository.service.js';
+import { isLatestPREvent } from './webhook-event.service.js';
 
 /**
  * Claims and processes the next pending or stale analysis job.
@@ -29,6 +31,20 @@ export async function processNextAnalysisJob(): Promise<boolean> {
       return true;
     }
 
+    // Check for stale out-of-order PR event before attempting API calls or token decryption
+    if (job.triggerSource === 'pull_request' && job.prNumber && job.headSha) {
+      const isLatest = await isLatestPREvent(job.repositoryId, job.prNumber, job.headSha);
+      if (!isLatest) {
+        await updateAnalysisJobStatus(job.id, {
+          status: 'completed',
+          stage: 'stale_skipped',
+          stageLabel: 'Skipped - newer PR commit received',
+          finishedAt: new Date(),
+        });
+        return true;
+      }
+    }
+
     const githubToken = await getDecryptedGitHubToken(repo.userId);
     if (!githubToken) {
       await updateAnalysisJobStatus(job.id, {
@@ -39,7 +55,12 @@ export async function processNextAnalysisJob(): Promise<boolean> {
       return true;
     }
 
-    await executeAnalysisJob(job, githubToken);
+    if (job.triggerSource === 'pull_request') {
+      await computePRArchitectureSnapshot(job, githubToken);
+    } else {
+      await executeAnalysisJob(job, githubToken);
+    }
+
     return true;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Worker analysis processing error';

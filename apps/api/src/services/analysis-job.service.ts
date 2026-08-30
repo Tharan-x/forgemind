@@ -7,6 +7,15 @@ import { Prisma } from '@prisma/client';
 
 import { prisma } from '../lib/prisma.js';
 
+export interface CreateAnalysisJobOptions {
+  commitHash?: string | null;
+  triggerSource?: string | null;
+  prNumber?: number | null;
+  headSha?: string | null;
+  baseSha?: string | null;
+  targetRef?: string | null;
+}
+
 export interface UpdateAnalysisJobOptions {
   status?: string;
   stage?: string | null;
@@ -14,6 +23,11 @@ export interface UpdateAnalysisJobOptions {
   processedCount?: number | null;
   totalCount?: number | null;
   commitHash?: string | null;
+  triggerSource?: string | null;
+  prNumber?: number | null;
+  headSha?: string | null;
+  baseSha?: string | null;
+  targetRef?: string | null;
   error?: string | null;
   startedAt?: Date | null;
   finishedAt?: Date | null;
@@ -21,24 +35,36 @@ export interface UpdateAnalysisJobOptions {
 
 /**
  * Creates a new analysis job for a repository.
+ * Supports legacy signature (repositoryId, commitHash) as well as options object.
  */
 export async function createAnalysisJob(
   repositoryId: string,
-  commitHash?: string,
+  options?: CreateAnalysisJobOptions | string,
 ): Promise<AnalysisJob> {
+  const opts: CreateAnalysisJobOptions =
+    typeof options === 'string' ? { commitHash: options } : (options ?? {});
+
   return prisma.analysisJob.create({
     data: {
       repositoryId,
       status: 'pending',
       stage: 'queued',
-      stageLabel: 'Queued in worker pipeline',
-      commitHash: commitHash ?? null,
+      stageLabel:
+        opts.triggerSource === 'pull_request'
+          ? 'Queued PR gatekeeper check'
+          : 'Queued in worker pipeline',
+      commitHash: opts.commitHash ?? opts.headSha ?? null,
+      triggerSource: opts.triggerSource ?? 'manual',
+      prNumber: opts.prNumber ?? null,
+      headSha: opts.headSha ?? opts.commitHash ?? null,
+      baseSha: opts.baseSha ?? null,
+      targetRef: opts.targetRef ?? null,
     },
   });
 }
 
 /**
- * Updates an analysis job status and optional parameters (error, commitHash, timestamps, stage, counts).
+ * Updates an analysis job status and optional parameters.
  */
 export async function updateAnalysisJobStatus(
   id: string,
@@ -53,6 +79,11 @@ export async function updateAnalysisJobStatus(
     if (options.processedCount !== undefined) data.processedCount = options.processedCount;
     if (options.totalCount !== undefined) data.totalCount = options.totalCount;
     if (options.commitHash !== undefined) data.commitHash = options.commitHash;
+    if (options.triggerSource !== undefined) data.triggerSource = options.triggerSource;
+    if (options.prNumber !== undefined) data.prNumber = options.prNumber;
+    if (options.headSha !== undefined) data.headSha = options.headSha;
+    if (options.baseSha !== undefined) data.baseSha = options.baseSha;
+    if (options.targetRef !== undefined) data.targetRef = options.targetRef;
     if (options.error !== undefined) data.error = options.error;
     if (options.startedAt !== undefined) data.startedAt = options.startedAt;
     if (options.finishedAt !== undefined) data.finishedAt = options.finishedAt;
@@ -106,6 +137,45 @@ export async function findActiveAnalysisJobByRepository(
 }
 
 /**
+ * Finds an existing PR analysis job by repository, PR number, and head SHA.
+ */
+export async function findPRAnalysisJob(
+  repositoryId: string,
+  prNumber: number,
+  headSha: string,
+): Promise<AnalysisJob | null> {
+  return prisma.analysisJob.findFirst({
+    where: {
+      repositoryId,
+      prNumber,
+      headSha,
+      triggerSource: 'pull_request',
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Finds an active (pending or in_progress) PR analysis job for repository, PR number, and head SHA.
+ */
+export async function findActivePRAnalysisJob(
+  repositoryId: string,
+  prNumber: number,
+  headSha: string,
+): Promise<AnalysisJob | null> {
+  return prisma.analysisJob.findFirst({
+    where: {
+      repositoryId,
+      prNumber,
+      headSha,
+      triggerSource: 'pull_request',
+      status: { in: ['pending', 'in_progress'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
  * Atomically claims the next pending or stale in_progress analysis job.
  * Transitions status to 'in_progress' and sets startedAt timestamp.
  * Uses Postgres FOR UPDATE SKIP LOCKED with fallback for test environments.
@@ -131,7 +201,27 @@ export async function claimNextAnalysisJob(): Promise<AnalysisJob | null> {
       RETURNING *;
     `;
     if (Array.isArray(rawResult) && rawResult.length > 0 && rawResult[0]) {
-      return rawResult[0];
+      const row = rawResult[0] as Record<string, unknown>;
+      return {
+        id: row['id'] as string,
+        repositoryId: (row['repository_id'] ?? row['repositoryId']) as string,
+        status: row['status'] as string,
+        stage: (row['stage'] ?? null) as string | null,
+        stageLabel: (row['stage_label'] ?? row['stageLabel'] ?? null) as string | null,
+        processedCount: (row['processed_count'] ?? row['processedCount'] ?? null) as number | null,
+        totalCount: (row['total_count'] ?? row['totalCount'] ?? null) as number | null,
+        commitHash: (row['commit_hash'] ?? row['commitHash'] ?? null) as string | null,
+        triggerSource: (row['trigger_source'] ?? row['triggerSource'] ?? null) as string | null,
+        prNumber: (row['pr_number'] ?? row['prNumber'] ?? null) as number | null,
+        headSha: (row['head_sha'] ?? row['headSha'] ?? null) as string | null,
+        baseSha: (row['base_sha'] ?? row['baseSha'] ?? null) as string | null,
+        targetRef: (row['target_ref'] ?? row['targetRef'] ?? null) as string | null,
+        error: (row['error'] ?? null) as string | null,
+        startedAt: row['started_at'] ? new Date(row['started_at'] as string | Date) : null,
+        finishedAt: row['finished_at'] ? new Date(row['finished_at'] as string | Date) : null,
+        createdAt: row['created_at'] ? new Date(row['created_at'] as string | Date) : new Date(),
+        updatedAt: row['updated_at'] ? new Date(row['updated_at'] as string | Date) : new Date(),
+      };
     }
   } catch {
     // Fallback for mocked Prisma / test environments
