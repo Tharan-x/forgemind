@@ -75,6 +75,8 @@ import {
   getSharedBlueprint,
   getArchitectureHealth,
   explainArchitectureFinding,
+  getArchitectureHealthHistory,
+  compareArchitectureHealth,
 } from './intelligence.api.js';
 
 import { getGitHubConnection, connectGitHub, disconnectGitHub } from './github-credential.api.js';
@@ -1819,6 +1821,100 @@ async function runPartI(): Promise<void> {
     assert(lastRequest.method === 'POST', 'Test 82: POST method');
     console.log(
       '  ✅ Test 82: explainArchitectureFinding sends POST to /intelligence/health/explain',
+    );
+  }
+
+  // Test 83: getArchitectureHealthHistory sends GET to /intelligence/architecture/history
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: { repositoryId: REPO_ID, currentHealthScore: 90, overallTrend: 'STABLE', points: [] },
+    });
+
+    const res = await getArchitectureHealthHistory(REPO_ID);
+
+    assertDefined(lastRequest, 'Test 83: lastRequest captured');
+    assert(
+      lastRequest.url.includes(`/repositories/${REPO_ID}/intelligence/architecture/history`),
+      'Test 83: correct URL target',
+    );
+    assert(lastRequest.method === 'GET', 'Test 83: GET method');
+    assertEqual(res.data.currentHealthScore, 90, 'Test 83: score matches');
+    console.log(
+      '  ✅ Test 83: getArchitectureHealthHistory sends GET to /intelligence/architecture/history',
+    );
+  }
+
+  // Test 84: compareArchitectureHealth sends GET to /intelligence/architecture/compare
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: {
+        repositoryId: REPO_ID,
+        baselineAnalysisId: 'snap-1',
+        currentAnalysisId: 'snap-2',
+        baselineHealthScore: 85,
+        currentHealthScore: 85,
+        healthDelta: 0,
+        trend: 'STABLE',
+        isRegressed: false,
+        regressionSeverity: 'NONE',
+        newFindings: [],
+        resolvedFindings: [],
+        unmodifiedFindings: [],
+      },
+    });
+
+    const res = await compareArchitectureHealth(REPO_ID);
+
+    assertDefined(lastRequest, 'Test 84: lastRequest captured');
+    assert(
+      lastRequest.url.includes(`/repositories/${REPO_ID}/intelligence/architecture/compare`),
+      'Test 84: correct URL target',
+    );
+    assert(lastRequest.method === 'GET', 'Test 84: GET method');
+    assertEqual(res.data.trend, 'STABLE', 'Test 84: trend matches');
+    console.log(
+      '  ✅ Test 84: compareArchitectureHealth sends GET to /intelligence/architecture/compare',
+    );
+  }
+
+  // Test 85: compareArchitectureHealth serializes baselineId and currentId in query params
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: {
+        repositoryId: REPO_ID,
+        baselineAnalysisId: 'snap-old',
+        currentAnalysisId: 'snap-new',
+        baselineHealthScore: 90,
+        currentHealthScore: 75,
+        healthDelta: -15,
+        trend: 'DEGRADED',
+        isRegressed: true,
+        regressionSeverity: 'CRITICAL',
+        newFindings: [],
+        resolvedFindings: [],
+        unmodifiedFindings: [],
+      },
+    });
+
+    await compareArchitectureHealth(REPO_ID, 'snap-old', 'snap-new');
+
+    assertDefined(lastRequest, 'Test 85: lastRequest captured');
+    assert(
+      lastRequest.url.includes('baselineId=snap-old'),
+      'Test 85: baselineId query param present',
+    );
+    assert(
+      lastRequest.url.includes('currentId=snap-new'),
+      'Test 85: currentId query param present',
+    );
+    console.log(
+      '  ✅ Test 85: compareArchitectureHealth serializes baselineId and currentId in query string',
     );
   }
 }

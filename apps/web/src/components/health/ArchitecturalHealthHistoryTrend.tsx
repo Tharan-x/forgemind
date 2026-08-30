@@ -22,11 +22,16 @@ export function ArchitecturalHealthHistoryTrend({
   const [historyData, setHistoryData] = useState<ArchitectureHealthHistoryResponse | null>(null);
   const [compareData, setCompareData] = useState<ArchitectureHealthComparisonResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [compareLoading, setCompareLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [compareError, setCompareError] = useState<string | null>(null);
 
+  const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(null);
+  const [selectedCurrentId, setSelectedCurrentId] = useState<string | null>(null);
   const [activeDiffTab, setActiveDiffTab] = useState<'new' | 'resolved' | 'unmodified'>('new');
 
-  const fetchData = useCallback(async () => {
+  // Initial load of history & default comparison
+  const fetchInitialData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -36,6 +41,8 @@ export function ArchitecturalHealthHistoryTrend({
       ]);
       setHistoryData(histRes.data);
       setCompareData(compRes.data);
+      setSelectedBaselineId(compRes.data.baselineAnalysisId);
+      setSelectedCurrentId(compRes.data.currentAnalysisId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load architectural health history.');
     } finally {
@@ -44,8 +51,66 @@ export function ArchitecturalHealthHistoryTrend({
   }, [repositoryId]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  // Re-fetch comparison when selected baseline or target changes
+  const fetchComparison = useCallback(
+    async (baselineId: string, currentId: string) => {
+      if (baselineId === currentId) return;
+      setCompareLoading(true);
+      setCompareError(null);
+      try {
+        const compRes = await compareArchitectureHealth(repositoryId, baselineId, currentId);
+        setCompareData(compRes.data);
+      } catch (err) {
+        setCompareError(
+          err instanceof Error ? err.message : 'Failed to load snapshot comparison diff.',
+        );
+      } finally {
+        setCompareLoading(false);
+      }
+    },
+    [repositoryId],
+  );
+
+  const handleSelectBaseline = (analysisId: string) => {
+    if (analysisId === selectedBaselineId) return;
+    if (analysisId === selectedCurrentId) {
+      // Swap selection if baseline is set to current target
+      const newBaseline = analysisId;
+      const newCurrent = selectedBaselineId || analysisId;
+      setSelectedBaselineId(newBaseline);
+      setSelectedCurrentId(newCurrent);
+      if (newBaseline !== newCurrent) {
+        fetchComparison(newBaseline, newCurrent);
+      }
+      return;
+    }
+    setSelectedBaselineId(analysisId);
+    if (selectedCurrentId && analysisId !== selectedCurrentId) {
+      fetchComparison(analysisId, selectedCurrentId);
+    }
+  };
+
+  const handleSelectTarget = (analysisId: string) => {
+    if (analysisId === selectedCurrentId) return;
+    if (analysisId === selectedBaselineId) {
+      // Swap selection if target is set to current baseline
+      const newCurrent = analysisId;
+      const newBaseline = selectedCurrentId || analysisId;
+      setSelectedCurrentId(newCurrent);
+      setSelectedBaselineId(newBaseline);
+      if (newBaseline !== newCurrent) {
+        fetchComparison(newBaseline, newCurrent);
+      }
+      return;
+    }
+    setSelectedCurrentId(analysisId);
+    if (selectedBaselineId && analysisId !== selectedBaselineId) {
+      fetchComparison(selectedBaselineId, analysisId);
+    }
+  };
 
   if (loading) {
     return (
@@ -63,8 +128,21 @@ export function ArchitecturalHealthHistoryTrend({
     );
   }
 
+  const isSingleSnapshot = historyData.points.length <= 1;
+
   return (
     <div className="space-y-6">
+      {/* SINGLE SNAPSHOT INFORMATIONAL BANNER */}
+      {isSingleSnapshot && (
+        <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 text-cyan-300 flex items-center gap-3 text-xs">
+          <span className="text-base">ℹ</span>
+          <p>
+            Single analysis snapshot recorded for this repository. Interactive baseline comparison
+            diffing will unlock automatically as future analysis runs occur.
+          </p>
+        </div>
+      )}
+
       {/* SECTION 1: REGRESSION ALERT BANNER */}
       {compareData.isRegressed ? (
         <div className="rounded-2xl border border-rose-500/30 bg-rose-950/30 p-6 text-rose-300">
@@ -78,8 +156,8 @@ export function ArchitecturalHealthHistoryTrend({
                   Architectural Health Regression Alert
                 </h3>
                 <p className="text-xs text-rose-300/80">
-                  Health score degraded by {Math.abs(compareData.healthDelta)} points in the latest
-                  analysis snapshot
+                  Health score degraded by {Math.abs(compareData.healthDelta)} points between
+                  baseline and target snapshot
                 </p>
               </div>
             </div>
@@ -116,50 +194,126 @@ export function ArchitecturalHealthHistoryTrend({
                 Architecture Health Baseline Stable
               </p>
               <p className="text-xs text-zinc-400">
-                No score degradation detected across recent analysis runs
+                No score degradation detected across selected analysis snapshots
               </p>
             </div>
           </div>
           <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
-            {historyData.overallTrend} TREND
+            {compareData.trend || historyData.overallTrend} TREND
           </span>
         </div>
       )}
 
       {/* SECTION 2: HEALTH SCORE TIMELINE */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-200">
-            Historical Health Score Timeline ({historyData.points.length} Runs)
-          </h3>
-          <span className="text-xs text-zinc-400">Chronological analysis history</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-200">
+              Historical Health Score Timeline ({historyData.points.length} Runs)
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Click &quot;Set Baseline&quot; or &quot;Set Target&quot; on any run card to compare
+              snapshots.
+            </p>
+          </div>
+          {compareLoading && (
+            <span className="text-xs text-cyan-400 animate-pulse font-medium">
+              Updating snapshot diff...
+            </span>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {historyData.points.map((pt, idx) => (
-            <div
-              key={pt.analysisId}
-              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-center space-y-2 transition hover:border-cyan-500/40"
-            >
-              <p className="text-[11px] font-mono text-zinc-500">Run #{idx + 1}</p>
-              <p className="text-2xl font-bold text-white">{pt.healthScore}</p>
-              <span className="inline-block rounded bg-zinc-800 px-2 py-0.5 text-xs font-semibold text-cyan-400">
-                Grade {pt.grade}
-              </span>
-              <p className="text-[10px] text-zinc-500 truncate">
-                {new Date(pt.evaluatedAt).toLocaleDateString()}
-              </p>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {historyData.points.map((pt, idx) => {
+            const isBaseline = pt.analysisId === selectedBaselineId;
+            const isTarget = pt.analysisId === selectedCurrentId;
+
+            let cardBorder = 'border-zinc-800 bg-zinc-950';
+            if (isBaseline && isTarget) {
+              cardBorder = 'border-amber-500/60 bg-amber-950/20';
+            } else if (isBaseline) {
+              cardBorder = 'border-purple-500/60 bg-purple-950/20';
+            } else if (isTarget) {
+              cardBorder = 'border-cyan-500/60 bg-cyan-950/20';
+            }
+
+            return (
+              <div
+                key={pt.analysisId}
+                className={`rounded-xl border p-4 text-center space-y-2 transition ${cardBorder}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-zinc-500">Run #{idx + 1}</span>
+                  <div className="flex gap-1">
+                    {isBaseline && (
+                      <span className="rounded bg-purple-500/20 border border-purple-500/40 px-1.5 py-0.5 text-[9px] font-bold text-purple-300 uppercase">
+                        Baseline
+                      </span>
+                    )}
+                    {isTarget && (
+                      <span className="rounded bg-cyan-500/20 border border-cyan-500/40 px-1.5 py-0.5 text-[9px] font-bold text-cyan-300 uppercase">
+                        Target
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-2xl font-bold text-white">{pt.healthScore}</p>
+
+                <span className="inline-block rounded bg-zinc-800 px-2 py-0.5 text-xs font-semibold text-cyan-400">
+                  Grade {pt.grade}
+                </span>
+
+                <p className="text-[10px] text-zinc-500 truncate">
+                  {new Date(pt.evaluatedAt).toLocaleDateString()}
+                </p>
+
+                {!isSingleSnapshot && (
+                  <div className="pt-2 flex items-center justify-center gap-1.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectBaseline(pt.analysisId)}
+                      disabled={isBaseline}
+                      className={`px-2 py-1 rounded transition border font-semibold ${
+                        isBaseline
+                          ? 'bg-purple-900/40 border-purple-700 text-purple-200 opacity-60 cursor-default'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-purple-500 hover:text-purple-300'
+                      }`}
+                    >
+                      Baseline
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTarget(pt.analysisId)}
+                      disabled={isTarget}
+                      className={`px-2 py-1 rounded transition border font-semibold ${
+                        isTarget
+                          ? 'bg-cyan-900/40 border-cyan-700 text-cyan-200 opacity-60 cursor-default'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-cyan-500 hover:text-cyan-300'
+                      }`}
+                    >
+                      Target
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* SECTION 3: SNAPSHOT COMPARISON DIFF */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-4">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-200">
-            Analysis Snapshot Comparison Diff
-          </h3>
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-200">
+              Analysis Snapshot Comparison Diff
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Comparing Baseline ({compareData.baselineAnalysisId}) vs Target (
+              {compareData.currentAnalysisId})
+            </p>
+          </div>
 
           <div className="flex items-center space-x-2 text-xs">
             <button
@@ -198,8 +352,14 @@ export function ArchitecturalHealthHistoryTrend({
           </div>
         </div>
 
+        {compareError && (
+          <div className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-4 text-xs text-rose-400">
+            {compareError}
+          </div>
+        )}
+
         {/* Diff Content View */}
-        <div>
+        <div className={compareLoading ? 'opacity-50 pointer-events-none transition' : ''}>
           {activeDiffTab === 'new' &&
             (compareData.newFindings.length === 0 ? (
               <p className="text-xs text-zinc-400 text-center py-6">
