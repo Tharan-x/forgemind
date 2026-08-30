@@ -2046,7 +2046,9 @@ export default function RepositoryDetailPage() {
                       <strong className="font-semibold text-cyan-200">
                         {investigationContextSource === 'finding'
                           ? 'Architecture Health Finding'
-                          : 'Dependency Graph Node'}
+                          : investigationContextSource === 'onboarding'
+                            ? 'Onboarding Blueprint'
+                            : 'Dependency Graph Node'}
                       </strong>
                       . You can review or edit the question below before submitting.
                     </span>

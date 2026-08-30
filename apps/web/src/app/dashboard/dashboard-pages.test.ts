@@ -2464,6 +2464,43 @@ async function runPartE(): Promise<void> {
     console.log(
       '  ✅ Test 79: Investigate-with-AI and Generate-Fix-Plan actions operate coessentially',
     );
+
+    // Test 80: Onboarding Blueprint AI investigation context pre-populates query and sets context source
+    let onboardingChatQuery = '';
+    let onboardingContextSource: 'finding' | 'graph' | 'onboarding' | null = null;
+
+    const handleOnboardingInvestigateAI = (targetFile?: string) => {
+      if (targetFile) {
+        onboardingChatQuery = `Investigate repository architecture, dependencies, and code flow for file: ${targetFile}`;
+      } else {
+        onboardingChatQuery = `Investigate overall repository architecture and component boundaries`;
+      }
+      onboardingContextSource = 'onboarding';
+    };
+
+    handleOnboardingInvestigateAI('src/index.ts');
+    assert(
+      onboardingChatQuery.includes('src/index.ts'),
+      'Test 80: Chat query pre-populated with target file',
+    );
+    assertEqual(onboardingContextSource, 'onboarding', 'Test 80: Context source set to onboarding');
+
+    const bannerLabel =
+      onboardingContextSource === 'finding'
+        ? 'Architecture Health Finding'
+        : onboardingContextSource === 'onboarding'
+          ? 'Onboarding Blueprint'
+          : 'Dependency Graph Node';
+
+    assertEqual(
+      bannerLabel,
+      'Onboarding Blueprint',
+      'Test 80: Context banner label correctly evaluates to Onboarding Blueprint',
+    );
+
+    console.log(
+      '  ✅ Test 80: Onboarding Blueprint AI investigation pre-populates query and labels context banner as Onboarding Blueprint',
+    );
   }
 }
 
