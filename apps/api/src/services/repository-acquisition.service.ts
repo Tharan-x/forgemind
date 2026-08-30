@@ -2,17 +2,19 @@
 // ForgeMind API — Repository Acquisition & Analysis Orchestration Service
 // =============================================================================
 
-import type { AnalysisJob } from '@prisma/client';
+import type { AnalysisJob, Prisma } from '@prisma/client';
 
 import type { ExtractionResult, IndexingResult, VectorIndexingResult } from '@forgemind/types';
 
 import { createGithubClient } from '../github/index.js';
+import { prisma } from '../lib/prisma.js';
 
 import {
   createAnalysisJob,
   findActiveAnalysisJobByRepository,
   updateAnalysisJobStatus,
 } from './analysis-job.service.js';
+import { generateArchitectureHealthReport } from './architecture-health.service.js';
 import { processAndStoreFileChunks } from './chunk-embedding.service.js';
 import { getEmbeddingProvider } from './embeddings/factory.js';
 import { findRepositoryById } from './repository.service.js';
@@ -190,6 +192,44 @@ export async function executeAnalysisJob(
     const totalSizeBytes = blobs.reduce((sum, item) => sum + (item.size || 0), 0);
 
     const finishedAt = new Date();
+
+    // Generate deterministic architecture health report and persist snapshot
+    const healthReport = await generateArchitectureHealthReport(repositoryId, repo.userId);
+
+    await prisma.architectureHealthSnapshot.upsert({
+      where: { analysisJobId: job.id },
+      create: {
+        repositoryId,
+        analysisJobId: job.id,
+        commitHash: commitHash ?? null,
+        healthScore: healthReport.healthScore,
+        grade: healthReport.grade,
+        totalFiles: healthReport.metrics.totalFiles,
+        totalDependencies: healthReport.metrics.totalDependencies,
+        circularCycleCount: healthReport.metrics.circularCycleCount,
+        layerViolationCount: healthReport.metrics.layerViolationCount,
+        hotspotCount: healthReport.metrics.hotspotCount,
+        orphanExportCount: healthReport.metrics.orphanExportCount,
+        scoreBreakdown: healthReport.scoreBreakdown as unknown as Prisma.InputJsonValue,
+        findings: healthReport.findings as unknown as Prisma.InputJsonValue,
+        fanMetrics: healthReport.fanMetrics as unknown as Prisma.InputJsonValue,
+      },
+      update: {
+        commitHash: commitHash ?? null,
+        healthScore: healthReport.healthScore,
+        grade: healthReport.grade,
+        totalFiles: healthReport.metrics.totalFiles,
+        totalDependencies: healthReport.metrics.totalDependencies,
+        circularCycleCount: healthReport.metrics.circularCycleCount,
+        layerViolationCount: healthReport.metrics.layerViolationCount,
+        hotspotCount: healthReport.metrics.hotspotCount,
+        orphanExportCount: healthReport.metrics.orphanExportCount,
+        scoreBreakdown: healthReport.scoreBreakdown as unknown as Prisma.InputJsonValue,
+        findings: healthReport.findings as unknown as Prisma.InputJsonValue,
+        fanMetrics: healthReport.fanMetrics as unknown as Prisma.InputJsonValue,
+      },
+    });
+
     const completedJob = await updateAnalysisJobStatus(job.id, {
       status: 'completed',
       stage: 'completed',

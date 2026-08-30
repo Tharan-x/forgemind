@@ -90,6 +90,25 @@ let symbolIdCounter = 1;
 let depIdCounter = 1;
 let chunkIdCounter = 1;
 
+interface StoredHealthSnapshot {
+  id: string;
+  repositoryId: string;
+  analysisJobId: string;
+  commitHash: string | null;
+  healthScore: number;
+  grade: string;
+  totalFiles: number;
+  totalDependencies: number;
+  circularCycleCount: number;
+  layerViolationCount: number;
+  hotspotCount: number;
+  orphanExportCount: number;
+  scoreBreakdown: unknown;
+  findings: unknown;
+  fanMetrics: unknown;
+  createdAt: Date;
+}
+
 const fileStore = new Map<string, StoredRepositoryFile>();
 const jobStore = new Map<string, StoredAnalysisJob>();
 const symbolStore = new Map<string, StoredSymbol>();
@@ -97,6 +116,7 @@ const depStore = new Map<string, StoredDependency>();
 const chunkStore = new Map<string, StoredCodeChunk>();
 const repositoryStore = new Map<string, StoredRepository>();
 const ghCredStore = new Map<string, string>();
+const snapshotStore = new Map<string, StoredHealthSnapshot>();
 
 // Seed repository store for acquisition tests (repository.findUnique)
 interface StoredRepository {
@@ -125,6 +145,7 @@ function resetAllStores(): void {
   chunkStore.clear();
   repositoryStore.clear();
   ghCredStore.clear();
+  snapshotStore.clear();
   fileIdCounter = 1;
   jobIdCounter = 1;
   symbolIdCounter = 1;
@@ -202,6 +223,58 @@ function seedRepository(id: string, userId: string, name: string, owner: string)
       return repositoryStore.get(where.id) ?? null;
     }
     return null;
+  }
+
+  // ── architectureHealthSnapshot operations ──
+  if (
+    clientMethod?.startsWith('architectureHealthSnapshot.') ||
+    (args && (args as any).model === 'ArchitectureHealthSnapshot')
+  ) {
+    if (action === 'upsert' || action === 'create') {
+      const data = ((args as any).create || (args as any).data) as any;
+      const snapshot: StoredHealthSnapshot = {
+        id: data.id || `snapshot-${snapshotStore.size + 1}`,
+        repositoryId: data.repositoryId,
+        analysisJobId: data.analysisJobId,
+        commitHash: data.commitHash ?? null,
+        healthScore: data.healthScore,
+        grade: data.grade,
+        totalFiles: data.totalFiles || 0,
+        totalDependencies: data.totalDependencies || 0,
+        circularCycleCount: data.circularCycleCount || 0,
+        layerViolationCount: data.layerViolationCount || 0,
+        hotspotCount: data.hotspotCount || 0,
+        orphanExportCount: data.orphanExportCount || 0,
+        scoreBreakdown: data.scoreBreakdown,
+        findings: data.findings,
+        fanMetrics: data.fanMetrics ?? null,
+        createdAt: new Date(),
+      };
+      snapshotStore.set(snapshot.analysisJobId, snapshot);
+      return snapshot;
+    }
+    if (action === 'findFirst' || action === 'findUnique') {
+      const where = ((args as any).where || {}) as any;
+      if (where.analysisJobId) {
+        return snapshotStore.get(where.analysisJobId) ?? null;
+      }
+      if (where.repositoryId) {
+        for (const s of snapshotStore.values()) {
+          if (s.repositoryId === where.repositoryId) return s;
+        }
+      }
+      return null;
+    }
+    if (action === 'findMany') {
+      const where = ((args as any).where || {}) as any;
+      const results: StoredHealthSnapshot[] = [];
+      for (const s of snapshotStore.values()) {
+        if (!where.repositoryId || s.repositoryId === where.repositoryId) {
+          results.push(s);
+        }
+      }
+      return results;
+    }
   }
 
   // ── repositoryFile operations ──
@@ -1655,6 +1728,29 @@ async function runBackgroundWorkerTests(): Promise<void> {
     assertDefined(latestJob?.error, 'Test 36: Error details recorded');
     console.log('  ✅ Test 36: processNextAnalysisJob transitions to failed on processing error');
   }
+
+  // Test 37: ArchitectureHealthSnapshot is persisted on job completion (Phase 6.2)
+  {
+    resetAllStores();
+    setMockFetch(buildGitHubMockFetch());
+    seedRepository(REPO_ID_ACQ, USER_ID_ACQ, 'health-repo', 'testorg');
+
+    const job = await acquisition.enqueueAnalysisJob(REPO_ID_ACQ, USER_ID_ACQ);
+    const summary = await acquisition.executeAnalysisJob(job, 'test-token');
+
+    assertEqual(summary.job.status, 'completed', 'Test 37: Job status is completed');
+    const snapshot = snapshotStore.get(job.id);
+    assertDefined(snapshot, 'Test 37: Snapshot persisted for completed job');
+    assertEqual(snapshot?.repositoryId, REPO_ID_ACQ, 'Test 37: Snapshot repositoryId matches');
+    assertEqual(snapshot?.analysisJobId, job.id, 'Test 37: Snapshot analysisJobId matches');
+    assertEqual(typeof snapshot?.healthScore, 'number', 'Test 37: Snapshot healthScore is number');
+    assertDefined(snapshot?.grade, 'Test 37: Snapshot grade is defined');
+    assertDefined(snapshot?.scoreBreakdown, 'Test 37: Snapshot scoreBreakdown is defined');
+    assertDefined(snapshot?.findings, 'Test 37: Snapshot findings is defined');
+    console.log(
+      '  ✅ Test 37: ArchitectureHealthSnapshot is persisted on job completion (Phase 6.2)',
+    );
+  }
 }
 
 async function runAllTests(): Promise<void> {
@@ -1678,7 +1774,7 @@ async function runAllTests(): Promise<void> {
     await runAcquisitionOrchestrationTests();
     await runBackgroundWorkerTests();
 
-    console.log('\n🎉 ALL 36 INTEGRATION & SERVICE TESTS PASSED SUCCESSFULLY!\n');
+    console.log('\n🎉 ALL 37 INTEGRATION & SERVICE TESTS PASSED SUCCESSFULLY!\n');
     console.log('Summary:');
     console.log('  Part A — Tree Indexing & Language Detection:          Tests 1–7   (7 tests)');
     console.log('  Part B — AST Parsing:                                 Tests 8–14  (7 tests)');
@@ -1686,6 +1782,7 @@ async function runAllTests(): Promise<void> {
     console.log('  Part D — Analysis Job Lifecycle:                      Tests 19–23 (5 tests)');
     console.log('  Part E — Repository Analysis Acquisition:             Tests 24–30 (7 tests)');
     console.log('  Part F — Background Analysis Worker & Queue:          Tests 31–36 (6 tests)');
+    console.log('  Part G — Persisted Architecture Health Snapshots:     Test 37     (1 test)');
   } catch (err) {
     console.error('\n❌ Test suite failed:', err);
     process.exit(1);

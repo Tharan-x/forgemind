@@ -11,6 +11,7 @@ import type {
   ArchitectureHealthComparisonResponse,
   ArchitectureHealthHistoryResponse,
   ArchitectureHealthPoint,
+  ArchitectureHealthScoreBreakdown,
   HealthFinding,
   HealthTrendDirection,
   RegressionSeverity,
@@ -30,47 +31,40 @@ export async function getArchitectureHealthHistory(
 ): Promise<ArchitectureHealthHistoryResponse> {
   await assertRepositoryOwnership(repositoryId, userId);
 
-  const currentReport = await generateArchitectureHealthReport(repositoryId, userId);
-
-  // Fetch recent analysis jobs
-  const analysisJobs = await prisma.analysisJob.findMany({
-    where: { repositoryId, status: 'completed' },
+  // Fetch recent persisted health snapshots
+  const snapshots = await prisma.architectureHealthSnapshot.findMany({
+    where: { repositoryId },
     orderBy: { createdAt: 'desc' },
     take: 10,
   });
 
   const points: ArchitectureHealthPoint[] = [];
+  let currentHealthScore = 100;
 
-  if (analysisJobs.length > 0) {
-    analysisJobs.forEach((job, index) => {
-      // Calculate realistic historic curve based on current report metrics
-      const scoreVariance = index * 2;
-      const score = Math.max(1, Math.min(100, currentReport.healthScore + scoreVariance));
-      let grade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F' = 'B';
-      if (score >= 95) grade = 'A+';
-      else if (score >= 85) grade = 'A';
-      else if (score >= 75) grade = 'B+';
-      else if (score >= 65) grade = 'B';
-      else if (score >= 50) grade = 'C';
-      else if (score >= 35) grade = 'D';
-      else grade = 'F';
+  if (snapshots.length > 0) {
+    currentHealthScore = snapshots[0]?.healthScore ?? 100;
 
+    snapshots.forEach((snapshot) => {
       points.push({
-        analysisId: job.id,
-        commitHash: job.commitHash || null,
-        healthScore: score,
-        grade,
-        circularCycleCount: Math.max(0, currentReport.metrics.circularCycleCount - index),
-        layerViolationCount: Math.max(0, currentReport.metrics.layerViolationCount - index),
-        hotspotCount: currentReport.metrics.hotspotCount,
-        orphanExportCount: currentReport.metrics.orphanExportCount,
-        evaluatedAt: job.finishedAt ? job.finishedAt.toISOString() : job.createdAt.toISOString(),
+        analysisId: snapshot.analysisJobId,
+        commitHash: snapshot.commitHash || null,
+        healthScore: snapshot.healthScore,
+        grade: snapshot.grade as 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F',
+        circularCycleCount: snapshot.circularCycleCount,
+        layerViolationCount: snapshot.layerViolationCount,
+        hotspotCount: snapshot.hotspotCount,
+        orphanExportCount: snapshot.orphanExportCount,
+        evaluatedAt: snapshot.createdAt.toISOString(),
       });
     });
+
     // Sort chronological ascending (oldest first)
     points.reverse();
   } else {
-    // Single point baseline
+    // Phase 6.1 backward-compatible fallback: single point baseline from live evaluation
+    const currentReport = await generateArchitectureHealthReport(repositoryId, userId);
+    currentHealthScore = currentReport.healthScore;
+
     points.push({
       analysisId: 'current-snapshot',
       commitHash: 'latest',
@@ -87,18 +81,28 @@ export async function getArchitectureHealthHistory(
   // Determine overall trend
   let overallTrend: HealthTrendDirection = 'STABLE';
   if (points.length >= 2) {
-    const firstScore = points[0]?.healthScore ?? currentReport.healthScore;
-    const lastScore = points[points.length - 1]?.healthScore ?? currentReport.healthScore;
+    const firstScore = points[0]?.healthScore ?? currentHealthScore;
+    const lastScore = points[points.length - 1]?.healthScore ?? currentHealthScore;
     if (lastScore > firstScore) overallTrend = 'IMPROVED';
     else if (lastScore < firstScore) overallTrend = 'DEGRADED';
   }
 
   return {
     repositoryId,
-    currentHealthScore: currentReport.healthScore,
+    currentHealthScore,
     overallTrend,
     points,
   };
+}
+
+/**
+ * Generates a stable composite key for a HealthFinding to compare across snapshots.
+ */
+function getFindingKey(finding: HealthFinding): string {
+  const affected = Array.isArray(finding.affectedFilePaths)
+    ? [...finding.affectedFilePaths].sort().join(',')
+    : '';
+  return `${finding.category}::${finding.title}::${affected}`;
 }
 
 /**
@@ -112,34 +116,114 @@ export async function compareArchitectureHealthSnapshots(
 ): Promise<ArchitectureHealthComparisonResponse> {
   await assertRepositoryOwnership(repositoryId, userId);
 
-  const currentReport = await generateArchitectureHealthReport(repositoryId, userId);
+  // 1. Fetch current snapshot (or fallback to latest persisted)
+  const currentSnapshot = currentAnalysisId
+    ? await prisma.architectureHealthSnapshot.findFirst({
+        where: {
+          repositoryId,
+          OR: [{ analysisJobId: currentAnalysisId }, { id: currentAnalysisId }],
+        },
+      })
+    : await prisma.architectureHealthSnapshot.findFirst({
+        where: { repositoryId },
+        orderBy: { createdAt: 'desc' },
+      });
 
-  // Baseline report simulation/retrieval
-  const baselineHealthScore = baselineAnalysisId
-    ? Math.min(100, currentReport.healthScore + 10)
-    : currentReport.healthScore;
-  const healthDelta = currentReport.healthScore - baselineHealthScore;
+  // 2. Fetch baseline snapshot (if requested or previous)
+  let baselineSnapshot = baselineAnalysisId
+    ? await prisma.architectureHealthSnapshot.findFirst({
+        where: {
+          repositoryId,
+          OR: [{ analysisJobId: baselineAnalysisId }, { id: baselineAnalysisId }],
+        },
+      })
+    : null;
+
+  if (!baselineSnapshot && !baselineAnalysisId && currentSnapshot) {
+    // If baseline not specified, pick 2nd most recent snapshot
+    const recentSnapshots = await prisma.architectureHealthSnapshot.findMany({
+      where: { repositoryId },
+      orderBy: { createdAt: 'desc' },
+      take: 2,
+    });
+    if (recentSnapshots.length >= 2 && recentSnapshots[1]) {
+      baselineSnapshot = recentSnapshots[1];
+    }
+  }
+
+  // Fallback to live report if no snapshots exist in database at all
+  let currentFindings: HealthFinding[] = [];
+  let currentScoreBreakdown: ArchitectureHealthScoreBreakdown = {
+    baseScore: 100,
+    cyclePenalty: 0,
+    layerViolationPenalty: 0,
+    hotspotPenalty: 0,
+    orphanPenalty: 0,
+    finalScore: 100,
+    grade: 'A+',
+  };
+  let currentHealthScore = 100;
+
+  if (currentSnapshot) {
+    currentHealthScore = currentSnapshot.healthScore;
+    currentFindings = (currentSnapshot.findings as unknown as HealthFinding[]) || [];
+    currentScoreBreakdown =
+      (currentSnapshot.scoreBreakdown as unknown as ArchitectureHealthScoreBreakdown) ||
+      currentScoreBreakdown;
+  } else {
+    const currentReport = await generateArchitectureHealthReport(repositoryId, userId);
+    currentHealthScore = currentReport.healthScore;
+    currentFindings = currentReport.findings;
+    currentScoreBreakdown = currentReport.scoreBreakdown;
+  }
+
+  let baselineHealthScore = currentHealthScore;
+  let baselineFindings: HealthFinding[] = [];
+  let baselineScoreBreakdown: ArchitectureHealthScoreBreakdown = currentScoreBreakdown;
+
+  if (baselineSnapshot) {
+    baselineHealthScore = baselineSnapshot.healthScore;
+    baselineFindings = (baselineSnapshot.findings as unknown as HealthFinding[]) || [];
+    baselineScoreBreakdown =
+      (baselineSnapshot.scoreBreakdown as unknown as ArchitectureHealthScoreBreakdown) ||
+      currentScoreBreakdown;
+  }
+
+  const healthDelta = currentHealthScore - baselineHealthScore;
 
   let trend: HealthTrendDirection = 'STABLE';
   if (healthDelta > 0) trend = 'IMPROVED';
   else if (healthDelta < 0) trend = 'DEGRADED';
 
-  // Finding diff identification
+  // Compute finding diffs
+  const baselineFindingMap = new Map<string, HealthFinding>();
+  baselineFindings.forEach((f) => baselineFindingMap.set(getFindingKey(f), f));
+
+  const currentFindingMap = new Map<string, HealthFinding>();
+  currentFindings.forEach((f) => currentFindingMap.set(getFindingKey(f), f));
+
   const newFindings: HealthFinding[] = [];
   const resolvedFindings: HealthFinding[] = [];
   const unmodifiedFindings: HealthFinding[] = [];
 
-  if (baselineAnalysisId) {
-    // If comparing against historical baseline, classify findings
-    currentReport.findings.forEach((f) => {
-      if (f.severity === 'critical' || f.severity === 'high') {
-        newFindings.push(f);
-      } else {
+  if (baselineSnapshot && baselineSnapshot.id !== currentSnapshot?.id) {
+    currentFindings.forEach((f) => {
+      const key = getFindingKey(f);
+      if (baselineFindingMap.has(key)) {
         unmodifiedFindings.push(f);
+      } else {
+        newFindings.push(f);
+      }
+    });
+
+    baselineFindings.forEach((f) => {
+      const key = getFindingKey(f);
+      if (!currentFindingMap.has(key)) {
+        resolvedFindings.push(f);
       }
     });
   } else {
-    unmodifiedFindings.push(...currentReport.findings);
+    unmodifiedFindings.push(...currentFindings);
   }
 
   const isRegressed = healthDelta < -5 || newFindings.length > 0;
@@ -155,10 +239,11 @@ export async function compareArchitectureHealthSnapshots(
 
   return {
     repositoryId,
-    baselineAnalysisId: baselineAnalysisId || 'previous-snapshot',
-    currentAnalysisId: currentAnalysisId || 'latest-snapshot',
+    baselineAnalysisId:
+      baselineSnapshot?.analysisJobId || baselineAnalysisId || 'previous-snapshot',
+    currentAnalysisId: currentSnapshot?.analysisJobId || currentAnalysisId || 'latest-snapshot',
     baselineHealthScore,
-    currentHealthScore: currentReport.healthScore,
+    currentHealthScore,
     healthDelta,
     trend,
     isRegressed,
@@ -168,10 +253,13 @@ export async function compareArchitectureHealthSnapshots(
     unmodifiedFindings,
     scoreBreakdownDelta: {
       baseScoreDelta: 0,
-      cyclePenaltyDelta: currentReport.scoreBreakdown.cyclePenalty,
-      layerViolationPenaltyDelta: currentReport.scoreBreakdown.layerViolationPenalty,
-      hotspotPenaltyDelta: currentReport.scoreBreakdown.hotspotPenalty,
-      orphanPenaltyDelta: currentReport.scoreBreakdown.orphanPenalty,
+      cyclePenaltyDelta: currentScoreBreakdown.cyclePenalty - baselineScoreBreakdown.cyclePenalty,
+      layerViolationPenaltyDelta:
+        currentScoreBreakdown.layerViolationPenalty - baselineScoreBreakdown.layerViolationPenalty,
+      hotspotPenaltyDelta:
+        currentScoreBreakdown.hotspotPenalty - baselineScoreBreakdown.hotspotPenalty,
+      orphanPenaltyDelta:
+        currentScoreBreakdown.orphanPenalty - baselineScoreBreakdown.orphanPenalty,
     },
     evaluatedAt: new Date().toISOString(),
   };

@@ -67,7 +67,7 @@ model Repository {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
   members      RepositoryMember[]
   analysisJobs AnalysisJob[]
   files        RepositoryFile[]
@@ -75,6 +75,7 @@ model Repository {
   dependencies FileDependency[]
   chunks       CodeChunk[]
   chatSessions ChatSession[]
+  healthSnapshots ArchitectureHealthSnapshot[]
 
   @@map("repositories")
 }
@@ -112,7 +113,8 @@ model AnalysisJob {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  repository     Repository                  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  healthSnapshot ArchitectureHealthSnapshot?
 
   @@index([status])
   @@index([repositoryId, status])
@@ -267,5 +269,33 @@ model UserDevice {
   @@unique([userId, deviceId])
   @@index([userId])
   @@map("user_devices")
+}
+
+// ─── 12. Architecture Health Snapshots Model ───────────────────────────────
+
+model ArchitectureHealthSnapshot {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId        String   @map("repository_id") @db.Uuid
+  analysisJobId       String   @unique @map("analysis_job_id") @db.Uuid
+  commitHash          String?  @map("commit_hash")
+  healthScore         Int      @map("health_score")
+  grade               String
+  totalFiles          Int      @default(0) @map("total_files")
+  totalDependencies   Int      @default(0) @map("total_dependencies")
+  circularCycleCount  Int      @default(0) @map("circular_cycle_count")
+  layerViolationCount Int      @default(0) @map("layer_violation_count")
+  hotspotCount        Int      @default(0) @map("hotspot_count")
+  orphanExportCount   Int      @default(0) @map("orphan_export_count")
+  scoreBreakdown      Json     @map("score_breakdown")
+  findings            Json     @map("findings")
+  fanMetrics          Json?    @map("fan_metrics")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  repository  Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  analysisJob AnalysisJob @relation(fields: [analysisJobId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId, createdAt(sort: Desc)])
+  @@index([repositoryId])
+  @@map("architecture_health_snapshots")
 }
 

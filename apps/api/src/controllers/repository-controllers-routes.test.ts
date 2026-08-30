@@ -83,6 +83,7 @@ const jobStore = new Map<string, Record<string, unknown>>();
 const sessionStore = new Map<string, Record<string, unknown>>();
 const messageStore = new Map<string, Record<string, unknown>>();
 const userDeviceStore = new Map<string, Record<string, unknown>>();
+const snapshotStore = new Map<string, Record<string, unknown>>();
 
 function resetAllStores(): void {
   userStore.clear();
@@ -96,6 +97,7 @@ function resetAllStores(): void {
   sessionStore.clear();
   messageStore.clear();
   userDeviceStore.clear();
+  snapshotStore.clear();
 }
 
 // Seed Users
@@ -266,6 +268,60 @@ globalThis.fetch = async (
   const create = (args?.['create'] as Record<string, unknown> | undefined) || {};
   const update = (args?.['update'] as Record<string, unknown> | undefined) || {};
   const include = (args?.['include'] as Record<string, unknown> | undefined) || {};
+
+  // ── architectureHealthSnapshot ──
+  if (clientMethod?.startsWith('architectureHealthSnapshot.')) {
+    if (clientMethod === 'architectureHealthSnapshot.findMany') {
+      const repositoryId = where['repositoryId'] as string | undefined;
+      const results = Array.from(snapshotStore.values());
+      return results.filter((s) => !repositoryId || s['repositoryId'] === repositoryId);
+    }
+    if (
+      clientMethod === 'architectureHealthSnapshot.findFirst' ||
+      clientMethod === 'architectureHealthSnapshot.findUnique'
+    ) {
+      const repositoryId = where['repositoryId'] as string | undefined;
+      const analysisJobId = where['analysisJobId'] as string | undefined;
+      const id = where['id'] as string | undefined;
+      const results = Array.from(snapshotStore.values());
+      return (
+        results.find(
+          (s) =>
+            (id && s['id'] === id) ||
+            (analysisJobId && s['analysisJobId'] === analysisJobId) ||
+            (repositoryId && s['repositoryId'] === repositoryId),
+        ) ?? null
+      );
+    }
+    if (
+      clientMethod === 'architectureHealthSnapshot.create' ||
+      clientMethod === 'architectureHealthSnapshot.upsert'
+    ) {
+      const createData = (create.data || create || data) as Record<string, unknown>;
+      const id =
+        (createData['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
+      const record = {
+        id,
+        repositoryId: createData['repositoryId'],
+        analysisJobId: createData['analysisJobId'],
+        commitHash: createData['commitHash'] || null,
+        healthScore: createData['healthScore'] || 100,
+        grade: createData['grade'] || 'A+',
+        totalFiles: createData['totalFiles'] || 0,
+        totalDependencies: createData['totalDependencies'] || 0,
+        circularCycleCount: createData['circularCycleCount'] || 0,
+        layerViolationCount: createData['layerViolationCount'] || 0,
+        hotspotCount: createData['hotspotCount'] || 0,
+        orphanExportCount: createData['orphanExportCount'] || 0,
+        scoreBreakdown: createData['scoreBreakdown'] || {},
+        findings: createData['findings'] || [],
+        fanMetrics: createData['fanMetrics'] || [],
+        createdAt: new Date(),
+      };
+      snapshotStore.set(id, record);
+      return record;
+    }
+  }
 
   // ── user ──
   if (clientMethod === 'user.findFirst') {
