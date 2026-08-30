@@ -81,6 +81,32 @@ export interface GithubFileContentResponse {
   sha: string;
 }
 
+export type GithubStatusState = 'pending' | 'success' | 'failure' | 'error';
+
+export interface PostCommitStatusOptions {
+  state: GithubStatusState;
+  context?: string;
+  description?: string;
+  target_url?: string;
+}
+
+export interface GithubCommitStatus {
+  id: number;
+  state: GithubStatusState;
+  description: string | null;
+  target_url: string | null;
+  context: string;
+  created_at: string;
+}
+
+export interface GithubIssueComment {
+  id: number;
+  body: string;
+  user: { login: string };
+  created_at: string;
+  updated_at: string;
+}
+
 export interface GithubClient {
   getAuthenticatedUser(): Promise<GithubUser>;
   listRepositories(): Promise<GithubRepository[]>;
@@ -95,6 +121,29 @@ export interface GithubClient {
     recursive?: boolean,
   ): Promise<GithubTreeResponse>;
   getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<string>;
+  postCommitStatus(
+    owner: string,
+    repo: string,
+    sha: string,
+    options: PostCommitStatusOptions,
+  ): Promise<GithubCommitStatus>;
+  listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<GithubIssueComment[]>;
+  createIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string,
+  ): Promise<GithubIssueComment>;
+  updateIssueComment(
+    owner: string,
+    repo: string,
+    commentId: number,
+    body: string,
+  ): Promise<GithubIssueComment>;
 }
 
 const GITHUB_BASE_URL = 'https://api.github.com';
@@ -199,6 +248,69 @@ export function createGithubClient(token?: string): GithubClient {
     return '';
   }
 
+  async function postCommitStatus(
+    owner: string,
+    repo: string,
+    sha: string,
+    statusOptions: PostCommitStatusOptions,
+  ): Promise<GithubCommitStatus> {
+    return request<GithubCommitStatus>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/statuses/${encodeURIComponent(sha)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          state: statusOptions.state,
+          context: statusOptions.context ?? 'forgemind/architecture-gatekeeper',
+          description: statusOptions.description,
+          target_url: statusOptions.target_url,
+        }),
+      },
+    );
+  }
+
+  async function listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+  ): Promise<GithubIssueComment[]> {
+    return request<GithubIssueComment[]>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}/comments?per_page=100`,
+    );
+  }
+
+  async function createIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string,
+  ): Promise<GithubIssueComment> {
+    return request<GithubIssueComment>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${issueNumber}/comments`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      },
+    );
+  }
+
+  async function updateIssueComment(
+    owner: string,
+    repo: string,
+    commentId: number,
+    body: string,
+  ): Promise<GithubIssueComment> {
+    return request<GithubIssueComment>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/comments/${commentId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      },
+    );
+  }
+
   return {
     getAuthenticatedUser,
     listRepositories,
@@ -208,5 +320,9 @@ export function createGithubClient(token?: string): GithubClient {
     getCommit,
     getTree,
     getFileContent,
+    postCommitStatus,
+    listIssueComments,
+    createIssueComment,
+    updateIssueComment,
   };
 }

@@ -5,6 +5,7 @@
 import { claimNextAnalysisJob, updateAnalysisJobStatus } from './analysis-job.service.js';
 import { getDecryptedGitHubToken } from './github-credential.service.js';
 import { computePRArchitectureSnapshot } from './pr-analysis.service.js';
+import { postPRGatekeeperStatus, upsertPRGatekeeperComment } from './pr-reporter.service.js';
 import { executeAnalysisJob } from './repository-acquisition.service.js';
 import { findRepositoryById } from './repository.service.js';
 import { isLatestPREvent } from './webhook-event.service.js';
@@ -56,7 +57,59 @@ export async function processNextAnalysisJob(): Promise<boolean> {
     }
 
     if (job.triggerSource === 'pull_request') {
-      await computePRArchitectureSnapshot(job, githubToken);
+      const headSha = job.headSha || job.commitHash;
+
+      // Post pending status on head commit SHA
+      if (headSha) {
+        await postPRGatekeeperStatus({
+          githubToken,
+          owner: repo.owner,
+          repo: repo.name,
+          headSha,
+          state: 'pending',
+          description: 'Evaluating PR architecture health...',
+        });
+      }
+
+      try {
+        const summary = await computePRArchitectureSnapshot(job, githubToken);
+
+        // Post final commit status (success / failure)
+        if (headSha) {
+          const finalState = summary.policyResult.outcome === 'fail' ? 'failure' : 'success';
+          await postPRGatekeeperStatus({
+            githubToken,
+            owner: repo.owner,
+            repo: repo.name,
+            headSha,
+            state: finalState,
+            description: summary.policyResult.statusDescription,
+          });
+        }
+
+        // Upsert idempotent PR comment if prNumber exists
+        if (job.prNumber) {
+          await upsertPRGatekeeperComment({
+            githubToken,
+            owner: repo.owner,
+            repo: repo.name,
+            prNumber: job.prNumber,
+            summary,
+          });
+        }
+      } catch (prErr) {
+        if (headSha) {
+          await postPRGatekeeperStatus({
+            githubToken,
+            owner: repo.owner,
+            repo: repo.name,
+            headSha,
+            state: 'error',
+            description: 'PR architecture check encountered an error',
+          });
+        }
+        throw prErr;
+      }
     } else {
       await executeAnalysisJob(job, githubToken);
     }

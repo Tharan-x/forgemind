@@ -23,6 +23,7 @@ import { PrismaClient } from '@prisma/client';
 import { createAnalysisJob, findPRAnalysisJob } from './analysis-job.service.js';
 import { processNextAnalysisJob } from './analysis-worker.service.js';
 import { computePRArchitectureSnapshot } from './pr-analysis.service.js';
+import { evaluatePRGatekeeperPolicy } from './pr-gatekeeper-policy.service.js';
 import { processWebhookDelivery } from './webhook-event.service.js';
 
 const prisma = new PrismaClient();
@@ -208,7 +209,18 @@ export async function runPRAnalysisTests(): Promise<void> {
           where: { id: job.id },
           data: { status: 'completed', stage: 'completed', finishedAt: new Date() },
         });
-        summary = { job, snapshot, commitHash: job.headSha ?? '' };
+        summary = {
+          job,
+          snapshot,
+          baselineSnapshotId: null,
+          baselineFound: false,
+          comparison: null,
+          policyResult: evaluatePRGatekeeperPolicy(null, snapshot),
+          commitHash: job.headSha ?? '',
+          filesAnalyzed: 5,
+          symbolsExtracted: 10,
+          dependenciesExtracted: 8,
+        };
       }
 
       assert(Boolean(summary.snapshot), 'Test 3: ArchitectureHealthSnapshot created');

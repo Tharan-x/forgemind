@@ -14,6 +14,8 @@
 import path from 'node:path';
 import type { Prisma, AnalysisJob, ArchitectureHealthSnapshot } from '@prisma/client';
 
+import type { ArchitectureHealthComparisonResponse } from '@forgemind/types';
+
 import { createGithubClient } from '../github/index.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -23,12 +25,22 @@ import {
   type RawDependency,
   type RawSymbol,
 } from './architecture-health.service.js';
+import { compareArchitectureHealthSnapshots } from './architecture-history.service.js';
 import { parseSourceFile } from './ast-parser.service.js';
+import { findBaselineSnapshot } from './pr-baseline.service.js';
+import {
+  evaluatePRGatekeeperPolicy,
+  type PRGatekeeperPolicyResult,
+} from './pr-gatekeeper-policy.service.js';
 import { findRepositoryById } from './repository.service.js';
 
 export interface PRAnalysisSummary {
   job: AnalysisJob;
   snapshot: ArchitectureHealthSnapshot;
+  baselineSnapshotId: string | null;
+  baselineFound: boolean;
+  comparison: ArchitectureHealthComparisonResponse | null;
+  policyResult: PRGatekeeperPolicyResult;
   commitHash: string;
   filesAnalyzed: number;
   symbolsExtracted: number;
@@ -221,11 +233,33 @@ export async function computePRArchitectureSnapshot(
       },
     });
 
+    // 6. Resolve baseline snapshot and compare PR snapshot against baseline
+    const baselineSnapshot = await findBaselineSnapshot(repositoryId, job.baseSha);
+
+    let comparison: ArchitectureHealthComparisonResponse | null = null;
+    let baselineSnapshotId: string | null = null;
+
+    if (baselineSnapshot) {
+      baselineSnapshotId = baselineSnapshot.analysisJobId;
+      comparison = await compareArchitectureHealthSnapshots(
+        repositoryId,
+        repo.userId,
+        baselineSnapshot.analysisJobId,
+        snapshot.analysisJobId,
+      );
+    }
+
+    // 7. Evaluate PR Gatekeeper Policy against comparison result & snapshot
+    const policyResult = evaluatePRGatekeeperPolicy(comparison, snapshot);
+
     const finishedAt = new Date();
     const completedJob = await updateAnalysisJobStatus(job.id, {
       status: 'completed',
       stage: 'completed',
-      stageLabel: 'PR architecture analysis completed',
+      stageLabel:
+        policyResult.outcome === 'fail'
+          ? 'PR gatekeeper check failed'
+          : 'PR architecture analysis completed',
       processedCount: codeBlobItems.length,
       totalCount: codeBlobItems.length,
       commitHash: headSha,
@@ -242,6 +276,10 @@ export async function computePRArchitectureSnapshot(
         finishedAt,
       },
       snapshot,
+      baselineSnapshotId,
+      baselineFound: Boolean(baselineSnapshot),
+      comparison,
+      policyResult,
       commitHash: headSha,
       filesAnalyzed: filesParsed,
       symbolsExtracted: inMemorySymbols.length,
