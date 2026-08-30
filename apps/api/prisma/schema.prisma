@@ -76,6 +76,7 @@ model Repository {
   chunks       CodeChunk[]
   chatSessions ChatSession[]
   healthSnapshots ArchitectureHealthSnapshot[]
+  webhookDeliveries WebhookDelivery[]
 
   @@map("repositories")
 }
@@ -297,5 +298,30 @@ model ArchitectureHealthSnapshot {
   @@index([repositoryId, createdAt(sort: Desc)])
   @@index([repositoryId])
   @@map("architecture_health_snapshots")
+}
+
+// ─── 13. Webhook Deliveries Model ───────────────────────────────────────────
+
+model WebhookDelivery {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deliveryId    String    @unique @map("delivery_id")
+  eventType     String    @map("event_type")
+  action        String?
+  repositoryId  String?   @map("repository_id") @db.Uuid
+  githubRepoId  Int?      @map("github_repo_id")
+  prNumber      Int?      @map("pr_number")
+  headSha       String?   @map("head_sha")
+  baseSha       String?   @map("base_sha")
+  sender        String?
+  status        String    @default("received")
+  ignoredReason String?   @map("ignored_reason")
+  receivedAt    DateTime  @default(now()) @map("received_at")
+  processedAt   DateTime? @map("processed_at")
+
+  repository Repository? @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@index([repositoryId, prNumber])
+  @@map("webhook_deliveries")
 }
 
