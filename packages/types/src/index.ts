@@ -819,3 +819,109 @@ export interface ArchitectureHealthComparisonResponse {
   };
   evaluatedAt: string;
 }
+
+// ─── PR Architecture Gatekeeper & Webhook Dashboard Types ───────────────────
+
+export interface RepositoryPRGatekeeperOverview {
+  repositoryId: string;
+  totalPRAnalyses: number;
+  passedCount: number;
+  failedCount: number;
+  neutralCount: number;
+  passRate: number;
+  latestAnalysis: PRGatekeeperHistoryItem | null;
+  activeRegressionsCount: number;
+  latestHealthScore: number | null;
+  latestHealthDelta: number | null;
+}
+
+export interface PRGatekeeperHistoryItem {
+  id: string;
+  prNumber: number | null;
+  title?: string | null;
+  headSha: string | null;
+  baseSha: string | null;
+  targetRef?: string | null;
+  status: string;
+  outcome: 'pass' | 'fail' | 'neutral';
+  healthScore: number | null;
+  scoreDelta: number | null;
+  commitHash: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface PRGatekeeperDetailResponse {
+  prNumber: number;
+  jobId: string;
+  headSha: string | null;
+  baseSha: string | null;
+  status: string;
+  snapshot: {
+    healthScore: number;
+    grade: string;
+    totalFiles: number;
+    totalDependencies: number;
+    circularCycleCount: number;
+    layerViolationCount: number;
+    hotspotCount: number;
+    orphanExportCount: number;
+  } | null;
+  baseline: {
+    analysisJobId: string;
+    commitHash: string | null;
+    healthScore: number;
+    grade: string;
+  } | null;
+  comparison: ArchitectureHealthComparisonResponse | null;
+  policyResult: {
+    outcome: 'pass' | 'fail' | 'neutral';
+    statusDescription: string;
+    reasons: string[];
+    healthDelta: number;
+    baselineHealthScore: number | null;
+    prHealthScore: number;
+    isRegressed: boolean;
+    newCriticalCount: number;
+    newHighCount: number;
+    newCircularCyclesCount: number;
+    newLayerViolationsCount: number;
+    policyOptions?: Record<string, unknown>;
+    evaluatedAt: string;
+  };
+
+  evaluatedAt: string;
+}
+
+export interface WebhookDeliveryLogItem {
+  id: string;
+  deliveryId: string;
+  eventType: string;
+  action: string | null;
+  repositoryId: string | null;
+  githubRepoId: number | null;
+  prNumber: number | null;
+  headSha: string | null;
+  baseSha: string | null;
+  sender: string | null;
+  status: string;
+  ignoredReason: string | null;
+  receivedAt: string;
+  processedAt: string | null;
+}
+
+export interface PRGatekeeperHistoryResponse {
+  items: PRGatekeeperHistoryItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface WebhookDeliveryLogResponse {
+  items: WebhookDeliveryLogItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}

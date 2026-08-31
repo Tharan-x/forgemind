@@ -1427,7 +1427,8 @@ async function runPartD(): Promise<void> {
     const tabBar = rendered.props.children.props.children[1];
     const tabsList = tabBar.props.children.props.children;
 
-    assertEqual(tabsList.length, 8, 'Test 34: 8 tabs present');
+    assertEqual(tabsList.length, 9, 'Test 34: 9 tabs present');
+
     assertEqual(
       tabsList[0].props.children[1].props.children,
       'Overview',

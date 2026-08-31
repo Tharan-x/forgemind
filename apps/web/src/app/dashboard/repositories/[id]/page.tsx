@@ -26,7 +26,9 @@ import { Button } from '@forgemind/ui';
 import { ProtectedLayout } from '@/components/dashboard/ProtectedLayout';
 import { DependencyGraphVisualizer } from '@/components/graph/DependencyGraphVisualizer';
 import { ArchitecturalHealthDashboard } from '@/components/health/ArchitecturalHealthDashboard';
+import { PRGatekeeperDashboard } from '@/components/gatekeeper/PRGatekeeperDashboard';
 import { OnboardingBlueprintViewer } from '@/components/onboarding/OnboardingBlueprintViewer';
+
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -53,7 +55,15 @@ import {
 import { getRepository, type Repository } from '@/lib/repository.api';
 
 type TabType =
-  'overview' | 'health' | 'intelligence' | 'graph' | 'chat' | 'files' | 'symbols' | 'dependencies';
+  | 'overview'
+  | 'health'
+  | 'gatekeeper'
+  | 'intelligence'
+  | 'graph'
+  | 'chat'
+  | 'files'
+  | 'symbols'
+  | 'dependencies';
 
 export default function RepositoryDetailPage() {
   const params = useParams();
@@ -689,6 +699,7 @@ export default function RepositoryDetailPage() {
                 { id: 'files', label: 'Indexed Files', icon: '📁', count: totalFiles },
                 { id: 'symbols', label: 'AST Symbols', icon: '🧩', count: totalSymbols },
                 { id: 'dependencies', label: 'Dependencies', icon: '🔗', count: totalDependencies },
+                { id: 'gatekeeper', label: 'PR Gatekeeper', icon: '🛡️' },
               ] as Array<{ id: TabType; label: string; icon: string; count?: number }>
             ).map((tab) => {
               const isActive = activeTab === tab.id;
@@ -744,7 +755,11 @@ export default function RepositoryDetailPage() {
           />
         )}
 
+        {/* TAB: PR GATEKEEPER */}
+        {activeTab === 'gatekeeper' && <PRGatekeeperDashboard repositoryId={repositoryId} />}
+
         {/* TAB: GRAPH & TOPOLOGY */}
+
         {activeTab === 'graph' && (
           <DependencyGraphVisualizer
             repositoryId={repositoryId}

@@ -42,6 +42,10 @@ import {
   explainRemediationActionHandler,
   getArchitectureHealthHistoryHandler,
   compareArchitectureHealthHandler,
+  getGatekeeperOverviewHandler,
+  getGatekeeperPRsHandler,
+  getGatekeeperPRDetailHandler,
+  getGatekeeperWebhooksHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -317,7 +321,32 @@ router.get(
 router.get('/:repositoryId/architecture/compare', requireAuth, compareArchitectureHealthHandler);
 
 /**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/overview
+ * Returns summary metrics for the PR Architecture Gatekeeper dashboard.
+ */
+router.get('/:repositoryId/gatekeeper/overview', requireAuth, getGatekeeperOverviewHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs
+ * Returns paginated PR gatekeeper analysis history.
+ */
+router.get('/:repositoryId/gatekeeper/prs', requireAuth, getGatekeeperPRsHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs/:prNumber
+ * Returns detailed PR analysis, comparison, and policy decision for a specific PR number.
+ */
+router.get('/:repositoryId/gatekeeper/prs/:prNumber', requireAuth, getGatekeeperPRDetailHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/webhooks
+ * Returns paginated webhook delivery execution logs for a repository.
+ */
+router.get('/:repositoryId/gatekeeper/webhooks', requireAuth, getGatekeeperWebhooksHandler);
+
+/**
  * GET /api/v1/onboarding/share/:shareToken
+
  * Public retrieval of a shared onboarding blueprint by share token (no auth required).
  */
 onboardingShareRouter.get('/:shareToken', heavyRouteRateLimiter, getSharedBlueprintHandler);
