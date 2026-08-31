@@ -85,12 +85,21 @@ export async function getGatekeeperConfig(
 import { z } from 'zod';
 
 export const updateGatekeeperConfigSchema = z.object({
-  enabled: z.boolean().optional(),
-  maxScoreDegradation: z.number().int().min(0).max(100).optional(),
-  blockOnNewCriticalFindings: z.boolean().optional(),
-  blockOnNewHighFindings: z.boolean().optional(),
-  blockOnNewCircularCycles: z.boolean().optional(),
-  blockOnNewLayerViolations: z.boolean().optional(),
+  enabled: z.boolean({ invalid_type_error: 'Must be a boolean value' }).optional(),
+  maxScoreDegradation: z
+    .number({ invalid_type_error: 'Must be a number between 0 and 100' })
+    .int('Must be a number between 0 and 100')
+    .min(0, 'Must be a number between 0 and 100')
+    .max(100, 'Must be a number between 0 and 100')
+    .optional(),
+  blockOnNewCriticalFindings: z
+    .boolean({ invalid_type_error: 'Must be a boolean value' })
+    .optional(),
+  blockOnNewHighFindings: z.boolean({ invalid_type_error: 'Must be a boolean value' }).optional(),
+  blockOnNewCircularCycles: z.boolean({ invalid_type_error: 'Must be a boolean value' }).optional(),
+  blockOnNewLayerViolations: z
+    .boolean({ invalid_type_error: 'Must be a boolean value' })
+    .optional(),
 });
 
 /**
