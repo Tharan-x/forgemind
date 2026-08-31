@@ -17,6 +17,7 @@ import {
   getGatekeeperPRDetail,
   getGatekeeperWebhooks,
 } from '../services/gatekeeper-dashboard.service.js';
+import { getPRArchitectureImpact } from '../services/architecture-impact.service.js';
 import { assertRepositoryOwnership } from '../services/repository.service.js';
 
 function sendInternalError(res: Response, message = 'An unexpected error occurred.'): void {
@@ -440,6 +441,63 @@ export async function getWebhookStatusHandler(
     res.status(200).json({ success: true, status });
   } catch (err) {
     const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs/:prNumber/impact
+ *
+ * Returns structured Architecture Impact summary for a specific PR number.
+ */
+export async function getPRArchitectureImpactHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const repositoryId = getParamString(req.params['repositoryId']);
+    const prNumberRaw = getParamString(req.params['prNumber']);
+    const prNumber = prNumberRaw ? parseInt(prNumberRaw, 10) : NaN;
+
+    if (!repositoryId || isNaN(prNumber)) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Valid repository ID and PR number are required.' },
+      });
+      return;
+    }
+
+    try {
+      await assertRepositoryOwnership(repositoryId, user.id);
+    } catch (authErr) {
+      const authMessage = authErr instanceof Error ? authErr.message : 'Access denied.';
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: authMessage },
+      });
+      return;
+    }
+
+    const impact = await getPRArchitectureImpact(repositoryId, prNumber, user.id);
+    res.status(200).json({ success: true, impact });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal error';
+    if (message.includes('No PR analysis found') || message.includes('Repository not found')) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message },
+      });
+      return;
+    }
     sendInternalError(res, message);
   }
 }

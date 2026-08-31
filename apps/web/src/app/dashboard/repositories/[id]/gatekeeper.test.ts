@@ -11,8 +11,10 @@ import type {
   PRGatekeeperDetailResponse,
   WebhookDeliveryLogItem,
   HealthFinding,
+  ArchitectureImpact,
 } from '@forgemind/types';
 
+import { ArchitectureImpactCard } from '../../../../components/gatekeeper/ArchitectureImpactCard';
 import { GatekeeperSettingsForm } from '../../../../components/gatekeeper/GatekeeperSettingsForm';
 import { PRGatekeeperDashboard } from '../../../../components/gatekeeper/PRGatekeeperDashboard';
 import { PRHealthComparisonCard } from '../../../../components/gatekeeper/PRHealthComparisonCard';
@@ -240,6 +242,58 @@ export async function runWebGatekeeperUITests(): Promise<void> {
   assertEqual(settingsForm.props.repositoryId, 'test-repo-123', 'repositoryId prop bound');
 
   console.log('  ✅ Test 5 PASS: GatekeeperSettingsForm component signature and props verified');
+
+  // ── Test 6: ArchitectureImpactCard Instantiation & Props ──────────────────
+  const mockImpact: ArchitectureImpact = {
+    prNumber: 42,
+    jobId: 'job-42-sha',
+    headSha: 'head424242424242424242424242424242424242',
+    baseSha: 'base424242424242424242424242424242424242',
+    overallImpactLevel: 'HIGH',
+    impactReasoning: ['Significant score drop of -8 points detected.'],
+    changedFiles: { count: 3, paths: ['apps/api/src/services/user.ts'] },
+    affectedComponents: ['apps/api'],
+    affectedModules: ['services/user'],
+    affectedLayers: ['API & Controller Layer', 'Domain & Business Logic Layer'],
+    dependencyImpact: {
+      baselineDependenciesCount: 30,
+      prDependenciesCount: 35,
+      totalDependencyDelta: 5,
+      addedEdgesCount: 5,
+      removedEdgesCount: 0,
+    },
+    newlyIntroducedRisks: {
+      totalCount: 1,
+      criticalCount: 0,
+      highCount: 1,
+      mediumCount: 0,
+      lowCount: 0,
+      items: [],
+    },
+    resolvedRisks: { totalCount: 0, items: [] },
+    baselineComparison: {
+      baselineHealthScore: 90,
+      prHealthScore: 82,
+      scoreDelta: -8,
+      healthTrend: 'DEGRADED',
+      baselineFound: true,
+    },
+    evaluatedAt: new Date().toISOString(),
+  };
+
+  const impactCard = React.createElement(ArchitectureImpactCard, { impact: mockImpact });
+  assertEqual(
+    impactCard.props.impact.overallImpactLevel,
+    'HIGH',
+    'HIGH impact level bound to ArchitectureImpactCard',
+  );
+  assertEqual(
+    impactCard.props.impact.changedFiles.count,
+    3,
+    'Changed files count bound to ArchitectureImpactCard',
+  );
+
+  console.log('  ✅ Test 6 PASS: ArchitectureImpactCard component signature and props verified');
 
   console.log('\n🎉 ALL WEB PR GATEKEEPER DASHBOARD UI TESTS PASSED!\n');
 }

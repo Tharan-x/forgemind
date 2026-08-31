@@ -964,3 +964,53 @@ export interface WebhookStatusResponse {
     eventsNotice: string;
   };
 }
+
+export type ImpactLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface ArchitectureImpact {
+  prNumber: number | null;
+  jobId: string;
+  headSha: string;
+  baseSha: string | null;
+  overallImpactLevel: ImpactLevel;
+  impactReasoning: string[];
+  changedFiles: {
+    count: number;
+    paths: string[];
+  };
+  affectedComponents: string[];
+  affectedModules: string[];
+  affectedLayers: string[];
+  dependencyImpact: {
+    baselineDependenciesCount: number;
+    prDependenciesCount: number;
+    totalDependencyDelta: number;
+    addedEdgesCount: number;
+    removedEdgesCount: number;
+  };
+  newlyIntroducedRisks: {
+    totalCount: number;
+    criticalCount: number;
+    highCount: number;
+    mediumCount: number;
+    lowCount: number;
+    items: HealthFinding[];
+  };
+  resolvedRisks: {
+    totalCount: number;
+    items: HealthFinding[];
+  };
+  baselineComparison: {
+    baselineHealthScore: number | null;
+    prHealthScore: number;
+    scoreDelta: number;
+    healthTrend: 'IMPROVED' | 'DEGRADED' | 'STABLE';
+    baselineFound: boolean;
+  };
+  evaluatedAt: string;
+}
+
+export interface ArchitectureImpactResponse {
+  success: boolean;
+  impact: ArchitectureImpact;
+}

@@ -50,6 +50,7 @@ import {
   updateGatekeeperConfigHandler,
   resetGatekeeperConfigHandler,
   getWebhookStatusHandler,
+  getPRArchitectureImpactHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -341,6 +342,16 @@ router.get('/:repositoryId/gatekeeper/prs', requireAuth, getGatekeeperPRsHandler
  * Returns detailed PR analysis, comparison, and policy decision for a specific PR number.
  */
 router.get('/:repositoryId/gatekeeper/prs/:prNumber', requireAuth, getGatekeeperPRDetailHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs/:prNumber/impact
+ * Returns structured Architecture Impact summary for a specific PR number.
+ */
+router.get(
+  '/:repositoryId/gatekeeper/prs/:prNumber/impact',
+  requireAuth,
+  getPRArchitectureImpactHandler,
+);
 
 /**
  * GET /api/v1/repositories/:repositoryId/gatekeeper/webhooks

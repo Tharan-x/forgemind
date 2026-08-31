@@ -11,7 +11,9 @@ import type {
   RepositoryGatekeeperConfig,
   UpdateGatekeeperConfigInput,
   WebhookStatusResponse,
+  ArchitectureImpact,
 } from '@forgemind/types';
+
 import { supabase } from './supabase';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? '';
@@ -150,4 +152,17 @@ export async function getWebhookStatus(repositoryId: string): Promise<WebhookSta
     `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/webhooks/status`,
   );
   return data.status;
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs/:prNumber/impact
+ */
+export async function getPRArchitectureImpact(
+  repositoryId: string,
+  prNumber: number,
+): Promise<ArchitectureImpact> {
+  const data = await request<{ impact: ArchitectureImpact }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/prs/${prNumber}/impact`,
+  );
+  return data.impact;
 }

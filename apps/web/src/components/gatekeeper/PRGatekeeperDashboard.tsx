@@ -7,6 +7,7 @@ import type {
   PRGatekeeperDetailResponse,
   WebhookDeliveryLogItem,
   HealthFinding,
+  ArchitectureImpact,
 } from '@forgemind/types';
 
 import {
@@ -14,8 +15,10 @@ import {
   getGatekeeperPRs,
   getGatekeeperPRDetail,
   getGatekeeperWebhooks,
+  getPRArchitectureImpact,
 } from '../../lib/gatekeeper.api';
 import { AIExplanationDrawer } from '../health/AIExplanationDrawer';
+import { ArchitectureImpactCard } from './ArchitectureImpactCard';
 import { GatekeeperSettingsForm } from './GatekeeperSettingsForm';
 import { PRHealthComparisonCard } from './PRHealthComparisonCard';
 import { WebhookDeliveryLogViewer } from './WebhookDeliveryLogViewer';
@@ -40,6 +43,7 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
 
   const [selectedPRNumber, setSelectedPRNumber] = useState<number | null>(null);
   const [selectedPRDetail, setSelectedPRDetail] = useState<PRGatekeeperDetailResponse | null>(null);
+  const [selectedPRImpact, setSelectedPRImpact] = useState<ArchitectureImpact | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   const [isLoadingOverview, setIsLoadingOverview] = useState(true);
@@ -125,14 +129,19 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
     if (selectedPRNumber === prNumber) {
       setSelectedPRNumber(null);
       setSelectedPRDetail(null);
+      setSelectedPRImpact(null);
       return;
     }
 
     try {
       setSelectedPRNumber(prNumber);
       setIsLoadingDetail(true);
-      const detail = await getGatekeeperPRDetail(repositoryId, prNumber);
+      const [detail, impactResult] = await Promise.all([
+        getGatekeeperPRDetail(repositoryId, prNumber),
+        getPRArchitectureImpact(repositoryId, prNumber).catch(() => null),
+      ]);
       setSelectedPRDetail(detail);
+      setSelectedPRImpact(impactResult);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load PR detail';
       setError(msg);
@@ -251,21 +260,25 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
             </div>
           </div>
 
-          {/* Selected PR Health Comparison View */}
+          {/* Selected PR Architecture Impact & Health Comparison View */}
           {isLoadingDetail ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 text-center text-xs text-zinc-400 animate-pulse">
               Loading PR comparison analysis for PR #{selectedPRNumber}...
             </div>
           ) : (
             selectedPRDetail && (
-              <PRHealthComparisonCard
-                detail={selectedPRDetail}
-                onInvestigateFinding={handleInvestigateFinding}
-                onClose={() => {
-                  setSelectedPRNumber(null);
-                  setSelectedPRDetail(null);
-                }}
-              />
+              <div className="space-y-6">
+                {selectedPRImpact && <ArchitectureImpactCard impact={selectedPRImpact} />}
+                <PRHealthComparisonCard
+                  detail={selectedPRDetail}
+                  onInvestigateFinding={handleInvestigateFinding}
+                  onClose={() => {
+                    setSelectedPRNumber(null);
+                    setSelectedPRDetail(null);
+                    setSelectedPRImpact(null);
+                  }}
+                />
+              </div>
             )
           )}
 
