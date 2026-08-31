@@ -14,6 +14,12 @@ export type PRGatekeeperOutcome = 'pass' | 'fail' | 'neutral';
 
 export interface PRGatekeeperPolicyOptions {
   /**
+   * Whether the PR Architecture Gatekeeper is active for this repository.
+   * Default: true.
+   */
+  enabled?: boolean;
+
+  /**
    * Maximum allowed score drop before triggering policy failure.
    * Default: 5 points (i.e. healthDelta < -5 fails).
    */
@@ -61,6 +67,7 @@ export interface PRGatekeeperPolicyResult {
 }
 
 export const DEFAULT_PR_GATEKEEPER_POLICY: Required<PRGatekeeperPolicyOptions> = {
+  enabled: true,
   maxScoreDegradation: 5,
   blockOnNewCriticalFindings: true,
   blockOnNewHighFindings: false,
@@ -89,7 +96,27 @@ export function evaluatePRGatekeeperPolicy(
   const evaluatedAt = new Date().toISOString();
   const prHealthScore = prSnapshot.healthScore;
 
+  // 0. Handle Disabled Gatekeeper Configuration
+  if (policy.enabled === false) {
+    return {
+      outcome: 'neutral',
+      statusDescription: 'PR Architecture Gatekeeper disabled in repository configuration.',
+      reasons: ['Gatekeeper checks are currently disabled for this repository.'],
+      healthDelta: comparison?.healthDelta ?? 0,
+      baselineHealthScore: comparison?.baselineHealthScore ?? null,
+      prHealthScore,
+      isRegressed: false,
+      newCriticalCount: 0,
+      newHighCount: 0,
+      newCircularCyclesCount: 0,
+      newLayerViolationsCount: 0,
+      policyOptions: policy,
+      evaluatedAt,
+    };
+  }
+
   // 1. Handle No-Baseline / Neutral Result
+
   if (!comparison) {
     return {
       outcome: 'neutral',

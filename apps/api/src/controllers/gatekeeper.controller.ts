@@ -6,6 +6,12 @@ import type { Response } from 'express';
 
 import type { AuthenticatedRequest } from '../auth/index.js';
 import {
+  getGatekeeperConfig,
+  updateGatekeeperConfig,
+  resetGatekeeperConfigToDefault,
+  getWebhookStatus,
+} from '../services/gatekeeper-config.service.js';
+import {
   getGatekeeperOverview,
   getGatekeeperPRs,
   getGatekeeperPRDetail,
@@ -235,6 +241,203 @@ export async function getGatekeeperWebhooksHandler(
 
     const data = await getGatekeeperWebhooks(repositoryId, page, limit);
     res.status(200).json({ success: true, ...data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/config
+ *
+ * Returns the current gatekeeper policy configuration for a repository.
+ */
+export async function getGatekeeperConfigHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const repositoryId = getParamString(req.params['repositoryId']);
+    if (!repositoryId) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Repository ID is required.' },
+      });
+      return;
+    }
+
+    try {
+      await assertRepositoryOwnership(repositoryId, user.id);
+    } catch (authErr) {
+      const authMessage = authErr instanceof Error ? authErr.message : 'Access denied.';
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: authMessage },
+      });
+      return;
+    }
+
+    const config = await getGatekeeperConfig(repositoryId);
+    res.status(200).json({ success: true, config });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * PUT /api/v1/repositories/:repositoryId/gatekeeper/config
+ *
+ * Updates gatekeeper policy thresholds for a repository.
+ */
+export async function updateGatekeeperConfigHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const repositoryId = getParamString(req.params['repositoryId']);
+    if (!repositoryId) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Repository ID is required.' },
+      });
+      return;
+    }
+
+    try {
+      await assertRepositoryOwnership(repositoryId, user.id);
+    } catch (authErr) {
+      const authMessage = authErr instanceof Error ? authErr.message : 'Access denied.';
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: authMessage },
+      });
+      return;
+    }
+
+    try {
+      const config = await updateGatekeeperConfig(repositoryId, req.body || {});
+      res.status(200).json({ success: true, config });
+    } catch (valErr) {
+      const valMessage =
+        valErr instanceof Error ? valErr.message : 'Invalid configuration payload.';
+      res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: valMessage },
+      });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/gatekeeper/config/reset
+ *
+ * Resets repository gatekeeper policy thresholds to system defaults.
+ */
+export async function resetGatekeeperConfigHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const repositoryId = getParamString(req.params['repositoryId']);
+    if (!repositoryId) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Repository ID is required.' },
+      });
+      return;
+    }
+
+    try {
+      await assertRepositoryOwnership(repositoryId, user.id);
+    } catch (authErr) {
+      const authMessage = authErr instanceof Error ? authErr.message : 'Access denied.';
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: authMessage },
+      });
+      return;
+    }
+
+    const config = await resetGatekeeperConfigToDefault(repositoryId);
+    res.status(200).json({ success: true, config });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/webhooks/status
+ *
+ * Returns safe webhook configuration status and setup guidance.
+ */
+export async function getWebhookStatusHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Not authenticated.' },
+      });
+      return;
+    }
+
+    const repositoryId = getParamString(req.params['repositoryId']);
+    if (!repositoryId) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Repository ID is required.' },
+      });
+      return;
+    }
+
+    try {
+      await assertRepositoryOwnership(repositoryId, user.id);
+    } catch (authErr) {
+      const authMessage = authErr instanceof Error ? authErr.message : 'Access denied.';
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: authMessage },
+      });
+      return;
+    }
+
+    const status = await getWebhookStatus(repositoryId);
+    res.status(200).json({ success: true, status });
   } catch (err) {
     const message = err instanceof Error ? err.message : undefined;
     sendInternalError(res, message);

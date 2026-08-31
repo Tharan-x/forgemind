@@ -13,6 +13,7 @@ import type {
 
 import { prisma } from '../lib/prisma.js';
 import { compareArchitectureHealthSnapshots } from './architecture-history.service.js';
+import { getGatekeeperConfig } from './gatekeeper-config.service.js';
 import { findBaselineSnapshot } from './pr-baseline.service.js';
 import { evaluatePRGatekeeperPolicy } from './pr-gatekeeper-policy.service.js';
 import { findRepositoryById } from './repository.service.js';
@@ -51,6 +52,8 @@ export async function getGatekeeperOverview(
   let latestHealthScore: number | null = null;
   let latestHealthDelta: number | null = null;
 
+  const repoConfig = await getGatekeeperConfig(repositoryId);
+
   for (let i = 0; i < prJobs.length; i++) {
     const job = prJobs[i];
     if (!job) continue;
@@ -68,7 +71,7 @@ export async function getGatekeeperOverview(
           baseline.analysisJobId,
           job.id,
         );
-        const policy = evaluatePRGatekeeperPolicy(comparison, job.healthSnapshot);
+        const policy = evaluatePRGatekeeperPolicy(comparison, job.healthSnapshot, repoConfig);
         outcome = policy.outcome;
         delta = policy.healthDelta;
         if (policy.isRegressed || policy.outcome === 'fail') {
@@ -155,6 +158,8 @@ export async function getGatekeeperPRs(
     take: validLimit,
   });
 
+  const repoConfig = await getGatekeeperConfig(repositoryId);
+
   const items: PRGatekeeperHistoryItem[] = [];
 
   for (const job of prJobs) {
@@ -171,7 +176,7 @@ export async function getGatekeeperPRs(
           baseline.analysisJobId,
           job.id,
         );
-        const policy = evaluatePRGatekeeperPolicy(comparison, job.healthSnapshot);
+        const policy = evaluatePRGatekeeperPolicy(comparison, job.healthSnapshot, repoConfig);
         outcome = policy.outcome;
         delta = policy.healthDelta;
       } else {
@@ -256,6 +261,8 @@ export async function getGatekeeperPRDetail(
   let comparison = null;
   let policyResult;
 
+  const repoConfig = await getGatekeeperConfig(repositoryId);
+
   if (job.healthSnapshot) {
     const baseline = await findBaselineSnapshot(repositoryId, job.baseSha);
     if (baseline) {
@@ -273,9 +280,9 @@ export async function getGatekeeperPRDetail(
         job.id,
       );
 
-      policyResult = evaluatePRGatekeeperPolicy(comparison, job.healthSnapshot);
+      policyResult = evaluatePRGatekeeperPolicy(comparison, job.healthSnapshot, repoConfig);
     } else {
-      policyResult = evaluatePRGatekeeperPolicy(null, job.healthSnapshot);
+      policyResult = evaluatePRGatekeeperPolicy(null, job.healthSnapshot, repoConfig);
     }
   } else {
     policyResult = {

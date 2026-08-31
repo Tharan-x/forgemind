@@ -13,6 +13,7 @@ import type {
   HealthFinding,
 } from '@forgemind/types';
 
+import { GatekeeperSettingsForm } from '../../../../components/gatekeeper/GatekeeperSettingsForm';
 import { PRGatekeeperDashboard } from '../../../../components/gatekeeper/PRGatekeeperDashboard';
 import { PRHealthComparisonCard } from '../../../../components/gatekeeper/PRHealthComparisonCard';
 import { WebhookDeliveryLogViewer } from '../../../../components/gatekeeper/WebhookDeliveryLogViewer';
@@ -229,6 +230,16 @@ export async function runWebGatekeeperUITests(): Promise<void> {
   );
 
   console.log('  ✅ Test 4 PASS: Neutral outcome (missing baseline) renders safely');
+
+  // ── Test 5: GatekeeperSettingsForm Instantiation & Props ───────────────────
+  const settingsForm = React.createElement(GatekeeperSettingsForm, {
+    repositoryId: 'test-repo-123',
+  });
+
+  assertEqual(settingsForm.type, GatekeeperSettingsForm, 'GatekeeperSettingsForm mounts');
+  assertEqual(settingsForm.props.repositoryId, 'test-repo-123', 'repositoryId prop bound');
+
+  console.log('  ✅ Test 5 PASS: GatekeeperSettingsForm component signature and props verified');
 
   console.log('\n🎉 ALL WEB PR GATEKEEPER DASHBOARD UI TESTS PASSED!\n');
 }

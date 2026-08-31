@@ -27,7 +27,9 @@ import {
 } from './architecture-health.service.js';
 import { compareArchitectureHealthSnapshots } from './architecture-history.service.js';
 import { parseSourceFile } from './ast-parser.service.js';
+import { getGatekeeperConfig } from './gatekeeper-config.service.js';
 import { findBaselineSnapshot } from './pr-baseline.service.js';
+
 import {
   evaluatePRGatekeeperPolicy,
   type PRGatekeeperPolicyResult,
@@ -249,8 +251,9 @@ export async function computePRArchitectureSnapshot(
       );
     }
 
-    // 7. Evaluate PR Gatekeeper Policy against comparison result & snapshot
-    const policyResult = evaluatePRGatekeeperPolicy(comparison, snapshot);
+    // 7. Evaluate PR Gatekeeper Policy against comparison result & snapshot using repository policy config
+    const repoConfig = await getGatekeeperConfig(repositoryId);
+    const policyResult = evaluatePRGatekeeperPolicy(comparison, snapshot, repoConfig);
 
     const finishedAt = new Date();
     const completedJob = await updateAnalysisJobStatus(job.id, {

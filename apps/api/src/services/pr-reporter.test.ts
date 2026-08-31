@@ -94,12 +94,14 @@ function makeMockPolicyResult(
     newCircularCyclesCount: 0,
     newLayerViolationsCount: 0,
     policyOptions: {
+      enabled: true,
       maxScoreDegradation: 5,
       blockOnNewCriticalFindings: true,
       blockOnNewHighFindings: false,
       blockOnNewCircularCycles: true,
       blockOnNewLayerViolations: true,
     },
+
     evaluatedAt: new Date().toISOString(),
     ...overrides,
   };

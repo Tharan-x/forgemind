@@ -925,3 +925,42 @@ export interface WebhookDeliveryLogResponse {
   limit: number;
   totalPages: number;
 }
+
+export interface RepositoryGatekeeperConfig {
+  id: string;
+  repositoryId: string;
+  enabled: boolean;
+  maxScoreDegradation: number;
+  blockOnNewCriticalFindings: boolean;
+  blockOnNewHighFindings: boolean;
+  blockOnNewCircularCycles: boolean;
+  blockOnNewLayerViolations: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateGatekeeperConfigInput {
+  enabled?: boolean;
+  maxScoreDegradation?: number;
+  blockOnNewCriticalFindings?: boolean;
+  blockOnNewHighFindings?: boolean;
+  blockOnNewCircularCycles?: boolean;
+  blockOnNewLayerViolations?: boolean;
+}
+
+export interface WebhookStatusResponse {
+  repositoryId: string;
+  isConfigured: boolean;
+  webhookUrl: string;
+  secretConfigured: boolean;
+  subscribedEvents: string[];
+  recentDeliveriesCount: number;
+  lastDeliveryAt: string | null;
+  setupInstructions: {
+    title: string;
+    payloadUrl: string;
+    contentType: string;
+    secretNotice: string;
+    eventsNotice: string;
+  };
+}

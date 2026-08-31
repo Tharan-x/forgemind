@@ -77,9 +77,11 @@ model Repository {
   chatSessions ChatSession[]
   healthSnapshots ArchitectureHealthSnapshot[]
   webhookDeliveries WebhookDelivery[]
+  gatekeeperConfig  RepositoryGatekeeperConfig?
 
   @@map("repositories")
 }
+
 
 // ─── 3. Repository Members Model ──────────────────────────────────────────────
 
@@ -329,5 +331,24 @@ model WebhookDelivery {
   @@index([deliveryId])
   @@index([repositoryId, prNumber])
   @@map("webhook_deliveries")
+}
+
+// ─── 14. Repository Gatekeeper Config Model ──────────────────────────────────
+
+model RepositoryGatekeeperConfig {
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId               String   @unique @map("repository_id") @db.Uuid
+  enabled                    Boolean  @default(true)
+  maxScoreDegradation        Int      @default(5) @map("max_score_degradation")
+  blockOnNewCriticalFindings Boolean  @default(true) @map("block_on_new_critical_findings")
+  blockOnNewHighFindings     Boolean  @default(false) @map("block_on_new_high_findings")
+  blockOnNewCircularCycles   Boolean  @default(true) @map("block_on_new_circular_cycles")
+  blockOnNewLayerViolations  Boolean  @default(true) @map("block_on_new_layer_violations")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@map("repository_gatekeeper_configs")
 }
 

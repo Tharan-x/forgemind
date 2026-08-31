@@ -8,6 +8,9 @@ import type {
   PRGatekeeperHistoryResponse,
   PRGatekeeperDetailResponse,
   WebhookDeliveryLogResponse,
+  RepositoryGatekeeperConfig,
+  UpdateGatekeeperConfigInput,
+  WebhookStatusResponse,
 } from '@forgemind/types';
 import { supabase } from './supabase';
 
@@ -93,4 +96,58 @@ export async function getGatekeeperWebhooks(
   return request<WebhookDeliveryLogResponse>(
     `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/webhooks?page=${page}&limit=${limit}`,
   );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/config
+ */
+export async function getGatekeeperConfig(
+  repositoryId: string,
+): Promise<RepositoryGatekeeperConfig> {
+  const data = await request<{ config: RepositoryGatekeeperConfig }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/config`,
+  );
+  return data.config;
+}
+
+/**
+ * PUT /api/v1/repositories/:repositoryId/gatekeeper/config
+ */
+export async function updateGatekeeperConfig(
+  repositoryId: string,
+  input: UpdateGatekeeperConfigInput,
+): Promise<RepositoryGatekeeperConfig> {
+  const data = await request<{ config: RepositoryGatekeeperConfig }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/config`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    },
+  );
+  return data.config;
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/gatekeeper/config/reset
+ */
+export async function resetGatekeeperConfig(
+  repositoryId: string,
+): Promise<RepositoryGatekeeperConfig> {
+  const data = await request<{ config: RepositoryGatekeeperConfig }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/config/reset`,
+    {
+      method: 'POST',
+    },
+  );
+  return data.config;
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/webhooks/status
+ */
+export async function getWebhookStatus(repositoryId: string): Promise<WebhookStatusResponse> {
+  const data = await request<{ status: WebhookStatusResponse }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/webhooks/status`,
+  );
+  return data.status;
 }

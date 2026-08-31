@@ -46,6 +46,10 @@ import {
   getGatekeeperPRsHandler,
   getGatekeeperPRDetailHandler,
   getGatekeeperWebhooksHandler,
+  getGatekeeperConfigHandler,
+  updateGatekeeperConfigHandler,
+  resetGatekeeperConfigHandler,
+  getWebhookStatusHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -345,7 +349,32 @@ router.get('/:repositoryId/gatekeeper/prs/:prNumber', requireAuth, getGatekeeper
 router.get('/:repositoryId/gatekeeper/webhooks', requireAuth, getGatekeeperWebhooksHandler);
 
 /**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/config
+ * Returns current gatekeeper policy configuration for a repository.
+ */
+router.get('/:repositoryId/gatekeeper/config', requireAuth, getGatekeeperConfigHandler);
+
+/**
+ * PUT /api/v1/repositories/:repositoryId/gatekeeper/config
+ * Updates gatekeeper policy thresholds for a repository.
+ */
+router.put('/:repositoryId/gatekeeper/config', requireAuth, updateGatekeeperConfigHandler);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/gatekeeper/config/reset
+ * Resets gatekeeper policy thresholds for a repository to system defaults.
+ */
+router.post('/:repositoryId/gatekeeper/config/reset', requireAuth, resetGatekeeperConfigHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/webhooks/status
+ * Returns safe webhook configuration status and setup guidance.
+ */
+router.get('/:repositoryId/gatekeeper/webhooks/status', requireAuth, getWebhookStatusHandler);
+
+/**
  * GET /api/v1/onboarding/share/:shareToken
+
 
  * Public retrieval of a shared onboarding blueprint by share token (no auth required).
  */
