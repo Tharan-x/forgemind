@@ -1161,6 +1161,7 @@ async function runTests() {
     await runPartF();
     await runPartH();
     await runPartI();
+    await runPartM();
 
     console.log('\n🎉 ALL CONTROLLER & ROUTE INTEGRATION TESTS PASSED SUCCESSFULLY!\n');
   } finally {
@@ -2894,7 +2895,6 @@ async function runPartM() {
 async function executeSuite() {
   await runTests();
   await runPartG();
-  await runPartM();
 }
 
 executeSuite().catch((err) => {
