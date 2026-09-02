@@ -5,9 +5,18 @@
 // =============================================================================
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { GraphNode, GraphNodeType, RepositoryGraphResponse } from '@forgemind/types';
+import type {
+  ArchitectureDecision,
+  GraphNode,
+  GraphNodeType,
+  RepositoryGraphResponse,
+} from '@forgemind/types';
 import { Button } from '@forgemind/ui';
-import { getRepositoryGraphTopology } from '@/lib/intelligence.api';
+import {
+  getArchitectureDecisions,
+  getRepositoryGraphTopology,
+  synthesizeArchitectureDecision,
+} from '@/lib/intelligence.api';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 interface DependencyGraphVisualizerProps {
@@ -47,6 +56,14 @@ export function DependencyGraphVisualizer({
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Decision Memory State for Selected Node
+  const [decisions, setDecisions] = useState<ArchitectureDecision[]>([]);
+  const [decisionsLoading, setDecisionsLoading] = useState<boolean>(false);
+  const [decisionsError, setDecisionsError] = useState<string | null>(null);
+  const [synthesizingId, setSynthesizingId] = useState<string | null>(null);
+  const [synthesisError, setSynthesisError] = useState<string | null>(null);
+  const activeFetchIdRef = useRef<string | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Fetch Graph Data
@@ -76,6 +93,56 @@ export function DependencyGraphVisualizer({
   useEffect(() => {
     loadGraph();
   }, [loadGraph]);
+
+  // Fetch Decision Memory when selected node changes
+  useEffect(() => {
+    const currentPath = selectedNode?.path;
+    if (!currentPath) {
+      setDecisions([]);
+      setDecisionsLoading(false);
+      setDecisionsError(null);
+      return;
+    }
+
+    const fetchId = `${selectedNode.id}::${currentPath}`;
+    activeFetchIdRef.current = fetchId;
+    setDecisionsLoading(true);
+    setDecisionsError(null);
+
+    getArchitectureDecisions(repositoryId, { path: currentPath, limit: 5 })
+      .then((res) => {
+        if (activeFetchIdRef.current === fetchId) {
+          setDecisions(res.items || []);
+        }
+      })
+      .catch((err) => {
+        if (activeFetchIdRef.current === fetchId) {
+          setDecisionsError(err instanceof Error ? err.message : 'Failed to load decision memory.');
+        }
+      })
+      .finally(() => {
+        if (activeFetchIdRef.current === fetchId) {
+          setDecisionsLoading(false);
+        }
+      });
+  }, [repositoryId, selectedNode]);
+
+  const handleSynthesizeDecision = async (decisionId: string) => {
+    if (synthesizingId) return;
+    setSynthesizingId(decisionId);
+    setSynthesisError(null);
+
+    try {
+      const updated = await synthesizeArchitectureDecision(repositoryId, decisionId, {
+        force: true,
+      });
+      setDecisions((prev) => prev.map((d) => (d.id === decisionId ? updated : d)));
+    } catch (err) {
+      setSynthesisError(err instanceof Error ? err.message : 'Failed to synthesize AI rationale.');
+    } finally {
+      setSynthesizingId(null);
+    }
+  };
 
   const handleResetFilters = () => {
     setSearchFilter('');
@@ -544,6 +611,136 @@ export function DependencyGraphVisualizer({
                     </div>
                   </div>
                 )}
+
+                {/* Historical Decision Memory Section */}
+                <div className="space-y-2 border-t border-zinc-800 pt-3">
+                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
+                    📜 Historical Decision Memory
+                  </span>
+
+                  {!selectedNode.path ? (
+                    <p className="text-[11px] text-zinc-500 italic">
+                      Historical decisions unavailable for this node (no repository path mapped).
+                    </p>
+                  ) : decisionsLoading ? (
+                    <div className="py-2 text-center text-[11px] text-zinc-400">
+                      <LoadingSpinner label="Loading decision history..." />
+                    </div>
+                  ) : decisionsError ? (
+                    <p className="text-[11px] text-rose-400 font-mono">{decisionsError}</p>
+                  ) : decisions.length === 0 ? (
+                    <p className="text-[11px] text-zinc-500 italic">
+                      No historical architectural decisions recorded for this path.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {synthesisError && (
+                        <p className="text-[10px] text-rose-400 font-mono bg-rose-950/30 p-1.5 rounded">
+                          {synthesisError}
+                        </p>
+                      )}
+                      {decisions.map((decision) => (
+                        <div
+                          key={decision.id}
+                          className="rounded-lg border border-zinc-800 bg-zinc-950 p-2.5 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-1 text-[10px]">
+                            <span className="text-zinc-400 font-mono">
+                              {decision.committedAt
+                                ? new Date(decision.committedAt).toLocaleDateString()
+                                : 'Date N/A'}
+                            </span>
+                            {decision.healthScoreDelta !== null && (
+                              <span
+                                className={`font-bold ${
+                                  decision.healthScoreDelta >= 0
+                                    ? 'text-emerald-400'
+                                    : 'text-rose-400'
+                                }`}
+                              >
+                                Health:{' '}
+                                {decision.healthScoreDelta >= 0
+                                  ? `+${decision.healthScoreDelta}`
+                                  : decision.healthScoreDelta}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-zinc-300">
+                            {decision.commitHash && (
+                              <a
+                                href={decision.commitUrl || '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-cyan-400 hover:underline"
+                              >
+                                Commit {decision.commitHash.substring(0, 7)}
+                              </a>
+                            )}
+                            {decision.prNumber && (
+                              <a
+                                href={decision.prUrl || '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-purple-400 hover:underline"
+                              >
+                                #{decision.prNumber}
+                              </a>
+                            )}
+                            {decision.author && (
+                              <span className="text-zinc-400">by {decision.author}</span>
+                            )}
+                          </div>
+
+                          {decision.prTitle && (
+                            <p className="text-[11px] font-medium text-zinc-200 line-clamp-1">
+                              {decision.prTitle}
+                            </p>
+                          )}
+
+                          {/* AI Grounded Rationale vs Action */}
+                          {decision.synthesis ? (
+                            <div className="rounded border border-cyan-950 bg-cyan-950/20 p-2 space-y-1">
+                              <div className="flex items-center justify-between text-[9px] font-bold">
+                                <span className="text-cyan-400 uppercase tracking-wide">
+                                  🤖 Grounded AI Interpretation
+                                </span>
+                                <span
+                                  className={`px-1 rounded ${
+                                    decision.synthesis.evidenceConfidence === 'HIGH'
+                                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                      : decision.synthesis.evidenceConfidence === 'UNRECORDED'
+                                        ? 'bg-zinc-800 text-zinc-400'
+                                        : 'bg-amber-950 text-amber-300 border border-amber-800'
+                                  }`}
+                                >
+                                  {decision.synthesis.evidenceConfidence}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-300 leading-snug">
+                                {decision.synthesis.architecturalIntent}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="pt-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full text-[10px] h-6 justify-center border-cyan-500/30 text-cyan-300 hover:bg-cyan-950/40"
+                                disabled={synthesizingId === decision.id}
+                                onClick={() => handleSynthesizeDecision(decision.id)}
+                              >
+                                {synthesizingId === decision.id
+                                  ? 'Synthesizing...'
+                                  : '🤖 Synthesize AI Rationale'}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Direct Action Buttons */}
                 <div className="space-y-2 pt-2 border-t border-zinc-800">

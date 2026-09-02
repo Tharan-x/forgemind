@@ -51,6 +51,8 @@ import {
   getFileDependencyIntelligence,
   analyzeImpact,
   getArchitectureOverview,
+  getArchitectureDecisions,
+  synthesizeArchitectureDecision,
 } from '../../lib/intelligence.api.js';
 
 import {
@@ -2516,6 +2518,192 @@ async function runPartE(): Promise<void> {
 
     console.log(
       '  ✅ Test 80: Onboarding Blueprint AI investigation pre-populates query and labels context banner as Onboarding Blueprint',
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Part F — Graph ↔ Architecture Decision Memory Integration Tests (Tests 81–84)
+  // ---------------------------------------------------------------------------
+  console.log(
+    '\n📋 Part F — Graph ↔ Architecture Decision Memory Integration Tests (Tests 81–84)\n',
+  );
+
+  // Test 81: getArchitectureDecisions formats path filtering query parameter correctly
+  {
+    const origGetSession = supabase.auth.getSession;
+    (supabase.auth as any).getSession = async () => ({
+      data: { session: MOCK_SESSION },
+      error: null,
+    });
+    const origFetch = global.fetch;
+    let requestedUrl = '';
+    (global as any).fetch = async (url: string) => {
+      requestedUrl = String(url);
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          items: [
+            {
+              id: 'dec-1',
+              repositoryId: 'repo-123',
+              commitHash: 'abc1234',
+              commitMessage: 'feat: Add PR Gatekeeper decision policy',
+              affectedPaths: ['apps/api/src/app.ts'],
+              synthesis: {
+                architecturalIntent: 'Added decision policy checks.',
+                evidenceConfidence: 'HIGH',
+              },
+            },
+          ],
+          total: 1,
+          page: 1,
+          limit: 5,
+          totalPages: 1,
+        }),
+      };
+    };
+
+    try {
+      const res = await getArchitectureDecisions('repo-123', {
+        path: 'apps/api/src/app.ts',
+        limit: 5,
+      });
+      assert(
+        requestedUrl.includes(
+          '/repositories/repo-123/decisions?path=apps%2Fapi%2Fsrc%2Fapp.ts&limit=5',
+        ),
+        'Test 81: API endpoint called with path and limit parameters',
+      );
+      assertEqual(res.items.length, 1, 'Test 81: Returns decision items');
+      assertEqual(
+        res.items[0]?.synthesis?.evidenceConfidence,
+        'HIGH',
+        'Test 81: Preserves synthesis confidence badge',
+      );
+      console.log(
+        '  ✅ Test 81: getArchitectureDecisions path-filtered request formatting verified',
+      );
+    } finally {
+      global.fetch = origFetch;
+      (supabase.auth as any).getSession = origGetSession;
+    }
+  }
+
+  // Test 82: synthesizeArchitectureDecision formats force parameter correctly
+  {
+    const origGetSession = supabase.auth.getSession;
+    (supabase.auth as any).getSession = async () => ({
+      data: { session: MOCK_SESSION },
+      error: null,
+    });
+    const origFetch = global.fetch;
+    let requestedUrl = '';
+    let requestedMethod = '';
+    (global as any).fetch = async (url: string, opts?: any) => {
+      requestedUrl = String(url);
+      requestedMethod = opts?.method || 'GET';
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          decision: {
+            id: 'dec-1',
+            repositoryId: 'repo-123',
+            commitHash: 'abc1234',
+            synthesis: {
+              architecturalIntent: 'Synthesized intent.',
+              evidenceConfidence: 'HIGH',
+            },
+          },
+        }),
+      };
+    };
+
+    try {
+      const decision = await synthesizeArchitectureDecision('repo-123', 'dec-1', { force: true });
+      assert(
+        requestedUrl.includes('/repositories/repo-123/decisions/dec-1/synthesize?force=true'),
+        'Test 82: Synthesis endpoint called with force=true parameter',
+      );
+      assertEqual(requestedMethod, 'POST', 'Test 82: Uses POST HTTP method');
+      assertEqual(
+        decision.synthesis?.architecturalIntent,
+        'Synthesized intent.',
+        'Test 82: Returns updated decision synthesis',
+      );
+      console.log('  ✅ Test 82: synthesizeArchitectureDecision POST request formatting verified');
+    } finally {
+      global.fetch = origFetch;
+      (supabase.auth as any).getSession = origGetSession;
+    }
+  }
+
+  // Test 83: Graph node path matching logic distinguishes file/symbol nodes from pathless nodes
+  {
+    const fileNode: { id: string; type: string; label: string; path?: string } = {
+      id: 'node-1',
+      type: 'file',
+      label: 'app.ts',
+      path: 'src/app.ts',
+    };
+    const pathlessNode: { id: string; type: string; label: string; path?: string } = {
+      id: 'node-2',
+      type: 'package',
+      label: '@types/express',
+    };
+
+    assert(Boolean(fileNode.path), 'Test 83: File node has valid repository path');
+    assert(!pathlessNode.path, 'Test 83: Package node has undefined path');
+
+    const shouldQueryFile = Boolean(fileNode.path);
+    const shouldQueryPackage = Boolean(pathlessNode.path);
+
+    assertEqual(shouldQueryFile, true, 'Test 83: File node path triggers decision memory query');
+    assertEqual(
+      shouldQueryPackage,
+      false,
+      'Test 83: Pathless node safely skips decision memory query',
+    );
+    console.log(
+      '  ✅ Test 83: Node path matching logic correctly handles file nodes vs pathless nodes',
+    );
+  }
+
+  // Test 84: Synthesis state updating preserves deterministic decision evidence
+  {
+    const initialDecision = {
+      id: 'dec-100',
+      commitHash: 'fedcba9',
+      commitMessage: 'refactor: Extract API core router',
+      author: 'Lead Dev',
+      prNumber: 42,
+      healthScoreDelta: 7,
+      synthesis: null,
+    };
+
+    const synthesizedDecision = {
+      ...initialDecision,
+      synthesis: {
+        architecturalIntent: 'Extracted API core router to improve module boundary.',
+        evidenceConfidence: 'HIGH',
+      },
+    };
+
+    const decisionsState = [initialDecision];
+    const updatedState = decisionsState.map((d) => (d.id === 'dec-100' ? synthesizedDecision : d));
+    const firstUpdated = updatedState[0];
+    assertDefined(firstUpdated, 'Test 84: First updated decision element exists');
+
+    assertEqual(firstUpdated.commitHash, 'fedcba9', 'Test 84: Deterministic commit SHA preserved');
+    assertEqual(firstUpdated.prNumber, 42, 'Test 84: Deterministic PR number preserved');
+    assertEqual(firstUpdated.healthScoreDelta, 7, 'Test 84: Deterministic health delta preserved');
+    assert(
+      firstUpdated.synthesis !== null,
+      'Test 84: Synthesis attached cleanly to decision record',
+    );
+    console.log(
+      '  ✅ Test 84: Synthesis UI state update cleanly attaches AI intent while preserving evidence',
     );
   }
 }

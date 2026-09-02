@@ -19,6 +19,7 @@ import type {
   StructuredRemediationPlan,
   RemediationExplainRequest,
   RemediationExplanationResponse,
+  ArchitectureDecision,
   ArchitectureOverviewResponse,
   BlueprintShareRequest,
   BlueprintShareResponse,
@@ -385,4 +386,58 @@ export async function simulateArchitectureWhatIf(
     },
   );
   return res.result;
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/decisions?path=...&limit=...
+ */
+export async function getArchitectureDecisions(
+  repositoryId: string,
+  options: { path?: string; limit?: number; page?: number } = {},
+): Promise<{
+  items: ArchitectureDecision[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}> {
+  const queryParts: string[] = [];
+  if (options.path) queryParts.push(`path=${encodeURIComponent(options.path)}`);
+  if (options.limit) queryParts.push(`limit=${encodeURIComponent(String(options.limit))}`);
+  if (options.page) queryParts.push(`page=${encodeURIComponent(String(options.page))}`);
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+  const res = await request<{
+    success: boolean;
+    items: ArchitectureDecision[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>(`/repositories/${encodeURIComponent(repositoryId)}/decisions${queryString}`);
+
+  return res;
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions/:decisionId/synthesize?force=...
+ */
+export async function synthesizeArchitectureDecision(
+  repositoryId: string,
+  decisionId: string,
+  options: { force?: boolean } = {},
+): Promise<ArchitectureDecision> {
+  const queryString = options.force ? '?force=true' : '';
+
+  const res = await request<{
+    success: boolean;
+    decision: ArchitectureDecision;
+  }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/decisions/${encodeURIComponent(decisionId)}/synthesize${queryString}`,
+    {
+      method: 'POST',
+    },
+  );
+
+  return res.decision;
 }
