@@ -1112,3 +1112,57 @@ export interface ArchitectureTimeMachineComparisonResponse {
   architecturalConsequenceExplanation: string;
   evaluatedAt: string;
 }
+
+// ─── Architecture What-If / Change Simulator Types ─────────────────────────
+
+export type WhatIfScenarioType =
+  'add_dependency' | 'remove_dependency' | 'move_module' | 'introduce_cross_layer_dependency';
+
+export interface ArchitectureWhatIfRequest {
+  scenarioType: WhatIfScenarioType;
+  sourcePath: string;
+  targetPath: string;
+  includeAIAdvice?: boolean;
+}
+
+export interface ArchitectureWhatIfResult {
+  repositoryId: string;
+  scenario: {
+    type: WhatIfScenarioType;
+    sourcePath: string;
+    targetPath: string;
+    description: string;
+  };
+  confirmedEvidence: {
+    currentHealthScore: number;
+    currentGrade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+    currentTotalDependencies: number;
+    currentFindingCount: number;
+    sourceLayer: string;
+    targetLayer: string;
+  };
+  predictedConsequence: {
+    simulatedHealthScore: number;
+    simulatedGrade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+    scoreDelta: number;
+    healthTrend: 'IMPROVED' | 'DEGRADED' | 'STABLE';
+    predictedDriftLevel: ArchitectureDriftLevel;
+    predictedPolicyOutcome: 'pass' | 'fail' | 'neutral';
+    policyStatusDescription: string;
+    affectedModules: string[];
+    affectedLayers: string[];
+    newFindingsCount: number;
+    resolvedFindingsCount: number;
+    newFindings: HealthFinding[];
+    resolvedFindings: HealthFinding[];
+    newCrossLayerDependencies: ArchitectureCrossLayerDependency[];
+    reasons: string[];
+  };
+  aiAdvice?: {
+    architecturalRiskSummary: string;
+    educationalInsight: string;
+    saferAlternatives: string[];
+    providerUsed: string;
+  } | null;
+  evaluatedAt: string;
+}

@@ -1010,3 +1010,77 @@ export async function compareArchitectureTimeMachineHandler(
     sendInternalError(res, message);
   }
 }
+
+/**
+ * POST /api/v1/repositories/:repositoryId/architecture/what-if
+ * POST /api/v1/repositories/:repositoryId/intelligence/architecture/what-if
+ * Simulates a proposed structural architectural change in-memory.
+ */
+export async function architectureWhatIfHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { scenarioType, sourcePath, targetPath, includeAIAdvice } = req.body as {
+      scenarioType?: unknown;
+      sourcePath?: unknown;
+      targetPath?: unknown;
+      includeAIAdvice?: unknown;
+    };
+
+    if (
+      typeof scenarioType !== 'string' ||
+      typeof sourcePath !== 'string' ||
+      typeof targetPath !== 'string' ||
+      sourcePath.trim().length === 0 ||
+      targetPath.trim().length === 0
+    ) {
+      sendBadRequest(res, 'Valid scenarioType, sourcePath, and targetPath are required.');
+      return;
+    }
+
+    const validScenarios = [
+      'add_dependency',
+      'remove_dependency',
+      'move_module',
+      'introduce_cross_layer_dependency',
+    ];
+    if (!validScenarios.includes(scenarioType)) {
+      sendBadRequest(res, `Invalid scenarioType. Supported: ${validScenarios.join(', ')}`);
+      return;
+    }
+
+    const { simulateArchitectureWhatIf } =
+      await import('../services/architecture-whatif.service.js');
+
+    const result = await simulateArchitectureWhatIf(repositoryId, user.id, {
+      scenarioType: scenarioType as
+        'add_dependency' | 'remove_dependency' | 'move_module' | 'introduce_cross_layer_dependency',
+      sourcePath: sourcePath.trim(),
+      targetPath: targetPath.trim(),
+      includeAIAdvice: typeof includeAIAdvice === 'boolean' ? includeAIAdvice : false,
+    });
+
+    res.status(200).json({ success: true, result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    if (message.includes('Repository not found')) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message },
+      });
+      return;
+    }
+    sendInternalError(res, message);
+  }
+}

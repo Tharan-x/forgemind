@@ -36,4 +36,5 @@ export * from './pr-gatekeeper-policy.service.js';
 export * from './pr-analysis.service.js';
 export * from './gatekeeper-dashboard.service.js';
 export * from './architecture-time-machine.service.js';
+export * from './architecture-whatif.service.js';
 export * from './device-management.service.js';

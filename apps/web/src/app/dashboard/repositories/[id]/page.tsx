@@ -29,6 +29,7 @@ import { ArchitecturalHealthDashboard } from '@/components/health/ArchitecturalH
 import { PRGatekeeperDashboard } from '@/components/gatekeeper/PRGatekeeperDashboard';
 import { OnboardingBlueprintViewer } from '@/components/onboarding/OnboardingBlueprintViewer';
 import { ArchitectureTimeMachineViewer } from '@/components/architecture/ArchitectureTimeMachineViewer';
+import { ArchitectureWhatIfSimulator } from '@/components/architecture/ArchitectureWhatIfSimulator';
 
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -58,14 +59,15 @@ import { getRepository, type Repository } from '@/lib/repository.api';
 type TabType =
   | 'overview'
   | 'health'
-  | 'gatekeeper'
+  | 'what-if'
   | 'time-machine'
   | 'intelligence'
   | 'graph'
   | 'chat'
   | 'files'
   | 'symbols'
-  | 'dependencies';
+  | 'dependencies'
+  | 'gatekeeper';
 
 export default function RepositoryDetailPage() {
   const params = useParams();
@@ -695,6 +697,7 @@ export default function RepositoryDetailPage() {
               [
                 { id: 'overview', label: 'Overview', icon: '📊' },
                 { id: 'health', label: 'Architectural Health', icon: '🩺' },
+                { id: 'what-if', label: 'What-If Simulator', icon: '🔮' },
                 { id: 'time-machine', label: 'Time Machine', icon: '⏳' },
                 { id: 'intelligence', label: 'Code Intelligence', icon: '🧠' },
                 { id: 'graph', label: 'Graph & Topology', icon: '🌐' },
@@ -757,6 +760,9 @@ export default function RepositoryDetailPage() {
             }}
           />
         )}
+
+        {/* TAB: WHAT-IF SIMULATOR */}
+        {activeTab === 'what-if' && <ArchitectureWhatIfSimulator repositoryId={repositoryId} />}
 
         {/* TAB: ARCHITECTURE TIME MACHINE */}
         {activeTab === 'time-machine' && (

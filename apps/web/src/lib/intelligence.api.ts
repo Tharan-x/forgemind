@@ -13,6 +13,8 @@ import type {
   ArchitectureDrift,
   ArchitectureTimelineResponse,
   ArchitectureTimeMachineComparisonResponse,
+  ArchitectureWhatIfRequest,
+  ArchitectureWhatIfResult,
   GenerateRefactoringPlanRequest,
   StructuredRemediationPlan,
   RemediationExplainRequest,
@@ -366,4 +368,21 @@ export async function compareArchitectureTimeMachineSnapshots(
     `/repositories/${encodeURIComponent(repositoryId)}/architecture/time-machine/compare${queryString}`,
   );
   return res.comparison;
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/architecture/what-if
+ */
+export async function simulateArchitectureWhatIf(
+  repositoryId: string,
+  req: ArchitectureWhatIfRequest,
+): Promise<ArchitectureWhatIfResult> {
+  const res = await request<{ success: boolean; result: ArchitectureWhatIfResult }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/architecture/what-if`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    },
+  );
+  return res.result;
 }

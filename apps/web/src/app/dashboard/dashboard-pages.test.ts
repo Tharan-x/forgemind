@@ -1427,7 +1427,7 @@ async function runPartD(): Promise<void> {
     const tabBar = rendered.props.children.props.children[1];
     const tabsList = tabBar.props.children.props.children;
 
-    assertEqual(tabsList.length, 10, 'Test 34: 10 tabs present');
+    assertEqual(tabsList.length, 11, 'Test 34: 11 tabs present');
 
     assertEqual(
       tabsList[0].props.children[1].props.children,
@@ -1441,46 +1441,51 @@ async function runPartD(): Promise<void> {
     );
     assertEqual(
       tabsList[2].props.children[1].props.children,
-      'Time Machine',
-      'Test 34: Tab 3 Time Machine',
+      'What-If Simulator',
+      'Test 34: Tab 3 What-If Simulator',
     );
     assertEqual(
       tabsList[3].props.children[1].props.children,
-      'Code Intelligence',
-      'Test 34: Tab 4 Intelligence',
+      'Time Machine',
+      'Test 34: Tab 4 Time Machine',
     );
     assertEqual(
       tabsList[4].props.children[1].props.children,
-      'Graph & Topology',
-      'Test 34: Tab 5 Graph & Topology',
+      'Code Intelligence',
+      'Test 34: Tab 5 Intelligence',
     );
     assertEqual(
       tabsList[5].props.children[1].props.children,
-      'AI Assistant',
-      'Test 34: Tab 6 Chat',
+      'Graph & Topology',
+      'Test 34: Tab 6 Graph & Topology',
     );
     assertEqual(
       tabsList[6].props.children[1].props.children,
-      'Indexed Files',
-      'Test 34: Tab 7 Files',
+      'AI Assistant',
+      'Test 34: Tab 7 AI Assistant',
     );
     assertEqual(
       tabsList[7].props.children[1].props.children,
-      'AST Symbols',
-      'Test 34: Tab 8 Symbols',
+      'Indexed Files',
+      'Test 34: Tab 8 Files',
     );
     assertEqual(
       tabsList[8].props.children[1].props.children,
-      'Dependencies',
-      'Test 34: Tab 9 Dependencies',
+      'AST Symbols',
+      'Test 34: Tab 9 Symbols',
     );
     assertEqual(
       tabsList[9].props.children[1].props.children,
+      'Dependencies',
+      'Test 34: Tab 10 Dependencies',
+    );
+    assertEqual(
+      tabsList[10].props.children[1].props.children,
       'PR Gatekeeper',
-      'Test 34: Tab 10 PR Gatekeeper',
+      'Test 34: Tab 11 PR Gatekeeper',
     );
 
-    console.log('  ✅ Test 34: Tab bar navigation renders all 10 tabs correctly');
+    console.log('  ✅ Test 34: Tab bar navigation renders all 11 tabs correctly');
   }
 
   // Test 35: Overview tab metrics cards (Indexed Files, AST Symbols, File Dependencies, Latest Commit)

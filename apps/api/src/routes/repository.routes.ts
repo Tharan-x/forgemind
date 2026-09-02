@@ -55,6 +55,7 @@ import {
   getPRArchitectureDriftHandler,
   getArchitectureTimelineHandler,
   compareArchitectureTimeMachineHandler,
+  architectureWhatIfHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -365,6 +366,24 @@ router.get(
   '/:repositoryId/intelligence/architecture/time-machine/compare',
   requireAuth,
   compareArchitectureTimeMachineHandler,
+);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/architecture/what-if
+ * POST /api/v1/repositories/:repositoryId/intelligence/architecture/what-if
+ * Simulates a proposed structural architectural change in-memory.
+ */
+router.post(
+  '/:repositoryId/architecture/what-if',
+  requireAuth,
+  heavyRouteRateLimiter,
+  architectureWhatIfHandler,
+);
+router.post(
+  '/:repositoryId/intelligence/architecture/what-if',
+  requireAuth,
+  heavyRouteRateLimiter,
+  architectureWhatIfHandler,
 );
 
 /**
