@@ -1,7 +1,5 @@
-// =============================================================================
-// ForgeMind API — Architecture Time Machine Test Suite
-// =============================================================================
-
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+import { PrismaClient } from '@prisma/client';
 import {
   getArchitectureTimeMachineTimeline,
   compareArchitectureTimeMachineSnapshots,
@@ -19,12 +17,139 @@ function assertTrue(condition: boolean, message: string): void {
   }
 }
 
+const mockRepoId = '00000000-0000-4000-8000-0000000000c9';
+const mockUserId = 'user-owner-id';
+const nonOwnerUserId = 'user-unauthorized-id';
+
+const MOCK_REPOSITORIES: Record<string, any> = {
+  [mockRepoId]: {
+    id: mockRepoId,
+    userId: mockUserId,
+    name: 'forgemind-app',
+  },
+};
+
+const MOCK_SNAPSHOTS: any[] = [
+  {
+    id: 'snap-1',
+    repositoryId: mockRepoId,
+    analysisJobId: 'job-1',
+    commitHash: 'commit-old',
+    healthScore: 90,
+    grade: 'A',
+    totalFiles: 10,
+    totalDependencies: 5,
+    circularCycleCount: 1,
+    layerViolationCount: 0,
+    hotspotCount: 0,
+    orphanExportCount: 0,
+    scoreBreakdown: {},
+    findings: [
+      {
+        id: 'finding-1',
+        category: 'circular_dependency',
+        severity: 'high',
+        title: 'Circular Dependency Cycle (2 files)',
+        description: 'src/a.ts -> src/b.ts',
+        affectedNodeIds: ['file:src/a.ts', 'file:src/b.ts'],
+        affectedFilePaths: ['src/a.ts', 'src/b.ts'],
+        metrics: { cycleLength: 2 },
+        penaltyPoints: 10,
+      },
+    ],
+    fanMetrics: [],
+    createdAt: new Date('2026-08-20T10:00:00Z'),
+  },
+  {
+    id: 'snap-2',
+    repositoryId: mockRepoId,
+    analysisJobId: 'job-2',
+    commitHash: 'commit-new',
+    healthScore: 75,
+    grade: 'B+',
+    totalFiles: 12,
+    totalDependencies: 8,
+    circularCycleCount: 1,
+    layerViolationCount: 2,
+    hotspotCount: 0,
+    orphanExportCount: 0,
+    scoreBreakdown: {},
+    findings: [],
+    fanMetrics: [],
+    createdAt: new Date('2026-08-25T10:00:00Z'),
+  },
+];
+
+function setupMocks(): void {
+  (PrismaClient.prototype as any)._request = async function (params: any): Promise<any> {
+    const { clientMethod, model, action, args } = params;
+
+    if (
+      clientMethod === 'repository.findUnique' ||
+      (model === 'Repository' && (action === 'findUnique' || action === 'findFirst'))
+    ) {
+      const id = args?.where?.id;
+      return MOCK_REPOSITORIES[id] ?? null;
+    }
+
+    if (clientMethod === 'fileDependency.findMany' || model === 'FileDependency') {
+      return [
+        {
+          id: 'd1',
+          repositoryId: mockRepoId,
+          sourcePath: 'src/main.ts',
+          targetPath: 'src/utils.ts',
+          isExternal: false,
+        },
+      ];
+    }
+
+    if (
+      clientMethod?.startsWith('architectureHealthSnapshot.') ||
+      model === 'ArchitectureHealthSnapshot'
+    ) {
+      if (action === 'findMany') {
+        const repoId = args?.where?.repositoryId;
+        return MOCK_SNAPSHOTS.filter((s) => !repoId || s.repositoryId === repoId).sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+        );
+      }
+
+      if (action === 'findFirst' || action === 'findUnique') {
+        const where = args?.where || {};
+        if (where.OR) {
+          const matched = MOCK_SNAPSHOTS.find((s) =>
+            where.OR.some(
+              (cond: any) =>
+                (cond.analysisJobId && s.analysisJobId === cond.analysisJobId) ||
+                (cond.id && s.id === cond.id),
+            ),
+          );
+          if (matched) return matched;
+        }
+        if (where.analysisJobId) {
+          return MOCK_SNAPSHOTS.find((s) => s.analysisJobId === where.analysisJobId) ?? null;
+        }
+        if (where.id) {
+          return MOCK_SNAPSHOTS.find((s) => s.id === where.id) ?? null;
+        }
+        if (where.repositoryId) {
+          const list = MOCK_SNAPSHOTS.filter((s) => s.repositoryId === where.repositoryId).sort(
+            (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+          );
+          return list[0] ?? null;
+        }
+        return MOCK_SNAPSHOTS[0] ?? null;
+      }
+    }
+
+    return null;
+  };
+}
+
 export async function runArchitectureTimeMachineTests(): Promise<void> {
   console.log('\n🧪 Starting Architecture Time Machine Test Suite...');
-
-  const mockRepoId = '00000000-0000-4000-8000-0000000000c9';
-  const mockUserId = 'user-owner-id';
-  const nonOwnerUserId = 'user-unauthorized-id';
+  setupMocks();
 
   // 1. Timeline Retrieval & Ordering with Empty DB Fallback
   const timelineResult = await getArchitectureTimeMachineTimeline(mockRepoId, mockUserId);
@@ -156,10 +281,7 @@ export async function runArchitectureTimeMachineTests(): Promise<void> {
   console.log('\n🎉 ALL ARCHITECTURE TIME MACHINE TESTS PASSED!\n');
 }
 
-// Allow direct execution
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runArchitectureTimeMachineTests().catch((err) => {
-    console.error('❌ Architecture Time Machine Tests Failed:', err);
-    process.exit(1);
-  });
-}
+runArchitectureTimeMachineTests().catch((err) => {
+  console.error('❌ Architecture Time Machine Tests Failed:', err);
+  process.exit(1);
+});

@@ -398,7 +398,10 @@ export async function getArchitectureDrift(
 
   const changedComponents = Array.from(componentsSet).sort();
   const changedModules = Array.from(modulesSet).sort();
-  const affectedLayers = mapArchitecturalLayers(changedFilesList, newFindings);
+  const affectedLayers =
+    changedFilesList.length > 0 || newFindings.length > 0
+      ? mapArchitecturalLayers(changedFilesList, newFindings)
+      : [];
 
   // Dependency churn
   const currentDepsCount = currentSnapshot?.totalDependencies ?? dbDependencies.length;

@@ -1,7 +1,5 @@
-// =============================================================================
-// ForgeMind API — Architecture What-If Engine Test Suite
-// =============================================================================
-
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
+import { PrismaClient } from '@prisma/client';
 import { simulateArchitectureWhatIf } from './architecture-whatif.service.js';
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {
@@ -16,12 +14,92 @@ function assertTrue(condition: boolean, message: string): void {
   }
 }
 
+const mockRepoId = '00000000-0000-4000-8000-0000000000c9';
+const mockUserId = 'user-owner-id';
+const nonOwnerUserId = 'user-unauthorized-id';
+
+const MOCK_REPOSITORIES: Record<string, any> = {
+  [mockRepoId]: {
+    id: mockRepoId,
+    userId: mockUserId,
+    name: 'forgemind-app',
+  },
+};
+
+function setupMocks(): void {
+  (PrismaClient.prototype as any)._request = async function (params: any): Promise<any> {
+    const { clientMethod, model, action, args } = params;
+
+    if (
+      clientMethod === 'repository.findUnique' ||
+      (model === 'Repository' && (action === 'findUnique' || action === 'findFirst'))
+    ) {
+      const id = args?.where?.id;
+      return MOCK_REPOSITORIES[id] ?? null;
+    }
+
+    if (clientMethod === 'repositoryFile.findMany' || model === 'RepositoryFile') {
+      return [
+        {
+          id: 'f1',
+          repositoryId: mockRepoId,
+          path: 'apps/web/src/pages/dashboard.tsx',
+          name: 'dashboard.tsx',
+        },
+        {
+          id: 'f2',
+          repositoryId: mockRepoId,
+          path: 'apps/web/src/components/Header.tsx',
+          name: 'Header.tsx',
+        },
+        { id: 'f3', repositoryId: mockRepoId, path: 'apps/web/src/app/page.tsx', name: 'page.tsx' },
+        {
+          id: 'f4',
+          repositoryId: mockRepoId,
+          path: 'apps/api/src/db/client.ts',
+          name: 'client.ts',
+        },
+      ];
+    }
+
+    if (clientMethod === 'fileDependency.findMany' || model === 'FileDependency') {
+      return [
+        {
+          id: 'd1',
+          repositoryId: mockRepoId,
+          sourcePath: 'apps/web/src/pages/dashboard.tsx',
+          targetPath: 'apps/web/src/components/Header.tsx',
+          isExternal: false,
+        },
+      ];
+    }
+
+    if (clientMethod === 'repositorySymbol.findMany' || model === 'RepositorySymbol') {
+      return [];
+    }
+
+    if (
+      clientMethod === 'prGatekeeperPolicyConfig.findUnique' ||
+      model === 'PRGatekeeperPolicyConfig'
+    ) {
+      return {
+        repositoryId: mockRepoId,
+        enabled: true,
+        maxScoreDegradation: 5,
+        blockOnNewCriticalFindings: true,
+        blockOnNewHighFindings: false,
+        blockOnNewCircularCycles: true,
+        blockOnNewLayerViolations: true,
+      };
+    }
+
+    return null;
+  };
+}
+
 export async function runArchitectureWhatIfTests(): Promise<void> {
   console.log('\n🧪 Starting Architecture What-If Engine Test Suite...');
-
-  const mockRepoId = '00000000-0000-4000-8000-0000000000c9';
-  const mockUserId = 'user-owner-id';
-  const nonOwnerUserId = 'user-unauthorized-id';
+  setupMocks();
 
   // 1. Add Dependency Scenario (Clean addition without breach)
   const addResult = await simulateArchitectureWhatIf(mockRepoId, mockUserId, {
@@ -126,10 +204,7 @@ export async function runArchitectureWhatIfTests(): Promise<void> {
   console.log('\n🎉 ALL ARCHITECTURE WHAT-IF TESTS PASSED!\n');
 }
 
-// Direct CLI execution
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runArchitectureWhatIfTests().catch((err) => {
-    console.error('❌ Architecture What-If Tests Failed:', err);
-    process.exit(1);
-  });
-}
+runArchitectureWhatIfTests().catch((err) => {
+  console.error('❌ Architecture What-If Tests Failed:', err);
+  process.exit(1);
+});
