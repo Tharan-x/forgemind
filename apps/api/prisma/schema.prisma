@@ -371,6 +371,7 @@ model ArchitectureDecision {
   changedFiles     Json?     @map("changed_files")
   healthScoreDelta Int?      @map("health_score_delta")
   evidenceMetadata Json?     @map("evidence_metadata")
+  synthesis        Json?     @map("synthesis")
   isConfirmed      Boolean   @default(false) @map("is_confirmed")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")

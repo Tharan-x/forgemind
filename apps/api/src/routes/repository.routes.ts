@@ -60,6 +60,7 @@ import {
   getArchitectureDecisionsHandler,
   getArchitectureDecisionByIdHandler,
   confirmArchitectureDecisionHandler,
+  synthesizeArchitectureDecisionHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -489,6 +490,17 @@ router.patch(
   '/:repositoryId/decisions/:decisionId/confirm',
   requireAuth,
   confirmArchitectureDecisionHandler,
+);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions/:decisionId/synthesize
+ * Generates or regenerates evidence-grounded AI synthesis for a single decision record.
+ */
+router.post(
+  '/:repositoryId/decisions/:decisionId/synthesize',
+  requireAuth,
+  heavyRouteRateLimiter,
+  synthesizeArchitectureDecisionHandler,
 );
 
 /**

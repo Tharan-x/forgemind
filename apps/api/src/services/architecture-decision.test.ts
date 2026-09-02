@@ -1,6 +1,6 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 // =============================================================================
-// ForgeMind API — Architecture Decision Service Unit Tests (Milestone 1)
+// ForgeMind API — Architecture Decision Memory Service Unit Tests (Milestone 1 & 2)
 // =============================================================================
 
 process.env['ENCRYPTION_SECRET'] = 'forgemind-test-encryption-secret-32-chars';
@@ -12,6 +12,7 @@ import {
   findArchitectureDecisionById,
   findArchitectureDecisions,
   mineRepositoryHistoricalEvidence,
+  synthesizeArchitectureDecision,
 } from './architecture-decision.service.js';
 
 function assertEqual<T>(actual: T, expected: T, message: string): void {
@@ -150,6 +151,7 @@ function setupPrismaMocks(): void {
           changedFiles: args.data.changedFiles ?? null,
           healthScoreDelta: args.data.healthScoreDelta ?? null,
           evidenceMetadata: args.data.evidenceMetadata ?? null,
+          synthesis: args.data.synthesis ?? null,
           isConfirmed: args.data.isConfirmed ?? false,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -208,7 +210,7 @@ function setupPrismaMocks(): void {
 }
 
 async function runTests(): Promise<void> {
-  console.log('🧪 Starting Architecture Decision Service (Milestone 1) Tests...\n');
+  console.log('🧪 Starting Architecture Decision Service (Milestone 1 & 2) Tests...\n');
   setupPrismaMocks();
 
   // Mock global fetch for GitHub API calls
@@ -231,7 +233,7 @@ async function runTests(): Promise<void> {
           {
             sha: 'commit-sha-111',
             commit: {
-              message: 'refactor: Extract API core app router',
+              message: 'wip',
               author: {
                 name: 'Core Dev',
                 email: 'core@forgemind.io',
@@ -277,7 +279,7 @@ async function runTests(): Promise<void> {
           html_url:
             'https://github.com/forgemind-org/forgemind-decisions-repo/commit/commit-sha-222',
           commit: {
-            message: 'feat: Add PR Gatekeeper decision policy',
+            message: 'feat: Add PR Gatekeeper decision policy PAT="ghp_secret_key_123"',
             author: { name: 'Lead Dev', email: 'dev@forgemind.io', date: '2026-09-01T12:00:00Z' },
           },
           files: [
@@ -308,7 +310,7 @@ async function runTests(): Promise<void> {
           html_url:
             'https://github.com/forgemind-org/forgemind-decisions-repo/commit/commit-sha-111',
           commit: {
-            message: 'refactor: Extract API core app router',
+            message: 'wip',
             author: { name: 'Core Dev', email: 'core@forgemind.io', date: '2026-09-01T10:00:00Z' },
           },
           files: [
@@ -467,6 +469,89 @@ async function runTests(): Promise<void> {
       );
     }
     console.log('  ✅ Test 8 PASS: GitHub API failure handled cleanly without corrupting DB.');
+
+    // -------------------------------------------------------------------------
+    // TEST 9: Milestone 2 — Valid Commit + PR Evidence Produces Grounded Synthesis
+    // -------------------------------------------------------------------------
+    console.log('Test 9: Valid commit + PR evidence AI synthesis generation...');
+    const synthesized = await synthesizeArchitectureDecision(
+      mockRepoId,
+      prDecision!.id,
+      mockUserId,
+    );
+    assertTrue(!!synthesized.synthesis, 'Synthesis object created');
+    assertTrue(
+      synthesized.synthesis!.architecturalIntent.length > 0,
+      'Architectural intent populated',
+    );
+    assertTrue(synthesized.synthesis!.rationale.length > 0, 'Rationale populated');
+    assertEqual(
+      synthesized.synthesis!.evidenceConfidence,
+      'HIGH',
+      'High confidence for rich PR evidence',
+    );
+    console.log('  ✅ Test 9 PASS: Grounded AI synthesis generated for rich evidence.');
+
+    // -------------------------------------------------------------------------
+    // TEST 10: Milestone 2 — Sparse Evidence Fallback Handling
+    // -------------------------------------------------------------------------
+    console.log('Test 10: Sparse evidence fallback handling...');
+    const sparseDecision = decisions.items.find((d) => d.commitHash === 'commit-sha-111');
+    assertTrue(!!sparseDecision, 'Found sparse decision for commit-sha-111');
+
+    const sparseSynthesized = await synthesizeArchitectureDecision(
+      mockRepoId,
+      sparseDecision!.id,
+      mockUserId,
+    );
+    assertEqual(
+      sparseSynthesized.synthesis?.architecturalIntent,
+      'Historical intent unrecorded in commit metadata',
+      'Returns standard fallback for sparse commit/PR evidence',
+    );
+    assertEqual(
+      sparseSynthesized.synthesis?.evidenceConfidence,
+      'UNRECORDED',
+      'Evidence confidence set to UNRECORDED for sparse evidence',
+    );
+    console.log(
+      '  ✅ Test 10 PASS: Sparse evidence correctly triggers UNRECORDED fallback without hallucinating.',
+    );
+
+    // -------------------------------------------------------------------------
+    // TEST 11: Milestone 2 — force=true Regeneration & Idempotency
+    // -------------------------------------------------------------------------
+    console.log('Test 11: force=true regeneration & cached synthesis idempotency...');
+    const cachedRun = await synthesizeArchitectureDecision(mockRepoId, prDecision!.id, mockUserId, {
+      force: false,
+    });
+    assertEqual(
+      cachedRun.synthesis?.synthesizedAt,
+      synthesized.synthesis?.synthesizedAt,
+      'Identical timestamp returned when force=false',
+    );
+
+    const forcedRun = await synthesizeArchitectureDecision(mockRepoId, prDecision!.id, mockUserId, {
+      force: true,
+    });
+    assertTrue(!!forcedRun.synthesis, 'Re-synthesis succeeded on force=true');
+    console.log('  ✅ Test 11 PASS: Caching & force=true regeneration verified.');
+
+    // -------------------------------------------------------------------------
+    // TEST 12: Milestone 2 — Secret Protection / Masking Verification
+    // -------------------------------------------------------------------------
+    console.log('Test 12: Secret masking verification in LLM input...');
+    const decisionWithSecret = await synthesizeArchitectureDecision(
+      mockRepoId,
+      prDecision!.id,
+      mockUserId,
+      { force: true },
+    );
+    assertTrue(
+      !JSON.stringify(decisionWithSecret.synthesis).includes('ghp_secret_key_123'),
+      'Secret key masked prior to synthesis',
+    );
+    console.log('  ✅ Test 12 PASS: Credentials & PAT secrets masked prior to synthesis.');
 
     console.log('\n🎉 ALL ARCHITECTURE DECISION SERVICE TESTS PASSED SUCCESSFULLY!\n');
   } finally {

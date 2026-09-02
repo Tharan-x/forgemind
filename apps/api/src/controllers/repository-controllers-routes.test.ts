@@ -315,6 +315,7 @@ globalThis.fetch = async (
         changedFiles: createData['changedFiles'] || null,
         healthScoreDelta: createData['healthScoreDelta'] || null,
         evidenceMetadata: createData['evidenceMetadata'] || null,
+        synthesis: createData['synthesis'] || null,
         isConfirmed: createData['isConfirmed'] || false,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -2888,6 +2889,62 @@ async function runPartM() {
       'Test 104: Access denied for unauthorized repository user',
     );
     console.log('  ✅ Test 104: Decision endpoints enforce user repository ownership security');
+  }
+
+  // Test 105: POST /decisions/:id/synthesize AI synthesis endpoint
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${testRepoId}/decisions/${seedDecisionId}/synthesize`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    const body = res.body as any;
+    assertEqual(res.status, 200, 'Test 105: Status 200 for AI synthesis endpoint');
+    assertDefined(body.decision?.synthesis, 'Test 105: Synthesis payload included in response');
+    assert(
+      typeof body.decision.synthesis.architecturalIntent === 'string',
+      'Test 105: Architectural intent string present',
+    );
+    console.log('  ✅ Test 105: POST /decisions/:id/synthesize returned grounded AI synthesis');
+  }
+
+  // Test 106: Unauthorized user access to synthesis endpoint rejected
+  {
+    const res = await apiRequest(
+      'POST',
+      `/api/v1/repositories/${testRepoId}/decisions/${seedDecisionId}/synthesize`,
+      {
+        token: TOKEN_USER_2,
+      },
+    );
+    assert(
+      res.status === 400 || res.status === 403 || res.status === 500,
+      'Test 106: Access denied for unauthorized repository user',
+    );
+    console.log('  ✅ Test 106: Synthesis endpoint enforces repository ownership security');
+  }
+
+  // Test 107: GET single decision includes synthesis payload alongside deterministic evidence
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${testRepoId}/decisions/${seedDecisionId}`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    const body = res.body as any;
+    assertEqual(res.status, 200, 'Test 107: Status 200 for single decision retrieval');
+    assertEqual(body.decision?.id, seedDecisionId, 'Test 107: Decision ID matches');
+    assertDefined(
+      body.decision?.synthesis,
+      'Test 107: Single decision payload includes synthesis alongside evidence',
+    );
+    console.log(
+      '  ✅ Test 107: GET /decisions/:id returns deterministic evidence and synthesis payload',
+    );
   }
 }
 

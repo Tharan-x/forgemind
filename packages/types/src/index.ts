@@ -1167,7 +1167,7 @@ export interface ArchitectureWhatIfResult {
   evaluatedAt: string;
 }
 
-// ─── Architecture Decision Memory Types (Milestone 1) ───────────────────────
+// ─── Architecture Decision Memory Types (Milestone 1 & 2) ───────────────────
 
 export interface HistoricalChangedFileEvidence {
   filename: string;
@@ -1175,6 +1175,16 @@ export interface HistoricalChangedFileEvidence {
   additions: number;
   deletions: number;
   changes: number;
+}
+
+export interface ArchitectureDecisionSynthesis {
+  architecturalIntent: string;
+  rationale: string;
+  architecturalImpact: string;
+  evidenceConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNRECORDED';
+  supportedSources: string[];
+  modelUsed: string;
+  synthesizedAt: string;
 }
 
 export interface ArchitectureDecision {
@@ -1193,6 +1203,7 @@ export interface ArchitectureDecision {
   changedFiles: HistoricalChangedFileEvidence[] | null;
   healthScoreDelta: number | null;
   evidenceMetadata: Record<string, unknown> | null;
+  synthesis: ArchitectureDecisionSynthesis | null;
   isConfirmed: boolean;
   createdAt: string;
   updatedAt: string;

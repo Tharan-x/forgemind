@@ -10,6 +10,7 @@ import {
   findArchitectureDecisionById,
   findArchitectureDecisions,
   mineRepositoryHistoricalEvidence,
+  synthesizeArchitectureDecision,
 } from '../services/architecture-decision.service.js';
 
 function sendInternalError(res: Response, message = 'An unexpected error occurred.'): void {
@@ -190,6 +191,48 @@ export async function confirmArchitectureDecisionHandler(
       error: {
         code: 'CONFIRMATION_FAILED',
         message: message || 'Failed to update decision status.',
+      },
+    });
+  }
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions/:decisionId/synthesize
+ * Generates or regenerates evidence-grounded AI synthesis for a single decision record.
+ */
+export async function synthesizeArchitectureDecisionHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const repositoryId = (req.params['repositoryId'] as string) || '';
+    const decisionId = (req.params['decisionId'] as string) || '';
+    if (!repositoryId || !decisionId) {
+      sendBadRequest(res, 'Repository ID and Decision ID are required.');
+      return;
+    }
+
+    const forceRaw = req.query['force'] || req.body?.force;
+    const force = String(forceRaw) === 'true' || forceRaw === true;
+
+    const decision = await synthesizeArchitectureDecision(repositoryId, decisionId, user.id, {
+      force,
+    });
+
+    res.status(200).json({ success: true, decision });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'SYNTHESIS_FAILED',
+        message: message || 'Failed to synthesize architecture decision.',
       },
     });
   }
