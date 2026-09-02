@@ -8,3 +8,4 @@ export * from './vector.controller.js';
 export * from './chat.controller.js';
 export * from './intelligence.controller.js';
 export * from './gatekeeper.controller.js';
+export * from './architecture-decision.controller.js';

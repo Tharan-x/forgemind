@@ -78,6 +78,7 @@ model Repository {
   healthSnapshots ArchitectureHealthSnapshot[]
   webhookDeliveries WebhookDelivery[]
   gatekeeperConfig  RepositoryGatekeeperConfig?
+  decisions         ArchitectureDecision[]
 
   @@map("repositories")
 }
@@ -351,4 +352,35 @@ model RepositoryGatekeeperConfig {
 
   @@map("repository_gatekeeper_configs")
 }
+
+// ─── 15. Architecture Decisions Model ────────────────────────────────────────
+
+model ArchitectureDecision {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repositoryId     String    @map("repository_id") @db.Uuid
+  commitHash       String    @map("commit_hash")
+  commitUrl        String?   @map("commit_url")
+  commitMessage    String?   @map("commit_message") @db.Text
+  author           String?   @map("author")
+  committedAt      DateTime? @map("committed_at")
+  prNumber         Int?      @map("pr_number")
+  prUrl            String?   @map("pr_url")
+  prTitle          String?   @map("pr_title")
+  prBody           String?   @map("pr_body") @db.Text
+  affectedPaths    String[]  @default([]) @map("affected_paths")
+  changedFiles     Json?     @map("changed_files")
+  healthScoreDelta Int?      @map("health_score_delta")
+  evidenceMetadata Json?     @map("evidence_metadata")
+  isConfirmed      Boolean   @default(false) @map("is_confirmed")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, commitHash])
+  @@index([repositoryId])
+  @@index([repositoryId, prNumber])
+  @@map("architecture_decisions")
+}
+
 

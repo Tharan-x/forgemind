@@ -47,6 +47,7 @@ export interface GithubBranch {
 
 export interface GithubCommit {
   sha: string;
+  html_url?: string;
   commit: {
     message: string;
     author?: {
@@ -54,7 +55,44 @@ export interface GithubCommit {
       email: string;
       date: string;
     };
+    committer?: {
+      name: string;
+      email: string;
+      date: string;
+    };
   };
+  author?: {
+    login: string;
+    avatar_url?: string;
+    html_url?: string;
+  } | null;
+}
+
+export interface GithubCommitFileChange {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+}
+
+export interface GithubCommitDetail extends GithubCommit {
+  files?: GithubCommitFileChange[];
+}
+
+export interface GithubPullRequestSummary {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  state: string;
+  merged_at: string | null;
+  user?: {
+    login: string;
+    avatar_url?: string;
+  } | null;
 }
 
 export interface GithubTreeResponse {
@@ -114,6 +152,17 @@ export interface GithubClient {
   listBranches(owner: string, repo: string): Promise<GithubBranch[]>;
   getDefaultBranch(owner: string, repo: string): Promise<string>;
   getCommit(owner: string, repo: string, ref?: string): Promise<GithubCommit>;
+  listCommits(
+    owner: string,
+    repo: string,
+    options?: { path?: string; per_page?: number; sha?: string },
+  ): Promise<GithubCommitDetail[]>;
+  getCommitDetail(owner: string, repo: string, sha: string): Promise<GithubCommitDetail>;
+  getCommitPullRequests(
+    owner: string,
+    repo: string,
+    commitSha: string,
+  ): Promise<GithubPullRequestSummary[]>;
   getTree(
     owner: string,
     repo: string,
@@ -214,6 +263,45 @@ export function createGithubClient(token?: string): GithubClient {
     return request<GithubCommit>(
       `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(ref)}`,
     );
+  }
+
+  async function listCommits(
+    owner: string,
+    repo: string,
+    options: { path?: string; per_page?: number; sha?: string } = {},
+  ): Promise<GithubCommitDetail[]> {
+    const params = new URLSearchParams();
+    if (options.path) params.set('path', options.path);
+    if (options.per_page) params.set('per_page', options.per_page.toString());
+    if (options.sha) params.set('sha', options.sha);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<GithubCommitDetail[]>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits${query}`,
+    );
+  }
+
+  async function getCommitDetail(
+    owner: string,
+    repo: string,
+    sha: string,
+  ): Promise<GithubCommitDetail> {
+    return request<GithubCommitDetail>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(sha)}`,
+    );
+  }
+
+  async function getCommitPullRequests(
+    owner: string,
+    repo: string,
+    commitSha: string,
+  ): Promise<GithubPullRequestSummary[]> {
+    try {
+      return await request<GithubPullRequestSummary[]>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(commitSha)}/pulls`,
+      );
+    } catch {
+      return [];
+    }
   }
 
   async function getTree(
@@ -318,6 +406,9 @@ export function createGithubClient(token?: string): GithubClient {
     listBranches,
     getDefaultBranch,
     getCommit,
+    listCommits,
+    getCommitDetail,
+    getCommitPullRequests,
     getTree,
     getFileContent,
     postCommitStatus,

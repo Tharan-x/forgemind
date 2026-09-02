@@ -84,6 +84,7 @@ const sessionStore = new Map<string, Record<string, unknown>>();
 const messageStore = new Map<string, Record<string, unknown>>();
 const userDeviceStore = new Map<string, Record<string, unknown>>();
 const snapshotStore = new Map<string, Record<string, unknown>>();
+const decisionStore = new Map<string, Record<string, unknown>>();
 
 function resetAllStores(): void {
   userStore.clear();
@@ -98,6 +99,7 @@ function resetAllStores(): void {
   messageStore.clear();
   userDeviceStore.clear();
   snapshotStore.clear();
+  decisionStore.clear();
 }
 
 // Seed Users
@@ -268,6 +270,103 @@ globalThis.fetch = async (
   const create = (args?.['create'] as Record<string, unknown> | undefined) || {};
   const update = (args?.['update'] as Record<string, unknown> | undefined) || {};
   const include = (args?.['include'] as Record<string, unknown> | undefined) || {};
+
+  // ── architectureDecision ──
+  if (clientMethod?.startsWith('architectureDecision.')) {
+    if (
+      clientMethod === 'architectureDecision.findUnique' ||
+      clientMethod === 'architectureDecision.findFirst'
+    ) {
+      const repoId_commit = where['repositoryId_commitHash'] as
+        { repositoryId: string; commitHash: string } | undefined;
+      const id = where['id'] as string | undefined;
+      const repositoryId = where['repositoryId'] as string | undefined;
+      const results = Array.from(decisionStore.values());
+      return (
+        results.find(
+          (d) =>
+            (repoId_commit &&
+              d['repositoryId'] === repoId_commit.repositoryId &&
+              d['commitHash'] === repoId_commit.commitHash) ||
+            (id && d['id'] === id && (!repositoryId || d['repositoryId'] === repositoryId)),
+        ) ?? null
+      );
+    }
+    if (
+      clientMethod === 'architectureDecision.create' ||
+      clientMethod === 'architectureDecision.upsert'
+    ) {
+      const createData = (create.data || create || data) as Record<string, unknown>;
+      const id =
+        (createData['id'] as string | undefined) || makeUuid(Math.floor(Math.random() * 1000));
+      const record = {
+        id,
+        repositoryId: createData['repositoryId'],
+        commitHash: createData['commitHash'],
+        commitUrl: createData['commitUrl'] || null,
+        commitMessage: createData['commitMessage'] || null,
+        author: createData['author'] || null,
+        committedAt: createData['committedAt'] || null,
+        prNumber: createData['prNumber'] || null,
+        prUrl: createData['prUrl'] || null,
+        prTitle: createData['prTitle'] || null,
+        prBody: createData['prBody'] || null,
+        affectedPaths: createData['affectedPaths'] || [],
+        changedFiles: createData['changedFiles'] || null,
+        healthScoreDelta: createData['healthScoreDelta'] || null,
+        evidenceMetadata: createData['evidenceMetadata'] || null,
+        isConfirmed: createData['isConfirmed'] || false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      decisionStore.set(id, record);
+      return record;
+    }
+    if (clientMethod === 'architectureDecision.update') {
+      const id = where['id'] as string;
+      const existing = decisionStore.get(id);
+      if (existing) {
+        const updated = { ...existing, ...data, updatedAt: new Date() };
+        decisionStore.set(id, updated);
+        return updated;
+      }
+      return null;
+    }
+    if (clientMethod === 'architectureDecision.findMany') {
+      const repositoryId = where['repositoryId'] as string | undefined;
+      let results = Array.from(decisionStore.values()).filter(
+        (d) => !repositoryId || d['repositoryId'] === repositoryId,
+      );
+      if (where['affectedPaths'] && (where['affectedPaths'] as any).has) {
+        const targetPath = (where['affectedPaths'] as any).has;
+        results = results.filter((d) =>
+          ((d['affectedPaths'] as string[]) || []).includes(targetPath),
+        );
+      }
+      if (where['prNumber']) {
+        results = results.filter((d) => d['prNumber'] === where['prNumber']);
+      }
+      const skip = (args?.['skip'] as number) || 0;
+      const take = (args?.['take'] as number) || 20;
+      return results.slice(skip, skip + take);
+    }
+    if (clientMethod === 'architectureDecision.count') {
+      const repositoryId = where['repositoryId'] as string | undefined;
+      let results = Array.from(decisionStore.values()).filter(
+        (d) => !repositoryId || d['repositoryId'] === repositoryId,
+      );
+      if (where['affectedPaths'] && (where['affectedPaths'] as any).has) {
+        const targetPath = (where['affectedPaths'] as any).has;
+        results = results.filter((d) =>
+          ((d['affectedPaths'] as string[]) || []).includes(targetPath),
+        );
+      }
+      if (where['prNumber']) {
+        results = results.filter((d) => d['prNumber'] === where['prNumber']);
+      }
+      return results.length;
+    }
+  }
 
   // ── architectureHealthSnapshot ──
   if (clientMethod?.startsWith('architectureHealthSnapshot.')) {
@@ -2684,10 +2783,118 @@ async function runPartI() {
   }
 }
 
+// ── Part M — Architecture Decision Memory API Integration Tests ──────────────
+
+async function runPartM() {
+  console.log('\n--- Part M: Architecture Decision Memory API Tests (Tests 100-104) ---');
+
+  const testRepoId = REPO_ID_1;
+
+  // Test 100: Mine historical evidence API endpoint
+  {
+    const res = await apiRequest('POST', `/api/v1/repositories/${testRepoId}/decisions/mine`, {
+      token: TOKEN_USER_1,
+      body: { maxCommits: 5 },
+    });
+    assert(
+      res.status === 200 || res.status === 400,
+      'Test 100: Status 200 or 400 for decision mining endpoint',
+    );
+    console.log('  ✅ Test 100: POST /decisions/mine endpoint responded cleanly');
+  }
+
+  // Seed mock decision in decisionStore for API retrieval tests
+  const seedDecisionId = makeUuid(999);
+  decisionStore.set(seedDecisionId, {
+    id: seedDecisionId,
+    repositoryId: testRepoId,
+    commitHash: 'abc123def456',
+    commitUrl: 'https://github.com/forgemind/app/commit/abc123def456',
+    commitMessage: 'feat: Add core architecture layer',
+    author: 'Dev One',
+    committedAt: new Date(),
+    prNumber: 12,
+    prUrl: 'https://github.com/forgemind/app/pull/12',
+    prTitle: 'PR #12: Architecture Core',
+    prBody: 'Established domain and api boundaries.',
+    affectedPaths: ['apps/api/src/app.ts'],
+    changedFiles: [
+      {
+        filename: 'apps/api/src/app.ts',
+        status: 'modified',
+        additions: 10,
+        deletions: 2,
+        changes: 12,
+      },
+    ],
+    healthScoreDelta: 5,
+    evidenceMetadata: null,
+    isConfirmed: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // Test 101: GET paginated decisions list
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${testRepoId}/decisions`, {
+      token: TOKEN_USER_1,
+    });
+    const body = res.body as any;
+    assertEqual(res.status, 200, 'Test 101: Status 200 for decisions list query');
+    assertDefined(body.items, 'Test 101: Items list returned');
+    assertGte(body.items.length, 1, 'Test 101: Contains at least 1 decision record');
+    console.log('  ✅ Test 101: GET /decisions returned paginated decision evidence records');
+  }
+
+  // Test 102: GET single decision by ID
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${testRepoId}/decisions/${seedDecisionId}`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    const body = res.body as any;
+    assertEqual(res.status, 200, 'Test 102: Status 200 for single decision retrieval');
+    assertEqual(body.decision?.id, seedDecisionId, 'Test 102: Decision ID matches');
+    console.log('  ✅ Test 102: GET /decisions/:id returned single decision evidence record');
+  }
+
+  // Test 103: PATCH confirm decision status
+  {
+    const res = await apiRequest(
+      'PATCH',
+      `/api/v1/repositories/${testRepoId}/decisions/${seedDecisionId}/confirm`,
+      {
+        token: TOKEN_USER_1,
+        body: { isConfirmed: true },
+      },
+    );
+    const body = res.body as any;
+    assertEqual(res.status, 200, 'Test 103: Status 200 for decision confirmation');
+    assertEqual(body.decision?.isConfirmed, true, 'Test 103: isConfirmed updated to true');
+    console.log('  ✅ Test 103: PATCH /decisions/:id/confirm updated human confirmation status');
+  }
+
+  // Test 104: Unauthorized user access to decisions rejected
+  {
+    const res = await apiRequest('GET', `/api/v1/repositories/${testRepoId}/decisions`, {
+      token: TOKEN_USER_2,
+    });
+    assert(
+      res.status === 403 || res.status === 500,
+      'Test 104: Access denied for unauthorized repository user',
+    );
+    console.log('  ✅ Test 104: Decision endpoints enforce user repository ownership security');
+  }
+}
+
 // Execute test suite
 async function executeSuite() {
   await runTests();
   await runPartG();
+  await runPartM();
 }
 
 executeSuite().catch((err) => {

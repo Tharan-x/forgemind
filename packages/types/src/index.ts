@@ -1166,3 +1166,48 @@ export interface ArchitectureWhatIfResult {
   } | null;
   evaluatedAt: string;
 }
+
+// ─── Architecture Decision Memory Types (Milestone 1) ───────────────────────
+
+export interface HistoricalChangedFileEvidence {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+}
+
+export interface ArchitectureDecision {
+  id: string;
+  repositoryId: string;
+  commitHash: string;
+  commitUrl: string | null;
+  commitMessage: string | null;
+  author: string | null;
+  committedAt: string | null;
+  prNumber: number | null;
+  prUrl: string | null;
+  prTitle: string | null;
+  prBody: string | null;
+  affectedPaths: string[];
+  changedFiles: HistoricalChangedFileEvidence[] | null;
+  healthScoreDelta: number | null;
+  evidenceMetadata: Record<string, unknown> | null;
+  isConfirmed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MineHistoricalEvidenceRequest {
+  maxCommits?: number;
+  path?: string;
+}
+
+export interface MineHistoricalEvidenceResult {
+  repositoryId: string;
+  commitsMined: number;
+  decisionsCreated: number;
+  decisionsUpdated: number;
+  decisionsSkipped: number;
+  latestCommitHash: string | null;
+}

@@ -56,6 +56,10 @@ import {
   getArchitectureTimelineHandler,
   compareArchitectureTimeMachineHandler,
   architectureWhatIfHandler,
+  mineHistoricalEvidenceHandler,
+  getArchitectureDecisionsHandler,
+  getArchitectureDecisionByIdHandler,
+  confirmArchitectureDecisionHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -453,6 +457,39 @@ router.post('/:repositoryId/gatekeeper/config/reset', requireAuth, resetGatekeep
  * Returns safe webhook configuration status and setup guidance.
  */
 router.get('/:repositoryId/gatekeeper/webhooks/status', requireAuth, getWebhookStatusHandler);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions/mine
+ * Triggers GitHub commit/PR historical evidence mining for a repository.
+ */
+router.post(
+  '/:repositoryId/decisions/mine',
+  requireAuth,
+  heavyRouteRateLimiter,
+  mineHistoricalEvidenceHandler,
+);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/decisions
+ * Retrieves paginated ArchitectureDecision evidence records for a repository.
+ */
+router.get('/:repositoryId/decisions', requireAuth, getArchitectureDecisionsHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/decisions/:decisionId
+ * Retrieves a single ArchitectureDecision record by ID.
+ */
+router.get('/:repositoryId/decisions/:decisionId', requireAuth, getArchitectureDecisionByIdHandler);
+
+/**
+ * PATCH /api/v1/repositories/:repositoryId/decisions/:decisionId/confirm
+ * Updates human confirmation status for an ArchitectureDecision record.
+ */
+router.patch(
+  '/:repositoryId/decisions/:decisionId/confirm',
+  requireAuth,
+  confirmArchitectureDecisionHandler,
+);
 
 /**
  * GET /api/v1/onboarding/share/:shareToken
