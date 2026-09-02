@@ -884,3 +884,129 @@ export async function compareArchitectureHealthHandler(
     sendInternalError(res, message);
   }
 }
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/drift
+ * GET /api/v1/repositories/:repositoryId/architecture/drift
+ * Computes deterministic Architecture Drift intelligence across snapshots or PRs.
+ */
+export async function getArchitectureDriftHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { baselineId, currentId, prNumber } = req.query as {
+      baselineId?: string;
+      currentId?: string;
+      prNumber?: string;
+    };
+
+    const parsedPrNumber = prNumber ? parseInt(prNumber, 10) : undefined;
+
+    const { getArchitectureDrift } = await import('../services/architecture-drift.service.js');
+
+    const drift = await getArchitectureDrift(repositoryId, user.id, {
+      baselineAnalysisId: baselineId,
+      currentAnalysisId: currentId,
+      prNumber: isNaN(parsedPrNumber as number) ? undefined : parsedPrNumber,
+    });
+
+    res.status(200).json({ success: true, drift });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    if (message.includes('No PR analysis found') || message.includes('Repository not found')) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message },
+      });
+      return;
+    }
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/architecture/timeline
+ * Returns chronological Architecture Time Machine timeline snapshots.
+ */
+export async function getArchitectureTimelineHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { getArchitectureTimeMachineTimeline } =
+      await import('../services/architecture-time-machine.service.js');
+
+    const result = await getArchitectureTimeMachineTimeline(repositoryId, user.id);
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    sendInternalError(res, message);
+  }
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/architecture/time-machine/compare
+ * Compares two historical architecture snapshots (from vs to) deterministically.
+ * Query: ?from=<snapshotId>&to=<snapshotId>
+ */
+export async function compareArchitectureTimeMachineHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const { repositoryId } = req.params as { repositoryId: string };
+    const owned = await verifyRepositoryOwnership(repositoryId, user.id, res);
+    if (!owned) return;
+
+    const { from, to } = req.query as {
+      from?: string;
+      to?: string;
+    };
+
+    const { compareArchitectureTimeMachineSnapshots } =
+      await import('../services/architecture-time-machine.service.js');
+
+    const result = await compareArchitectureTimeMachineSnapshots(repositoryId, user.id, from, to);
+    res.status(200).json({ success: true, comparison: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+    if (
+      message.includes('No architectural snapshots found') ||
+      message.includes('Repository not found')
+    ) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message },
+      });
+      return;
+    }
+    sendInternalError(res, message);
+  }
+}

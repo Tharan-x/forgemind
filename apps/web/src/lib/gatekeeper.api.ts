@@ -12,6 +12,7 @@ import type {
   UpdateGatekeeperConfigInput,
   WebhookStatusResponse,
   ArchitectureImpact,
+  ArchitectureDrift,
 } from '@forgemind/types';
 
 import { supabase } from './supabase';
@@ -165,4 +166,17 @@ export async function getPRArchitectureImpact(
     `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/prs/${prNumber}/impact`,
   );
   return data.impact;
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs/:prNumber/drift
+ */
+export async function getPRArchitectureDrift(
+  repositoryId: string,
+  prNumber: number,
+): Promise<ArchitectureDrift> {
+  const data = await request<{ drift: ArchitectureDrift }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/gatekeeper/prs/${prNumber}/drift`,
+  );
+  return data.drift;
 }

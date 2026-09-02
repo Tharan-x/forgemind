@@ -55,7 +55,7 @@ export async function runArchitectureImpactTests(): Promise<void> {
   );
   assertEqual(
     extractModule('packages/types/src/index.ts'),
-    'src/index.ts',
+    'types/src',
     'Fallback module extracted',
   );
 

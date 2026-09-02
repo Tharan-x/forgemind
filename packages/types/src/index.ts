@@ -1014,3 +1014,101 @@ export interface ArchitectureImpactResponse {
   success: boolean;
   impact: ArchitectureImpact;
 }
+
+// ─── Architecture Time Machine & Drift Intelligence Types ────────────────────
+
+export type ArchitectureDriftLevel = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface ArchitectureDriftEdgeShift {
+  sourcePath: string;
+  targetPath: string;
+  type: 'added' | 'removed';
+}
+
+export interface ArchitectureCrossLayerDependency {
+  sourceLayer: string;
+  targetLayer: string;
+  sourceFile: string;
+  targetFile: string;
+}
+
+export interface ArchitectureDrift {
+  repositoryId: string;
+  baselineAnalysisId: string | null;
+  currentAnalysisId: string;
+  driftLevel: ArchitectureDriftLevel;
+  reasons: string[];
+  changedComponents: string[];
+  changedModules: string[];
+  affectedLayers: string[];
+  dependencyChurn: {
+    baselineEdgesCount: number;
+    currentEdgesCount: number;
+    totalDependencyDelta: number;
+    addedEdgesCount: number;
+    removedEdgesCount: number;
+    edgeShifts: ArchitectureDriftEdgeShift[];
+  };
+  newCrossLayerDependencies: ArchitectureCrossLayerDependency[];
+  healthScoreMovement: {
+    baselineScore: number;
+    currentScore: number;
+    scoreDelta: number;
+    trend: 'IMPROVED' | 'DEGRADED' | 'STABLE';
+  };
+  newFindings: HealthFinding[];
+  resolvedFindings: HealthFinding[];
+  unmodifiedFindings: HealthFinding[];
+  evaluatedAt: string;
+}
+
+export interface ArchitectureDriftResponse {
+  success: boolean;
+  drift: ArchitectureDrift;
+}
+
+// ─── Architecture Time Machine Types ─────────────────────────────────────────
+
+export interface ArchitectureTimeMachinePrecedingDriftSummary {
+  driftLevel: ArchitectureDriftLevel;
+  scoreDelta: number;
+  changedModulesCount: number;
+  affectedLayersCount: number;
+  totalDependencyDelta: number;
+}
+
+export interface ArchitectureTimeMachineSnapshotItem {
+  snapshotId: string;
+  analysisJobId: string;
+  commitHash: string | null;
+  prNumber: number | null;
+  prTitle?: string | null;
+  healthScore: number;
+  grade: 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F';
+  totalFiles: number;
+  totalDependencies: number;
+  findingsCount: number;
+  evaluatedAt: string;
+  driftFromPrevious?: ArchitectureTimeMachinePrecedingDriftSummary | null;
+}
+
+export interface ArchitectureTimelineResponse {
+  repositoryId: string;
+  currentHealthScore: number;
+  totalSnapshots: number;
+  timeline: ArchitectureTimeMachineSnapshotItem[];
+}
+
+export interface ArchitectureTimeMachineComparisonResponse {
+  repositoryId: string;
+  fromSnapshot: ArchitectureTimeMachineSnapshotItem;
+  toSnapshot: ArchitectureTimeMachineSnapshotItem;
+  drift: ArchitectureDrift;
+  associatedPR?: {
+    prNumber: number;
+    headSha: string;
+    baseSha: string | null;
+  } | null;
+  architecturalConsequenceExplanation: string;
+  evaluatedAt: string;
+}

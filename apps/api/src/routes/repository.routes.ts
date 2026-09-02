@@ -51,6 +51,10 @@ import {
   resetGatekeeperConfigHandler,
   getWebhookStatusHandler,
   getPRArchitectureImpactHandler,
+  getArchitectureDriftHandler,
+  getPRArchitectureDriftHandler,
+  getArchitectureTimelineHandler,
+  compareArchitectureTimeMachineHandler,
 } from '../controllers/index.js';
 
 const router: RouterType = Router();
@@ -326,6 +330,44 @@ router.get(
 router.get('/:repositoryId/architecture/compare', requireAuth, compareArchitectureHealthHandler);
 
 /**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/drift
+ * GET /api/v1/repositories/:repositoryId/architecture/drift
+ * Computes deterministic Architecture Drift intelligence across snapshots or PRs.
+ */
+router.get(
+  '/:repositoryId/intelligence/architecture/drift',
+  requireAuth,
+  getArchitectureDriftHandler,
+);
+router.get('/:repositoryId/architecture/drift', requireAuth, getArchitectureDriftHandler);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/architecture/timeline
+ * Returns chronological Architecture Time Machine timeline snapshots.
+ */
+router.get('/:repositoryId/architecture/timeline', requireAuth, getArchitectureTimelineHandler);
+router.get(
+  '/:repositoryId/intelligence/architecture/timeline',
+  requireAuth,
+  getArchitectureTimelineHandler,
+);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/architecture/time-machine/compare
+ * Compares two historical architecture snapshots (from vs to) deterministically.
+ */
+router.get(
+  '/:repositoryId/architecture/time-machine/compare',
+  requireAuth,
+  compareArchitectureTimeMachineHandler,
+);
+router.get(
+  '/:repositoryId/intelligence/architecture/time-machine/compare',
+  requireAuth,
+  compareArchitectureTimeMachineHandler,
+);
+
+/**
  * GET /api/v1/repositories/:repositoryId/gatekeeper/overview
  * Returns summary metrics for the PR Architecture Gatekeeper dashboard.
  */
@@ -351,6 +393,16 @@ router.get(
   '/:repositoryId/gatekeeper/prs/:prNumber/impact',
   requireAuth,
   getPRArchitectureImpactHandler,
+);
+
+/**
+ * GET /api/v1/repositories/:repositoryId/gatekeeper/prs/:prNumber/drift
+ * Returns structured Architecture Drift summary for a specific PR number.
+ */
+router.get(
+  '/:repositoryId/gatekeeper/prs/:prNumber/drift',
+  requireAuth,
+  getPRArchitectureDriftHandler,
 );
 
 /**

@@ -28,6 +28,7 @@ import { DependencyGraphVisualizer } from '@/components/graph/DependencyGraphVis
 import { ArchitecturalHealthDashboard } from '@/components/health/ArchitecturalHealthDashboard';
 import { PRGatekeeperDashboard } from '@/components/gatekeeper/PRGatekeeperDashboard';
 import { OnboardingBlueprintViewer } from '@/components/onboarding/OnboardingBlueprintViewer';
+import { ArchitectureTimeMachineViewer } from '@/components/architecture/ArchitectureTimeMachineViewer';
 
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -58,6 +59,7 @@ type TabType =
   | 'overview'
   | 'health'
   | 'gatekeeper'
+  | 'time-machine'
   | 'intelligence'
   | 'graph'
   | 'chat'
@@ -693,6 +695,7 @@ export default function RepositoryDetailPage() {
               [
                 { id: 'overview', label: 'Overview', icon: '📊' },
                 { id: 'health', label: 'Architectural Health', icon: '🩺' },
+                { id: 'time-machine', label: 'Time Machine', icon: '⏳' },
                 { id: 'intelligence', label: 'Code Intelligence', icon: '🧠' },
                 { id: 'graph', label: 'Graph & Topology', icon: '🌐' },
                 { id: 'chat', label: 'AI Assistant', icon: '🤖' },
@@ -753,6 +756,11 @@ export default function RepositoryDetailPage() {
               setActiveTab('files');
             }}
           />
+        )}
+
+        {/* TAB: ARCHITECTURE TIME MACHINE */}
+        {activeTab === 'time-machine' && (
+          <ArchitectureTimeMachineViewer repositoryId={repositoryId} />
         )}
 
         {/* TAB: PR GATEKEEPER */}

@@ -10,6 +10,9 @@ import type {
   ArchitecturalRiskIntelligenceResponse,
   ArchitectureHealthHistoryResponse,
   ArchitectureHealthComparisonResponse,
+  ArchitectureDrift,
+  ArchitectureTimelineResponse,
+  ArchitectureTimeMachineComparisonResponse,
   GenerateRefactoringPlanRequest,
   StructuredRemediationPlan,
   RemediationExplainRequest,
@@ -311,4 +314,56 @@ export async function generateStructuredRemediationPlan(
       body: JSON.stringify(req),
     },
   );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/intelligence/architecture/drift
+ */
+export async function getArchitectureDrift(
+  repositoryId: string,
+  baselineId?: string,
+  currentId?: string,
+  prNumber?: number,
+): Promise<{ success: boolean; drift: ArchitectureDrift }> {
+  const queryParts: string[] = [];
+  if (baselineId) queryParts.push(`baselineId=${encodeURIComponent(baselineId)}`);
+  if (currentId) queryParts.push(`currentId=${encodeURIComponent(currentId)}`);
+  if (prNumber) queryParts.push(`prNumber=${prNumber}`);
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  return request<{ success: boolean; drift: ArchitectureDrift }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/intelligence/architecture/drift${queryString}`,
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/architecture/timeline
+ */
+export async function getArchitectureTimeline(
+  repositoryId: string,
+): Promise<ArchitectureTimelineResponse> {
+  return request<ArchitectureTimelineResponse>(
+    `/repositories/${encodeURIComponent(repositoryId)}/architecture/timeline`,
+  );
+}
+
+/**
+ * GET /api/v1/repositories/:repositoryId/architecture/time-machine/compare?from=...&to=...
+ */
+export async function compareArchitectureTimeMachineSnapshots(
+  repositoryId: string,
+  fromId?: string,
+  toId?: string,
+): Promise<ArchitectureTimeMachineComparisonResponse> {
+  const queryParts: string[] = [];
+  if (fromId) queryParts.push(`from=${encodeURIComponent(fromId)}`);
+  if (toId) queryParts.push(`to=${encodeURIComponent(toId)}`);
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+  const res = await request<{
+    success: boolean;
+    comparison: ArchitectureTimeMachineComparisonResponse;
+  }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/architecture/time-machine/compare${queryString}`,
+  );
+  return res.comparison;
 }

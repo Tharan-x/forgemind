@@ -8,6 +8,7 @@ import type {
   WebhookDeliveryLogItem,
   HealthFinding,
   ArchitectureImpact,
+  ArchitectureDrift,
 } from '@forgemind/types';
 
 import {
@@ -16,9 +17,11 @@ import {
   getGatekeeperPRDetail,
   getGatekeeperWebhooks,
   getPRArchitectureImpact,
+  getPRArchitectureDrift,
 } from '../../lib/gatekeeper.api';
 import { AIExplanationDrawer } from '../health/AIExplanationDrawer';
 import { ArchitectureImpactCard } from './ArchitectureImpactCard';
+import { ArchitectureDriftCard } from './ArchitectureDriftCard';
 import { GatekeeperSettingsForm } from './GatekeeperSettingsForm';
 import { PRHealthComparisonCard } from './PRHealthComparisonCard';
 import { WebhookDeliveryLogViewer } from './WebhookDeliveryLogViewer';
@@ -44,6 +47,7 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
   const [selectedPRNumber, setSelectedPRNumber] = useState<number | null>(null);
   const [selectedPRDetail, setSelectedPRDetail] = useState<PRGatekeeperDetailResponse | null>(null);
   const [selectedPRImpact, setSelectedPRImpact] = useState<ArchitectureImpact | null>(null);
+  const [selectedPRDrift, setSelectedPRDrift] = useState<ArchitectureDrift | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
   const [isLoadingOverview, setIsLoadingOverview] = useState(true);
@@ -130,18 +134,21 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
       setSelectedPRNumber(null);
       setSelectedPRDetail(null);
       setSelectedPRImpact(null);
+      setSelectedPRDrift(null);
       return;
     }
 
     try {
       setSelectedPRNumber(prNumber);
       setIsLoadingDetail(true);
-      const [detail, impactResult] = await Promise.all([
+      const [detail, impactResult, driftResult] = await Promise.all([
         getGatekeeperPRDetail(repositoryId, prNumber),
         getPRArchitectureImpact(repositoryId, prNumber).catch(() => null),
+        getPRArchitectureDrift(repositoryId, prNumber).catch(() => null),
       ]);
       setSelectedPRDetail(detail);
       setSelectedPRImpact(impactResult);
+      setSelectedPRDrift(driftResult);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load PR detail';
       setError(msg);
@@ -268,6 +275,7 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
           ) : (
             selectedPRDetail && (
               <div className="space-y-6">
+                {selectedPRDrift && <ArchitectureDriftCard drift={selectedPRDrift} />}
                 {selectedPRImpact && <ArchitectureImpactCard impact={selectedPRImpact} />}
                 <PRHealthComparisonCard
                   detail={selectedPRDetail}
@@ -276,6 +284,7 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
                     setSelectedPRNumber(null);
                     setSelectedPRDetail(null);
                     setSelectedPRImpact(null);
+                    setSelectedPRDrift(null);
                   }}
                 />
               </div>

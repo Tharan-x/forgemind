@@ -1427,7 +1427,7 @@ async function runPartD(): Promise<void> {
     const tabBar = rendered.props.children.props.children[1];
     const tabsList = tabBar.props.children.props.children;
 
-    assertEqual(tabsList.length, 9, 'Test 34: 9 tabs present');
+    assertEqual(tabsList.length, 10, 'Test 34: 10 tabs present');
 
     assertEqual(
       tabsList[0].props.children[1].props.children,
@@ -1441,36 +1441,46 @@ async function runPartD(): Promise<void> {
     );
     assertEqual(
       tabsList[2].props.children[1].props.children,
-      'Code Intelligence',
-      'Test 34: Tab 3 Intelligence',
+      'Time Machine',
+      'Test 34: Tab 3 Time Machine',
     );
     assertEqual(
       tabsList[3].props.children[1].props.children,
-      'Graph & Topology',
-      'Test 34: Tab 4 Graph & Topology',
+      'Code Intelligence',
+      'Test 34: Tab 4 Intelligence',
     );
     assertEqual(
       tabsList[4].props.children[1].props.children,
-      'AI Assistant',
-      'Test 34: Tab 5 Chat',
+      'Graph & Topology',
+      'Test 34: Tab 5 Graph & Topology',
     );
     assertEqual(
       tabsList[5].props.children[1].props.children,
-      'Indexed Files',
-      'Test 34: Tab 6 Files',
+      'AI Assistant',
+      'Test 34: Tab 6 Chat',
     );
     assertEqual(
       tabsList[6].props.children[1].props.children,
-      'AST Symbols',
-      'Test 34: Tab 7 Symbols',
+      'Indexed Files',
+      'Test 34: Tab 7 Files',
     );
     assertEqual(
       tabsList[7].props.children[1].props.children,
+      'AST Symbols',
+      'Test 34: Tab 8 Symbols',
+    );
+    assertEqual(
+      tabsList[8].props.children[1].props.children,
       'Dependencies',
-      'Test 34: Tab 8 Dependencies',
+      'Test 34: Tab 9 Dependencies',
+    );
+    assertEqual(
+      tabsList[9].props.children[1].props.children,
+      'PR Gatekeeper',
+      'Test 34: Tab 10 PR Gatekeeper',
     );
 
-    console.log('  ✅ Test 34: Tab bar navigation renders all 7 tabs correctly');
+    console.log('  ✅ Test 34: Tab bar navigation renders all 10 tabs correctly');
   }
 
   // Test 35: Overview tab metrics cards (Indexed Files, AST Symbols, File Dependencies, Latest Commit)
