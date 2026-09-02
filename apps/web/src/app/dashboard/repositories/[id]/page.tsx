@@ -5,8 +5,8 @@
 // =============================================================================
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useSearchParams, usePathname } from 'next/navigation';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import type {
   AnalysisJob,
@@ -56,7 +56,9 @@ import {
 } from '@/lib/rag.api';
 import { getRepository, type Repository } from '@/lib/repository.api';
 
-type TabType =
+export type WorkspaceSection = 'overview' | 'architecture' | 'health' | 'change' | 'governance';
+
+export type TabType =
   | 'overview'
   | 'health'
   | 'what-if'
@@ -69,13 +71,114 @@ type TabType =
   | 'dependencies'
   | 'gatekeeper';
 
+export function resolveWorkspaceFromUrl(tabParam: string | null): {
+  section: WorkspaceSection;
+  subTab: TabType;
+} {
+  if (!tabParam) {
+    return { section: 'overview', subTab: 'overview' };
+  }
+  const lower = tabParam.toLowerCase().trim();
+  switch (lower) {
+    case 'overview':
+      return { section: 'overview', subTab: 'overview' };
+    case 'health':
+    case 'risk':
+      return { section: 'health', subTab: 'health' };
+    case 'change':
+      return { section: 'change', subTab: 'what-if' };
+    case 'what-if':
+    case 'whatif':
+      return { section: 'change', subTab: 'what-if' };
+    case 'time-machine':
+    case 'timemachine':
+    case 'history':
+      return { section: 'change', subTab: 'time-machine' };
+    case 'architecture':
+      return { section: 'architecture', subTab: 'graph' };
+    case 'graph':
+    case 'topology':
+      return { section: 'architecture', subTab: 'graph' };
+    case 'intelligence':
+    case 'code':
+      return { section: 'architecture', subTab: 'intelligence' };
+    case 'files':
+      return { section: 'architecture', subTab: 'files' };
+    case 'symbols':
+      return { section: 'architecture', subTab: 'symbols' };
+    case 'dependencies':
+    case 'deps':
+      return { section: 'architecture', subTab: 'dependencies' };
+    case 'chat':
+    case 'ai':
+    case 'assistant':
+      return { section: 'architecture', subTab: 'chat' };
+    case 'governance':
+    case 'gatekeeper':
+      return { section: 'governance', subTab: 'gatekeeper' };
+    default:
+      return { section: 'overview', subTab: 'overview' };
+  }
+}
+
 export default function RepositoryDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
   const repositoryId = typeof params?.['id'] === 'string' ? params['id'] : '';
+  const tabParam = searchParams ? searchParams.get('tab') : null;
+
+  const resolvedWorkspace = useMemo(() => resolveWorkspaceFromUrl(tabParam), [tabParam]);
 
   const [repository, setRepository] = useState<Repository | null>(null);
   const [latestJob, setLatestJob] = useState<AnalysisJob | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTabState] = useState<TabType>(resolvedWorkspace.subTab);
+
+  // Sync activeTab whenever URL search parameter changes
+  useEffect(() => {
+    setActiveTabState(resolvedWorkspace.subTab);
+  }, [resolvedWorkspace]);
+
+  // Handle browser Back / Forward popstate navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window === 'undefined') return;
+      const currentSearchParams = new URLSearchParams(window.location.search);
+      const currentTabParam = currentSearchParams.get('tab');
+      const resolved = resolveWorkspaceFromUrl(currentTabParam);
+      setActiveTabState(resolved.subTab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToTab = useCallback(
+    (targetTab: TabType, targetSection?: WorkspaceSection, options: { replace?: boolean } = {}) => {
+      setActiveTabState(targetTab);
+      const sectionToUse = targetSection || resolveWorkspaceFromUrl(targetTab).section;
+      const paramToSet = sectionToUse === 'overview' ? 'overview' : sectionToUse;
+
+      if (typeof window !== 'undefined' && pathname) {
+        const targetSearch = `?tab=${encodeURIComponent(paramToSet)}`;
+        const url = `${pathname}${targetSearch}`;
+
+        if (window.location.search !== targetSearch) {
+          if (options.replace) {
+            window.history.replaceState(null, '', url);
+          } else {
+            window.history.pushState(null, '', url);
+          }
+        }
+      }
+    },
+    [pathname],
+  );
+
+  const setActiveTab = (tab: TabType) => {
+    navigateToTab(tab);
+  };
 
   // Overview metrics & data state
   const [loadingRepo, setLoadingRepo] = useState<boolean>(true);
@@ -690,52 +793,125 @@ export default function RepositoryDetailPage() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="border-b border-zinc-800">
-          <div className="flex space-x-8 overflow-x-auto">
-            {(
-              [
-                { id: 'overview', label: 'Overview', icon: '📊' },
-                { id: 'health', label: 'Architectural Health', icon: '🩺' },
-                { id: 'what-if', label: 'What-If Simulator', icon: '🔮' },
-                { id: 'time-machine', label: 'Time Machine', icon: '⏳' },
-                { id: 'intelligence', label: 'Code Intelligence', icon: '🧠' },
-                { id: 'graph', label: 'Graph & Topology', icon: '🌐' },
-                { id: 'chat', label: 'AI Assistant', icon: '🤖' },
-                { id: 'files', label: 'Indexed Files', icon: '📁', count: totalFiles },
-                { id: 'symbols', label: 'AST Symbols', icon: '🧩', count: totalSymbols },
-                { id: 'dependencies', label: 'Dependencies', icon: '🔗', count: totalDependencies },
-                { id: 'gatekeeper', label: 'PR Gatekeeper', icon: '🛡️' },
-              ] as Array<{ id: TabType; label: string; icon: string; count?: number }>
-            ).map((tab) => {
-              const isActive = activeTab === tab.id;
+        {/* Primary Workspace Section Navigation */}
+        <div className="border-b border-zinc-800 space-y-3">
+          <div className="flex space-x-6 overflow-x-auto">
+            {[
+              {
+                section: 'overview' as WorkspaceSection,
+                defaultTab: 'overview' as TabType,
+                label: 'Overview',
+                icon: '📊',
+              },
+              {
+                section: 'architecture' as WorkspaceSection,
+                defaultTab: 'graph' as TabType,
+                label: 'Architecture',
+                icon: '🌐',
+              },
+              {
+                section: 'health' as WorkspaceSection,
+                defaultTab: 'health' as TabType,
+                label: 'Health & Risk',
+                icon: '🩺',
+              },
+              {
+                section: 'change' as WorkspaceSection,
+                defaultTab: 'what-if' as TabType,
+                label: 'Change & History',
+                icon: '⚡',
+              },
+              {
+                section: 'governance' as WorkspaceSection,
+                defaultTab: 'gatekeeper' as TabType,
+                label: 'Governance',
+                icon: '🛡️',
+              },
+            ].map((item) => {
+              const currentSection = resolveWorkspaceFromUrl(activeTab).section;
+              const isSectionActive = currentSection === item.section;
               return (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  key={item.section}
+                  onClick={() => navigateToTab(item.defaultTab, item.section)}
                   className={`py-3 px-1 border-b-2 text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
-                    isActive
+                    isSectionActive
                       ? 'border-emerald-400 text-emerald-400'
                       : 'border-transparent text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined && tab.count > 0 && (
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        isActive
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : 'bg-zinc-800 text-zinc-400'
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  )}
+                  <span>{item.icon}</span>
+                  <span>{item.label}</span>
                 </button>
               );
             })}
           </div>
+
+          {/* Secondary Sub-Navigation for Architecture Workspace */}
+          {resolveWorkspaceFromUrl(activeTab).section === 'architecture' && (
+            <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-1.5 flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'graph' as TabType, label: 'Graph & Topology', icon: '🌐' },
+                { id: 'intelligence' as TabType, label: 'Code Intelligence', icon: '🧠' },
+                { id: 'files' as TabType, label: 'Indexed Files', icon: '📁', count: totalFiles },
+                { id: 'symbols' as TabType, label: 'AST Symbols', icon: '🧩', count: totalSymbols },
+                {
+                  id: 'dependencies' as TabType,
+                  label: 'Dependencies',
+                  icon: '🔗',
+                  count: totalDependencies,
+                },
+                { id: 'chat' as TabType, label: 'AI Assistant', icon: '🤖' },
+              ].map((sub) => {
+                const isSubActive = activeTab === sub.id;
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => navigateToTab(sub.id, 'architecture')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      isSubActive
+                        ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <span>{sub.icon}</span>
+                    <span>{sub.label}</span>
+                    {sub.count !== undefined && sub.count > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-zinc-800 text-zinc-300 rounded font-mono">
+                        {sub.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Secondary Sub-Navigation for Change & History Workspace */}
+          {resolveWorkspaceFromUrl(activeTab).section === 'change' && (
+            <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-1.5 flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'what-if' as TabType, label: 'What-If Simulator', icon: '🔮' },
+                { id: 'time-machine' as TabType, label: 'Time Machine', icon: '⏳' },
+              ].map((sub) => {
+                const isSubActive = activeTab === sub.id;
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => navigateToTab(sub.id, 'change')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      isSubActive
+                        ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <span>{sub.icon}</span>
+                    <span>{sub.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* TAB: ARCHITECTURAL HEALTH */}
