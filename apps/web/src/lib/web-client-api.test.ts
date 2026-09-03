@@ -1751,6 +1751,29 @@ async function runPartI(): Promise<void> {
     console.log('  ✅ Test 78: All API modules share identical error extraction logic');
   }
 
+  // Test 78c: HTTP 429 rate limit response error handling
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(429, { success: false });
+
+    await assertRejects(
+      () => explainCode(REPO_ID, { filePath: 'src/index.ts' }),
+      'Rate limit exceeded. Please wait a moment before trying again.',
+      'Test 78c: 429 fallback user-friendly message',
+    );
+
+    installFetchInterceptor(429, {
+      success: false,
+      error: { code: 'RATE_LIMITED', message: 'Custom rate limit message from server' },
+    });
+    await assertRejects(
+      () => explainCode(REPO_ID, { filePath: 'src/index.ts' }),
+      'Custom rate limit message from server',
+      'Test 78d: 429 custom server message preserved',
+    );
+    console.log('  ✅ Test 78c/d: HTTP 429 rate-limit responses produce user-friendly feedback');
+  }
+
   // Test 79: Missing session prevents ANY network call
   {
     mockMissingSession();

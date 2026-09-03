@@ -62,6 +62,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const body = (await response.json()) as Record<string, unknown>;
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const serverMessage =
+        typeof body['message'] === 'string'
+          ? body['message']
+          : typeof (body['error'] as Record<string, unknown> | undefined)?.['message'] === 'string'
+            ? ((body['error'] as Record<string, unknown>)['message'] as string)
+            : undefined;
+
+      throw new Error(
+        serverMessage || 'Rate limit exceeded. Please wait a moment before trying again.',
+      );
+    }
+
     const message =
       typeof body['message'] === 'string'
         ? body['message']
@@ -210,6 +223,19 @@ export async function getSharedBlueprint(
   );
   const body = (await response.json()) as Record<string, unknown>;
   if (!response.ok) {
+    if (response.status === 429) {
+      const serverMessage =
+        typeof body['message'] === 'string'
+          ? body['message']
+          : typeof (body['error'] as Record<string, unknown> | undefined)?.['message'] === 'string'
+            ? ((body['error'] as Record<string, unknown>)['message'] as string)
+            : undefined;
+
+      throw new Error(
+        serverMessage || 'Rate limit exceeded. Please wait a moment before trying again.',
+      );
+    }
+
     const message =
       typeof body['message'] === 'string'
         ? body['message']
