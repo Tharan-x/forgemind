@@ -156,6 +156,7 @@ export default function RepositoryDetailPage() {
   const validScenario = parseValidScenarioType(scenarioParam);
   const prParam = searchParams ? searchParams.get('pr') : null;
   const parsedPR = prParam && /^\d+$/.test(prParam) ? parseInt(prParam, 10) : undefined;
+  const searchParam = searchParams ? searchParams.get('search') || '' : '';
 
   const resolvedWorkspace = useMemo(
     () => resolveWorkspaceFromUrl(tabParam, subTabParam),
@@ -165,11 +166,13 @@ export default function RepositoryDetailPage() {
   const [repository, setRepository] = useState<Repository | null>(null);
   const [latestJob, setLatestJob] = useState<AnalysisJob | null>(null);
   const [activeTab, setActiveTabState] = useState<TabType>(resolvedWorkspace.subTab);
+  const [symbolSearch, setSymbolSearchState] = useState<string>(searchParam);
 
-  // Sync activeTab whenever URL search parameter changes
+  // Sync activeTab & symbolSearch whenever URL search parameters change
   useEffect(() => {
     setActiveTabState(resolvedWorkspace.subTab);
-  }, [resolvedWorkspace]);
+    setSymbolSearchState(searchParam);
+  }, [resolvedWorkspace, searchParam]);
 
   // Handle browser Back / Forward popstate navigation
   useEffect(() => {
@@ -178,8 +181,10 @@ export default function RepositoryDetailPage() {
       const currentSearchParams = new URLSearchParams(window.location.search);
       const currentTabParam = currentSearchParams.get('tab');
       const currentSubTabParam = currentSearchParams.get('subtab');
+      const currentSearch = currentSearchParams.get('search') || '';
       const resolved = resolveWorkspaceFromUrl(currentTabParam, currentSubTabParam);
       setActiveTabState(resolved.subTab);
+      setSymbolSearchState(currentSearch);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -202,12 +207,45 @@ export default function RepositoryDetailPage() {
         if (targetTab !== 'overview' && targetTab !== sectionToUse) {
           search.set('subtab', targetTab);
         }
+        if (symbolSearch.trim()) {
+          search.set('search', symbolSearch.trim());
+        }
         if (options.queryParams) {
           Object.entries(options.queryParams).forEach(([k, v]) => {
             if (v) search.set(k, v);
           });
         }
         const targetSearch = `?${search.toString()}`;
+        const url = `${pathname}${targetSearch}`;
+
+        if (window.location.search !== targetSearch) {
+          if (options.replace) {
+            window.history.replaceState(null, '', url);
+          } else {
+            window.history.pushState(null, '', url);
+          }
+        }
+      }
+    },
+    [pathname, symbolSearch],
+  );
+
+  const setSymbolSearch = useCallback(
+    (query: string, options: { replace?: boolean } = { replace: true }) => {
+      setSymbolSearchState(query);
+
+      if (typeof window !== 'undefined' && pathname) {
+        const currentSearchParams = new URLSearchParams(window.location.search);
+        const trimmed = query.trim();
+        if (trimmed) {
+          currentSearchParams.set('search', trimmed);
+        } else {
+          currentSearchParams.delete('search');
+        }
+
+        const targetSearch = currentSearchParams.toString()
+          ? `?${currentSearchParams.toString()}`
+          : '';
         const url = `${pathname}${targetSearch}`;
 
         if (window.location.search !== targetSearch) {
@@ -242,7 +280,6 @@ export default function RepositoryDetailPage() {
   const [symbols, setSymbols] = useState<RepositorySymbol[]>([]);
   const [totalSymbols, setTotalSymbols] = useState<number>(0);
   const [symbolsLoading, setSymbolsLoading] = useState<boolean>(false);
-  const [symbolSearch, setSymbolSearch] = useState<string>('');
   const [selectedKind, setSelectedKind] = useState<string>('');
 
   // Dependencies Tab State

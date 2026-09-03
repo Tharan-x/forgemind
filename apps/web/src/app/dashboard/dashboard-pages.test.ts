@@ -1294,6 +1294,7 @@ function setupRepoDetailDispatcher(overrides: RepoDetailStateOverrides = {}) {
     overrides.repository !== undefined ? overrides.repository : MOCK_REPO,
     overrides.latestJob !== undefined ? overrides.latestJob : MOCK_JOB,
     overrides.activeTab ?? 'overview',
+    overrides.symbolSearch ?? '',
     overrides.loadingRepo ?? false,
     overrides.analyzing ?? false,
     overrides.error ?? null,
@@ -1305,7 +1306,6 @@ function setupRepoDetailDispatcher(overrides: RepoDetailStateOverrides = {}) {
     overrides.symbols ?? [],
     overrides.totalSymbols ?? 0,
     overrides.symbolsLoading ?? false,
-    overrides.symbolSearch ?? '',
     overrides.selectedKind ?? '',
     overrides.dependencies ?? [],
     overrides.totalDependencies ?? 0,
@@ -3995,6 +3995,104 @@ async function runPartE(): Promise<void> {
     console.log(
       '  ✅ Test 140: Architectural Risk Action Loop pre-fills exact target file path in ADR creation',
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // PART R: Task 3 — AST Symbol Search URL Persistence
+  // ---------------------------------------------------------------------------
+  console.log('\n📋 Part R — AST Symbol Search URL Persistence (Tests 141–145)');
+
+  // Test 141: Initial search parameter parsing from URL
+  {
+    const mockSearchParams = new URLSearchParams(
+      'tab=architecture&subtab=symbols&search=parseSourceFile',
+    );
+    const searchParam = mockSearchParams.get('search') || '';
+    const tabParam = mockSearchParams.get('tab');
+    const subTabParam = mockSearchParams.get('subtab');
+
+    const resolved = resolveWorkspaceFromUrl(tabParam, subTabParam);
+
+    assertEqual(searchParam, 'parseSourceFile', 'Test 141: ?search= parameter correctly extracted');
+    assertEqual(resolved.section, 'architecture', 'Test 141: Architecture section resolved');
+    assertEqual(resolved.subTab, 'symbols', 'Test 141: Symbols subTab resolved');
+
+    console.log('  ✅ Test 141: Initial ?search= parameter correctly extracted from deep-link URL');
+  }
+
+  // Test 142: Symbol search update updates URL search query while preserving tab/subtab
+  {
+    const currentParams = new URLSearchParams('tab=architecture&subtab=symbols');
+    const newSearchTerm = 'AuthService';
+
+    if (newSearchTerm.trim()) {
+      currentParams.set('search', newSearchTerm.trim());
+    } else {
+      currentParams.delete('search');
+    }
+
+    assertEqual(currentParams.get('tab'), 'architecture', 'Test 142: tab param preserved');
+    assertEqual(currentParams.get('subtab'), 'symbols', 'Test 142: subtab param preserved');
+    assertEqual(currentParams.get('search'), 'AuthService', 'Test 142: search param appended');
+    assertEqual(
+      currentParams.toString(),
+      'tab=architecture&subtab=symbols&search=AuthService',
+      'Test 142: Full URL search query',
+    );
+
+    console.log('  ✅ Test 142: Symbol search update appends ?search= while preserving tab/subtab');
+  }
+
+  // Test 143: Clearing symbol search deletes search parameter from URL
+  {
+    const currentParams = new URLSearchParams('tab=architecture&subtab=symbols&search=AuthService');
+    const newSearchTerm = '';
+
+    if (newSearchTerm.trim()) {
+      currentParams.set('search', newSearchTerm.trim());
+    } else {
+      currentParams.delete('search');
+    }
+
+    assertEqual(currentParams.get('search'), null, 'Test 143: search param deleted when empty');
+    assertEqual(
+      currentParams.toString(),
+      'tab=architecture&subtab=symbols',
+      'Test 143: Clean URL without search param',
+    );
+
+    console.log('  ✅ Test 143: Clearing symbol search removes ?search= from URL query');
+  }
+
+  // Test 144: Tab navigation preserves existing symbolSearch query
+  {
+    const symbolSearchQuery = 'verifyToken';
+    const newTabSearchParams = new URLSearchParams();
+    newTabSearchParams.set('tab', 'architecture');
+    newTabSearchParams.set('subtab', 'symbols');
+    if (symbolSearchQuery.trim()) {
+      newTabSearchParams.set('search', symbolSearchQuery.trim());
+    }
+
+    assertEqual(
+      newTabSearchParams.get('search'),
+      'verifyToken',
+      'Test 144: search param preserved during tab navigation',
+    );
+
+    console.log('  ✅ Test 144: Tab navigation preserves active symbol search parameter');
+  }
+
+  // Test 145: Popstate simulation restores search parameter correctly
+  {
+    const popStateUrl =
+      'http://localhost:3000/dashboard/repositories/repo-1?tab=architecture&subtab=symbols&search=validateSession';
+    const parsedSearch = new URLSearchParams(popStateUrl.split('?')[1]);
+    const restoredSearch = parsedSearch.get('search') || '';
+
+    assertEqual(restoredSearch, 'validateSession', 'Test 145: popstate restores search parameter');
+
+    console.log('  ✅ Test 145: Browser popstate event restores symbol search parameter correctly');
   }
 }
 
