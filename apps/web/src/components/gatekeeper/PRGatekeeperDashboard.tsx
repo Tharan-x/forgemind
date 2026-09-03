@@ -9,6 +9,7 @@ import type {
   HealthFinding,
   ArchitectureImpact,
   ArchitectureDrift,
+  WhatIfScenarioType,
 } from '@forgemind/types';
 
 import {
@@ -28,9 +29,19 @@ import { WebhookDeliveryLogViewer } from './WebhookDeliveryLogViewer';
 
 interface PRGatekeeperDashboardProps {
   repositoryId: string;
+  initialPRNumber?: number;
+  onHighlightOnGraph?: (nodeIds: string[]) => void;
+  onSimulateRefactor?: (sourcePath: string, scenario: WhatIfScenarioType) => void;
+  onViewHistory?: (filePath: string) => void;
 }
 
-export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ repositoryId }) => {
+export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({
+  repositoryId,
+  initialPRNumber,
+  onHighlightOnGraph,
+  onSimulateRefactor,
+  onViewHistory,
+}) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'settings'>('overview');
   const [overview, setOverview] = useState<RepositoryPRGatekeeperOverview | null>(null);
 
@@ -127,6 +138,13 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
     fetchPRs(1);
     fetchWebhooks(1);
   }, [fetchOverview, fetchPRs, fetchWebhooks]);
+
+  useEffect(() => {
+    if (initialPRNumber && initialPRNumber > 0) {
+      void handleSelectPR(initialPRNumber);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPRNumber]);
 
   // 4. Select PR detail
   const handleSelectPR = async (prNumber: number) => {
@@ -280,6 +298,9 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({ re
                 <PRHealthComparisonCard
                   detail={selectedPRDetail}
                   onInvestigateFinding={handleInvestigateFinding}
+                  onHighlightOnGraph={onHighlightOnGraph}
+                  onSimulateRefactor={onSimulateRefactor}
+                  onViewHistory={onViewHistory}
                   onClose={() => {
                     setSelectedPRNumber(null);
                     setSelectedPRDetail(null);

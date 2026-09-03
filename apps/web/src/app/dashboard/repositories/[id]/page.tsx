@@ -153,6 +153,8 @@ export default function RepositoryDetailPage() {
     : '';
   const scenarioParam = searchParams ? searchParams.get('scenario') : null;
   const validScenario = parseValidScenarioType(scenarioParam);
+  const prParam = searchParams ? searchParams.get('pr') : null;
+  const parsedPR = prParam && /^\d+$/.test(prParam) ? parseInt(prParam, 10) : undefined;
 
   const resolvedWorkspace = useMemo(
     () => resolveWorkspaceFromUrl(tabParam, subTabParam),
@@ -1004,7 +1006,31 @@ export default function RepositoryDetailPage() {
         )}
 
         {/* TAB: PR GATEKEEPER */}
-        {activeTab === 'gatekeeper' && <PRGatekeeperDashboard repositoryId={repositoryId} />}
+        {activeTab === 'gatekeeper' && (
+          <PRGatekeeperDashboard
+            repositoryId={repositoryId}
+            initialPRNumber={parsedPR}
+            onHighlightOnGraph={(nodeIds) => {
+              setGraphHighlightNodeIds(nodeIds);
+              setActiveTab('graph');
+            }}
+            onSimulateRefactor={(sourcePath, scenario) => {
+              navigateToTab('what-if', 'change', {
+                queryParams: {
+                  sourcePath,
+                  scenario,
+                },
+              });
+            }}
+            onViewHistory={(filePath) => {
+              navigateToTab('time-machine', 'change', {
+                queryParams: {
+                  path: filePath,
+                },
+              });
+            }}
+          />
+        )}
 
         {/* TAB: GRAPH & TOPOLOGY */}
 

@@ -1,17 +1,27 @@
 'use client';
 
-import React from 'react';
-import type { PRGatekeeperDetailResponse, HealthFinding } from '@forgemind/types';
+import type {
+  PRGatekeeperDetailResponse,
+  HealthFinding,
+  WhatIfScenarioType,
+} from '@forgemind/types';
+import { getRemediationWhatIfScenario } from '../health/StructuredRemediationPlanView';
 
 interface PRHealthComparisonCardProps {
   detail: PRGatekeeperDetailResponse;
   onInvestigateFinding?: (finding: HealthFinding) => void;
+  onHighlightOnGraph?: (nodeIds: string[]) => void;
+  onSimulateRefactor?: (sourcePath: string, scenario: WhatIfScenarioType) => void;
+  onViewHistory?: (filePath: string) => void;
   onClose?: () => void;
 }
 
 export const PRHealthComparisonCard: React.FC<PRHealthComparisonCardProps> = ({
   detail,
   onInvestigateFinding,
+  onHighlightOnGraph,
+  onSimulateRefactor,
+  onViewHistory,
   onClose,
 }) => {
   const { policyResult, comparison, snapshot, baseline, prNumber, headSha, baseSha } = detail;
@@ -138,36 +148,76 @@ export const PRHealthComparisonCard: React.FC<PRHealthComparisonCardProps> = ({
             ⚠️ Newly Introduced Architectural Anti-Patterns ({comparison.newFindings.length})
           </h4>
           <div className="space-y-2">
-            {comparison.newFindings.map((finding) => (
-              <div
-                key={finding.id}
-                className="rounded-lg border border-rose-500/20 bg-rose-950/20 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-400 uppercase">
-                      {finding.severity}
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-100">{finding.title}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-300">{finding.description}</p>
-                  {finding.affectedFilePaths.length > 0 && (
-                    <div className="mt-2 text-[11px] text-zinc-400 font-mono">
-                      Files: {finding.affectedFilePaths.join(', ')}
-                    </div>
-                  )}
-                </div>
+            {comparison.newFindings.map((finding) => {
+              const supportedScenario = getRemediationWhatIfScenario(finding.category);
+              const sourcePath = finding.affectedFilePaths[0];
 
-                {onInvestigateFinding && (
-                  <button
-                    onClick={() => onInvestigateFinding(finding)}
-                    className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors flex items-center gap-1.5"
-                  >
-                    ✨ Investigate PR Regression with AI
-                  </button>
-                )}
-              </div>
-            ))}
+              return (
+                <div
+                  key={finding.id}
+                  className="rounded-lg border border-rose-500/20 bg-rose-950/20 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-400 uppercase">
+                        {finding.severity}
+                      </span>
+                      <span className="text-sm font-semibold text-zinc-100">{finding.title}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-300">{finding.description}</p>
+                    {finding.affectedFilePaths.length > 0 && (
+                      <div className="mt-2 text-[11px] text-zinc-400 font-mono">
+                        Files: {finding.affectedFilePaths.join(', ')}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0 shrink-0 font-sans">
+                    {finding.affectedNodeIds &&
+                      finding.affectedNodeIds.length > 0 &&
+                      onHighlightOnGraph && (
+                        <button
+                          type="button"
+                          onClick={() => onHighlightOnGraph(finding.affectedNodeIds)}
+                          className="px-2 py-1 text-xs font-semibold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded transition-colors"
+                          title="Highlight on Graph"
+                        >
+                          🔍 Highlight on Graph
+                        </button>
+                      )}
+                    {supportedScenario && sourcePath && onSimulateRefactor && (
+                      <button
+                        type="button"
+                        onClick={() => onSimulateRefactor(sourcePath, supportedScenario)}
+                        className="px-2 py-1 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded transition-colors"
+                        title="Simulate Proposed Fix in What-If Simulator"
+                      >
+                        🔮 Simulate Fix
+                      </button>
+                    )}
+                    {sourcePath && onViewHistory && (
+                      <button
+                        type="button"
+                        onClick={() => onViewHistory(sourcePath)}
+                        className="px-2 py-1 text-xs font-semibold text-neutral-300 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded transition-colors"
+                        title="View History in Time Machine"
+                      >
+                        ⏳ View History
+                      </button>
+                    )}
+                    {onInvestigateFinding && (
+                      <button
+                        type="button"
+                        onClick={() => onInvestigateFinding(finding)}
+                        className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors flex items-center gap-1.5"
+                      >
+                        ✨ Ask AI
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (

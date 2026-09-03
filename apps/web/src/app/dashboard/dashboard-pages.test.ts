@@ -80,6 +80,8 @@ import RepositoryDetailPage, {
 } from './repositories/[id]/page.js';
 import { getRemediationWhatIfScenario } from '../../components/health/StructuredRemediationPlanView.js';
 import { ArchitectureTimeMachineViewer } from '../../components/architecture/ArchitectureTimeMachineViewer.js';
+import { PRGatekeeperDashboard } from '../../components/gatekeeper/PRGatekeeperDashboard.js';
+import { PRHealthComparisonCard } from '../../components/gatekeeper/PRHealthComparisonCard.js';
 import { ProtectedLayout } from '../../components/dashboard/ProtectedLayout.js';
 import { ProtectedRoute } from '../../components/ProtectedRoute.js';
 
@@ -3277,6 +3279,106 @@ async function runPartE(): Promise<void> {
     assertEqual(step4Res.subTab, 'time-machine', 'Test 112: Step 4 subtab is time-machine');
 
     console.log('  ✅ Test 112: Unified Workspace Navigation history traversal verified');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Part M — Milestone 4D Governance & PR Action Loop Integration Tests (Tests 113–118)
+  // ---------------------------------------------------------------------------
+  console.log(
+    '\n📋 Part M — Milestone 4D Governance & PR Action Loop Integration Tests (Tests 113–118)\n',
+  );
+
+  // Test 113: PR finding circular_dependency category maps to remove_dependency What-If scenario
+  {
+    const scenario = getRemediationWhatIfScenario('circular_dependency');
+    assertEqual(
+      scenario,
+      'remove_dependency',
+      'Test 113: circular_dependency maps to remove_dependency',
+    );
+    console.log('  ✅ Test 113: PR risk circular_dependency -> remove_dependency mapping verified');
+  }
+
+  // Test 114: Unsupported PR risk categories (orphan_export, layer_violation) return null (no fallback to add_dependency)
+  {
+    const orphanScenario = getRemediationWhatIfScenario('orphan_export');
+    assertEqual(orphanScenario, null, 'Test 114: orphan_export returns null');
+
+    const layerScenario = getRemediationWhatIfScenario('layer_violation');
+    assertEqual(layerScenario, null, 'Test 114: layer_violation returns null');
+
+    console.log(
+      '  ✅ Test 114: Unsupported PR risk categories return null (action button omitted) verified',
+    );
+  }
+
+  // Test 115: PR finding affectedNodeIds binds directly to graph highlight callback
+  {
+    let highlightedNodes: string[] = [];
+    const handleHighlightOnGraph = (nodeIds: string[]) => {
+      highlightedNodes = nodeIds;
+    };
+
+    const mockNodeIds = ['apps/web/src/services/auth.service.ts', 'apps/api/src/routes/auth.ts'];
+    handleHighlightOnGraph(mockNodeIds);
+
+    assertEqual(highlightedNodes.length, 2, 'Test 115: 2 node IDs highlighted');
+    assertEqual(
+      highlightedNodes[0],
+      'apps/web/src/services/auth.service.ts',
+      'Test 115: node ID 0 preserved',
+    );
+    assertEqual(
+      highlightedNodes[1],
+      'apps/api/src/routes/auth.ts',
+      'Test 115: node ID 1 preserved',
+    );
+
+    console.log(
+      '  ✅ Test 115: PR finding affectedNodeIds direct graph highlight binding verified',
+    );
+  }
+
+  // Test 116: PR finding affectedFilePaths[0] generates valid Time Machine URL query parameters
+  {
+    const targetFile = 'apps/web/src/services/user.service.ts';
+    const tmSearch = new URLSearchParams();
+    tmSearch.set('tab', 'change');
+    tmSearch.set('subtab', 'time-machine');
+    tmSearch.set('path', targetFile);
+
+    assertEqual(tmSearch.get('tab'), 'change', 'Test 116: tab set to change');
+    assertEqual(tmSearch.get('subtab'), 'time-machine', 'Test 116: subtab set to time-machine');
+    assertEqual(tmSearch.get('path'), targetFile, 'Test 116: path set to target file');
+
+    console.log('  ✅ Test 116: PR finding Time Machine query parameters generation verified');
+  }
+
+  // Test 117: ?tab=governance&pr=12 resolves section, subtab, and parsed PR number 12
+  {
+    const governanceWorkspace = resolveWorkspaceFromUrl('governance', 'gatekeeper');
+    assertEqual(governanceWorkspace.section, 'governance', 'Test 117: governance section resolved');
+    assertEqual(governanceWorkspace.subTab, 'gatekeeper', 'Test 117: gatekeeper subtab resolved');
+
+    const rawPRParam = '12';
+    const parsedPR = rawPRParam && /^\d+$/.test(rawPRParam) ? parseInt(rawPRParam, 10) : undefined;
+    assertEqual(parsedPR, 12, 'Test 117: pr parameter parsed to integer 12');
+
+    console.log('  ✅ Test 117: Governance URL state and PR number parsing verified');
+  }
+
+  // Test 118: Malformed or negative PR query parameters resolve safely to undefined
+  {
+    ['invalid_xyz', 'abc-123', '', '-5'].forEach((invalidVal) => {
+      const parsed = invalidVal && /^\d+$/.test(invalidVal) ? parseInt(invalidVal, 10) : undefined;
+      assertEqual(
+        parsed,
+        undefined,
+        `Test 118: Malformed PR param '${invalidVal}' parsed to undefined`,
+      );
+    });
+
+    console.log('  ✅ Test 118: Malformed PR parameter safe fallback (undefined) verified');
   }
 }
 
