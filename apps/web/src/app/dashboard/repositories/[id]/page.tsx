@@ -1670,6 +1670,13 @@ export default function RepositoryDetailPage() {
                     onNavigateToHealth={() => {
                       setActiveTab('health');
                     }}
+                    onViewHistory={(path) => {
+                      navigateToTab('time-machine', 'change', {
+                        queryParams: {
+                          path,
+                        },
+                      });
+                    }}
                   />
                 ) : (
                   <div className="py-8 text-center text-zinc-400 text-sm">

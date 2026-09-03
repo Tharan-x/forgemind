@@ -5,8 +5,17 @@
 // =============================================================================
 
 import React, { useState, useEffect } from 'react';
-import type { OnboardingBlueprint, BlueprintTourStep, RAGSourceCitation } from '@forgemind/types';
-import { askOnboardingStepQuestion, shareOnboardingBlueprint } from '../../lib/intelligence.api';
+import type {
+  OnboardingBlueprint,
+  BlueprintTourStep,
+  RAGSourceCitation,
+  ArchitectureDecision,
+} from '@forgemind/types';
+import {
+  askOnboardingStepQuestion,
+  shareOnboardingBlueprint,
+  getArchitectureDecisions,
+} from '../../lib/intelligence.api';
 
 export interface OnboardingBlueprintViewerProps {
   blueprint: OnboardingBlueprint;
@@ -16,7 +25,138 @@ export interface OnboardingBlueprintViewerProps {
   onInvestigateAI?: (queryOrFile?: string) => void;
   onViewRemediation?: (findingIdOrFile?: string) => void;
   onNavigateToHealth?: () => void;
+  onViewHistory?: (filePath: string) => void;
 }
+
+const OnboardingFileDecisionMemorySection: React.FC<{
+  repositoryId: string;
+  filePath: string;
+}> = ({ repositoryId, filePath }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [decisions, setDecisions] = useState<ArchitectureDecision[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!filePath || !filePath.trim()) return null;
+
+  const handleToggle = () => {
+    const nextOpen = !isOpen;
+    setIsOpen(nextOpen);
+
+    if (nextOpen && !fetched) {
+      setLoading(true);
+      setError(null);
+      const normalizedPath = filePath.trim().replace(/\\/g, '/').replace(/^\//, '');
+
+      getArchitectureDecisions(repositoryId, { path: normalizedPath, limit: 3 })
+        .then((res) => {
+          setDecisions(res.items || []);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Failed to load decisions');
+          setDecisions([]);
+        })
+        .finally(() => {
+          setLoading(false);
+          setFetched(true);
+        });
+    }
+  };
+
+  return (
+    <div className="w-full pt-2">
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition-colors"
+        title="View Decision Memory for this file"
+      >
+        📜 Decision Memory
+      </button>
+
+      {isOpen && (
+        <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs space-y-2 text-left w-full">
+          <div className="flex items-center justify-between font-semibold text-slate-300 border-b border-slate-800 pb-1.5">
+            <span>📜 Historical Architecture Decisions</span>
+            {loading && (
+              <span className="text-[11px] text-slate-400 animate-pulse">Loading...</span>
+            )}
+          </div>
+
+          {error && (
+            <p className="text-slate-500 text-[11px]">
+              No historical architecture decisions found for this file.
+            </p>
+          )}
+
+          {!loading && fetched && !error && decisions.length === 0 && (
+            <p className="text-slate-500 text-[11px]">
+              No historical architecture decisions found for this file.
+            </p>
+          )}
+
+          {!loading && decisions.length > 0 && (
+            <div className="space-y-2">
+              {decisions.map((dec) => (
+                <div
+                  key={dec.id}
+                  className="rounded border border-slate-800/80 bg-slate-900/60 p-2.5 text-[11px] space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-200">
+                      {dec.prTitle || dec.commitMessage || 'Architecture Decision'}
+                    </span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                        dec.isConfirmed
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-slate-700/50 text-slate-300 border border-slate-600/30'
+                      }`}
+                    >
+                      {dec.isConfirmed ? 'Confirmed' : 'Mined'}
+                    </span>
+                  </div>
+
+                  {(dec.author || dec.committedAt || dec.prNumber) && (
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                      {dec.author && <span>Author: {dec.author}</span>}
+                      {dec.committedAt && (
+                        <span>Date: {new Date(dec.committedAt).toLocaleDateString()}</span>
+                      )}
+                      {dec.prNumber && dec.prUrl ? (
+                        <a
+                          href={dec.prUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-cyan-400 hover:underline"
+                        >
+                          PR #{dec.prNumber}
+                        </a>
+                      ) : (
+                        dec.prNumber && <span>PR #{dec.prNumber}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {dec.synthesis?.rationale ? (
+                    <p className="text-slate-300 text-[10px] leading-normal">
+                      {dec.synthesis.rationale}
+                    </p>
+                  ) : (
+                    dec.commitMessage && (
+                      <p className="text-slate-400 italic text-[10px]">{dec.commitMessage}</p>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface StepQAThreadItem {
   id: string;
@@ -36,6 +176,7 @@ export function OnboardingBlueprintViewer({
   onInvestigateAI,
   onViewRemediation,
   onNavigateToHealth,
+  onViewHistory,
 }: OnboardingBlueprintViewerProps): React.JSX.Element {
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
 
@@ -452,22 +593,39 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                     </p>
                     <p className="mt-2 text-xs text-slate-300 line-clamp-2">{file.reason}</p>
                   </div>
-                  {canView && (
-                    <div className="mt-3 border-t border-slate-800/80 pt-2.5">
-                      <button
-                        onClick={() => {
-                          if (onFileSelect) {
-                            onFileSelect(file.path);
-                          } else if (onExplainCode) {
-                            onExplainCode(file.path);
-                          }
-                        }}
-                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 transition-all hover:bg-slate-800 hover:text-white"
-                      >
-                        📄 View File
-                      </button>
+                  <div className="mt-3 border-t border-slate-800/80 pt-2.5 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {canView && (
+                        <button
+                          onClick={() => {
+                            if (onFileSelect) {
+                              onFileSelect(file.path);
+                            } else if (onExplainCode) {
+                              onExplainCode(file.path);
+                            }
+                          }}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 transition-all hover:bg-slate-800 hover:text-white"
+                        >
+                          📄 View File
+                        </button>
+                      )}
+                      {file.path && onViewHistory && (
+                        <button
+                          onClick={() => onViewHistory(file.path)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-neutral-300 transition-all hover:bg-slate-800 hover:text-white"
+                          title="View History in Time Machine"
+                        >
+                          ⏳ View History
+                        </button>
+                      )}
                     </div>
-                  )}
+                    {file.path && (
+                      <OnboardingFileDecisionMemorySection
+                        repositoryId={blueprint.repositoryId}
+                        filePath={file.path}
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -558,8 +716,8 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                     <h4 className="text-sm font-bold text-white">{task.title}</h4>
                     <p className="text-xs text-slate-300">{task.description}</p>
                   </div>
-                  {handler && (
-                    <div className="shrink-0">
+                  <div className="shrink-0 flex items-center gap-2">
+                    {handler && (
                       <button
                         onClick={handler}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-200 transition-all hover:bg-slate-800 hover:text-white shadow-sm"
@@ -567,8 +725,18 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                         <span>{actionIcon}</span>
                         <span>{actionLabel}</span>
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {task.targetFile && onViewHistory && (
+                      <button
+                        onClick={() => onViewHistory(task.targetFile!)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-neutral-300 transition-all hover:bg-slate-800 hover:text-white shadow-sm"
+                        title="View History in Time Machine"
+                      >
+                        <span>⏳</span>
+                        <span>View History</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -695,6 +863,15 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                         className="text-xs font-medium text-indigo-400 hover:text-indigo-300 underline"
                       >
                         View File →
+                      </button>
+                    )}
+                    {tourStep.targetFile && onViewHistory && (
+                      <button
+                        onClick={() => onViewHistory(tourStep.targetFile)}
+                        className="text-xs font-medium text-neutral-300 hover:text-white underline"
+                        title="View History in Time Machine"
+                      >
+                        ⏳ View History →
                       </button>
                     )}
                   </div>
@@ -840,18 +1017,35 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                 <span className="rounded-md bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-400 border border-emerald-500/30">
                   {ep.type.toUpperCase()}
                 </span>
-                {onFileSelect && (
-                  <button
-                    onClick={() => onFileSelect(ep.path)}
-                    className="text-xs text-indigo-400 hover:underline"
-                  >
-                    Inspect File →
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                  {onFileSelect && (
+                    <button
+                      onClick={() => onFileSelect(ep.path)}
+                      className="text-xs text-indigo-400 hover:underline"
+                    >
+                      Inspect File →
+                    </button>
+                  )}
+                  {ep.path && onViewHistory && (
+                    <button
+                      onClick={() => onViewHistory(ep.path)}
+                      className="text-xs text-neutral-300 hover:text-white underline"
+                      title="View History in Time Machine"
+                    >
+                      ⏳ View History →
+                    </button>
+                  )}
+                </div>
               </div>
               <h4 className="mt-3 text-base font-bold text-white">{ep.name}</h4>
               <p className="mt-1 font-mono text-xs text-slate-300 break-all">{ep.path}</p>
               <p className="mt-2 text-xs text-slate-400 leading-relaxed">{ep.description}</p>
+              {ep.path && (
+                <OnboardingFileDecisionMemorySection
+                  repositoryId={blueprint.repositoryId}
+                  filePath={ep.path}
+                />
+              )}
             </div>
           ))}
         </div>
