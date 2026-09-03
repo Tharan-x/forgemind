@@ -1,14 +1,133 @@
-'use client';
-
+import React, { useState } from 'react';
 import type {
   PRGatekeeperDetailResponse,
   HealthFinding,
   WhatIfScenarioType,
+  ArchitectureDecision,
 } from '@forgemind/types';
 import { getRemediationWhatIfScenario } from '../health/StructuredRemediationPlanView';
+import { getArchitectureDecisions } from '../../lib/intelligence.api';
+
+const PRFindingDecisionMemorySection: React.FC<{
+  repositoryId: string;
+  filePath: string;
+}> = ({ repositoryId, filePath }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [decisions, setDecisions] = useState<ArchitectureDecision[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!repositoryId) return null;
+
+  const handleToggle = () => {
+    const nextOpen = !isOpen;
+    setIsOpen(nextOpen);
+
+    if (nextOpen && !fetched) {
+      setLoading(true);
+      setError(null);
+      const normalizedPath = filePath.trim().replace(/\\/g, '/').replace(/^\//, '');
+
+      getArchitectureDecisions(repositoryId, { path: normalizedPath, limit: 3 })
+        .then((res) => {
+          setDecisions(res.items || []);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Failed to load decisions');
+          setDecisions([]);
+        })
+        .finally(() => {
+          setLoading(false);
+          setFetched(true);
+        });
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="px-2 py-1 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition-colors"
+        title="View Decision Memory for affected file"
+      >
+        📜 Decision Memory
+      </button>
+
+      {isOpen && (
+        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs space-y-2 text-left w-full">
+          <div className="flex items-center justify-between font-semibold text-zinc-300 border-b border-zinc-800 pb-1.5">
+            <span>📜 Historical Architecture Decisions</span>
+            {loading && <span className="text-[11px] text-zinc-400 animate-pulse">Loading...</span>}
+          </div>
+
+          {error && (
+            <p className="text-zinc-500 text-[11px]">
+              No historical architecture decisions found for this file.
+            </p>
+          )}
+
+          {!loading && fetched && !error && decisions.length === 0 && (
+            <p className="text-zinc-500 text-[11px]">
+              No historical architecture decisions found for this file.
+            </p>
+          )}
+
+          {!loading && decisions.length > 0 && (
+            <div className="space-y-2">
+              {decisions.map((dec) => (
+                <div
+                  key={dec.id}
+                  className="rounded border border-zinc-800/80 bg-zinc-900/60 p-2 text-[11px] space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-zinc-200">
+                      {dec.prTitle || dec.commitMessage || 'Architecture Decision'}
+                    </span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                        dec.isConfirmed
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-zinc-700/50 text-zinc-300 border border-zinc-600/30'
+                      }`}
+                    >
+                      {dec.isConfirmed ? 'Confirmed' : 'Mined'}
+                    </span>
+                  </div>
+
+                  {(dec.author || dec.committedAt || dec.prNumber) && (
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-400">
+                      {dec.author && <span>Author: {dec.author}</span>}
+                      {dec.committedAt && (
+                        <span>Date: {new Date(dec.committedAt).toLocaleDateString()}</span>
+                      )}
+                      {dec.prNumber && <span>PR #{dec.prNumber}</span>}
+                    </div>
+                  )}
+
+                  {dec.synthesis?.rationale ? (
+                    <p className="text-zinc-300 text-[10px] leading-normal">
+                      {dec.synthesis.rationale}
+                    </p>
+                  ) : (
+                    dec.commitMessage && (
+                      <p className="text-zinc-400 italic text-[10px]">{dec.commitMessage}</p>
+                    )
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface PRHealthComparisonCardProps {
   detail: PRGatekeeperDetailResponse;
+  repositoryId?: string;
   onInvestigateFinding?: (finding: HealthFinding) => void;
   onHighlightOnGraph?: (nodeIds: string[]) => void;
   onSimulateRefactor?: (sourcePath: string, scenario: WhatIfScenarioType) => void;
@@ -18,6 +137,7 @@ interface PRHealthComparisonCardProps {
 
 export const PRHealthComparisonCard: React.FC<PRHealthComparisonCardProps> = ({
   detail,
+  repositoryId,
   onInvestigateFinding,
   onHighlightOnGraph,
   onSimulateRefactor,
@@ -25,6 +145,7 @@ export const PRHealthComparisonCard: React.FC<PRHealthComparisonCardProps> = ({
   onClose,
 }) => {
   const { policyResult, comparison, snapshot, baseline, prNumber, headSha, baseSha } = detail;
+  const activeRepoId = repositoryId || comparison?.repositoryId || '';
   const outcome = policyResult.outcome;
 
   const outcomeColor =
@@ -215,6 +336,14 @@ export const PRHealthComparisonCard: React.FC<PRHealthComparisonCardProps> = ({
                       </button>
                     )}
                   </div>
+                  {sourcePath && (
+                    <div className="w-full pt-2">
+                      <PRFindingDecisionMemorySection
+                        repositoryId={activeRepoId}
+                        filePath={sourcePath}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}

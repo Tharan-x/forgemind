@@ -10,11 +10,13 @@ import type {
   HealthFinding,
   StructuredRemediationPlan,
   WhatIfScenarioType,
+  ArchitectureDecision,
 } from '@forgemind/types';
 import { Button } from '@forgemind/ui';
 import {
   explainArchitectureFinding,
   generateStructuredRemediationPlan,
+  getArchitectureDecisions,
 } from '@/lib/intelligence.api';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { StructuredRemediationPlanView } from './StructuredRemediationPlanView';
@@ -49,6 +51,10 @@ export function AIExplanationDrawer({
   const [planLoading, setPlanLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [decisions, setDecisions] = useState<ArchitectureDecision[]>([]);
+  const [decisionsLoading, setDecisionsLoading] = useState<boolean>(false);
+  const [decisionsFetched, setDecisionsFetched] = useState<boolean>(false);
+
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab, finding?.id]);
@@ -58,12 +64,43 @@ export function AIExplanationDrawer({
       setData(null);
       setPlanData(null);
       setError(null);
+      setDecisions([]);
+      setDecisionsFetched(false);
       return;
     }
 
     let isMounted = true;
     setLoading(true);
     setError(null);
+    setDecisionsLoading(true);
+
+    const primaryFile = finding.affectedFilePaths[0];
+    const normalizedPath = primaryFile
+      ? primaryFile.trim().replace(/\\/g, '/').replace(/^\//, '')
+      : undefined;
+
+    if (normalizedPath) {
+      getArchitectureDecisions(repositoryId, { path: normalizedPath, limit: 3 })
+        .then((res) => {
+          if (isMounted) {
+            setDecisions(res.items || []);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setDecisions([]);
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setDecisionsLoading(false);
+            setDecisionsFetched(true);
+          }
+        });
+    } else {
+      setDecisionsLoading(false);
+      setDecisionsFetched(true);
+    }
 
     explainArchitectureFinding(repositoryId, {
       findingId: finding.id,
@@ -382,6 +419,85 @@ export function AIExplanationDrawer({
                             <pre className="mt-2 overflow-x-auto font-mono text-zinc-300">
                               {src.content}
                             </pre>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Historical Architecture Decisions */}
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-200">
+                        📜 Historical Architecture Decisions
+                      </h3>
+                      {decisionsLoading && (
+                        <span className="text-[11px] text-zinc-400 animate-pulse">
+                          Loading decisions...
+                        </span>
+                      )}
+                    </div>
+                    {!decisionsLoading && decisionsFetched && decisions.length === 0 && (
+                      <p className="mt-2 text-xs text-zinc-500">
+                        No historical architecture decisions found for this file.
+                      </p>
+                    )}
+                    {decisions.length > 0 && (
+                      <div className="mt-3 space-y-3">
+                        {decisions.map((dec) => (
+                          <div
+                            key={dec.id}
+                            className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-xs space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-zinc-200">
+                                {dec.prTitle || dec.commitMessage || 'Architecture Decision'}
+                              </span>
+                              <span
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                  dec.isConfirmed
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                    : 'bg-zinc-700/50 text-zinc-300 border border-zinc-600/30'
+                                }`}
+                              >
+                                {dec.isConfirmed ? 'Confirmed' : 'Mined'}
+                              </span>
+                            </div>
+
+                            {(dec.author || dec.committedAt || dec.prNumber) && (
+                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400">
+                                {dec.author && <span>Author: {dec.author}</span>}
+                                {dec.committedAt && (
+                                  <span>
+                                    Date: {new Date(dec.committedAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                                {dec.prNumber && dec.prUrl ? (
+                                  <a
+                                    href={dec.prUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-cyan-400 hover:underline"
+                                  >
+                                    PR #{dec.prNumber}
+                                  </a>
+                                ) : (
+                                  dec.prNumber && <span>PR #{dec.prNumber}</span>
+                                )}
+                              </div>
+                            )}
+
+                            {dec.synthesis?.rationale ? (
+                              <p className="text-zinc-300 leading-relaxed text-[11px]">
+                                {dec.synthesis.rationale}
+                              </p>
+                            ) : (
+                              dec.commitMessage && (
+                                <p className="text-zinc-400 italic text-[11px]">
+                                  {dec.commitMessage}
+                                </p>
+                              )
+                            )}
                           </div>
                         ))}
                       </div>
