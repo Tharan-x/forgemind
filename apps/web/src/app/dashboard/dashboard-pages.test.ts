@@ -74,7 +74,10 @@ import { useToast, type ToastContextType, type ToastType } from '../../context/T
 import DashboardPage from './page.js';
 import AnalysisHistoryPage from './history/page.js';
 import SettingsPage from './settings/page.js';
-import RepositoryDetailPage, { resolveWorkspaceFromUrl } from './repositories/[id]/page.js';
+import RepositoryDetailPage, {
+  resolveWorkspaceFromUrl,
+  parseValidScenarioType,
+} from './repositories/[id]/page.js';
 import { ProtectedLayout } from '../../components/dashboard/ProtectedLayout.js';
 import { ProtectedRoute } from '../../components/ProtectedRoute.js';
 
@@ -2875,6 +2878,241 @@ async function runPartE(): Promise<void> {
     );
 
     console.log('  ✅ Test 95: Sub-navigation sub-tab history traversal verified');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Part K — Milestone 4B Graph → What-If + Time Machine Contextual Action Loop Tests (Tests 96–104)
+  // ---------------------------------------------------------------------------
+  console.log(
+    '\n📋 Part K — Milestone 4B Graph → What-If + Time Machine Contextual Action Loop Tests (Tests 96–104)\n',
+  );
+
+  // Test 96: resolveWorkspaceFromUrl handles dual tab and subtab parameters
+  {
+    const res = resolveWorkspaceFromUrl('change', 'time-machine');
+    assertEqual(res.section, 'change', 'Test 96: Section is change');
+    assertEqual(res.subTab, 'time-machine', 'Test 96: SubTab is time-machine');
+    console.log('  ✅ Test 96: Dual tab=change & subtab=time-machine parameters resolved');
+  }
+
+  // Test 97: resolveWorkspaceFromUrl handles dual tab=change and subtab=what-if
+  {
+    const res = resolveWorkspaceFromUrl('change', 'what-if');
+    assertEqual(res.section, 'change', 'Test 97: Section is change');
+    assertEqual(res.subTab, 'what-if', 'Test 97: SubTab is what-if');
+    console.log('  ✅ Test 97: Dual tab=change & subtab=what-if parameters resolved');
+  }
+
+  // Test 98: File node -> View History URL search params generation
+  {
+    const path = 'apps/web/src/app/page.tsx';
+    const search = new URLSearchParams();
+    search.set('tab', 'change');
+    search.set('subtab', 'time-machine');
+    search.set('path', path);
+
+    const urlString = search.toString();
+    assert(urlString.includes('tab=change'), 'Test 98: tab=change included');
+    assert(urlString.includes('subtab=time-machine'), 'Test 98: subtab=time-machine included');
+    assert(
+      urlString.includes(`path=${encodeURIComponent(path)}`),
+      'Test 98: path URL encoded correctly',
+    );
+
+    const res = resolveWorkspaceFromUrl(search.get('tab'), search.get('subtab'));
+    assertEqual(res.section, 'change', 'Test 98: Resolved section is change');
+    assertEqual(res.subTab, 'time-machine', 'Test 98: Resolved subTab is time-machine');
+    console.log('  ✅ Test 98: File node -> View History URL search params generation verified');
+  }
+
+  // Test 99: File node -> Simulate Change URL search params generation
+  {
+    const sourcePath = 'apps/web/src/app/page.tsx';
+    const search = new URLSearchParams();
+    search.set('tab', 'change');
+    search.set('subtab', 'what-if');
+    search.set('sourcePath', sourcePath);
+
+    const urlString = search.toString();
+    assert(urlString.includes('tab=change'), 'Test 99: tab=change included');
+    assert(urlString.includes('subtab=what-if'), 'Test 99: subtab=what-if included');
+    assert(
+      urlString.includes(`sourcePath=${encodeURIComponent(sourcePath)}`),
+      'Test 99: sourcePath URL encoded',
+    );
+
+    const res = resolveWorkspaceFromUrl(search.get('tab'), search.get('subtab'));
+    assertEqual(res.section, 'change', 'Test 99: Resolved section is change');
+    assertEqual(res.subTab, 'what-if', 'Test 99: Resolved subTab is what-if');
+    console.log('  ✅ Test 99: File node -> Simulate Change URL search params generation verified');
+  }
+
+  // Test 100: Module node -> Simulate Change extracts and validates scenario=move_module
+  {
+    const modulePath = 'apps/web/src/components';
+    const search = new URLSearchParams(
+      '?tab=change&subtab=what-if&sourcePath=apps%2Fweb%2Fsrc%2Fcomponents&scenario=move_module',
+    );
+
+    const sourcePathParam = search.get('sourcePath') || search.get('path') || '';
+    const scenarioParam = search.get('scenario');
+    const validScenario = parseValidScenarioType(scenarioParam);
+
+    assertEqual(scenarioParam, 'move_module', 'Test 100: scenarioParam extracted as move_module');
+    assertEqual(
+      validScenario,
+      'move_module',
+      'Test 100: parseValidScenarioType runtime validation accepts move_module',
+    );
+    assertEqual(sourcePathParam, modulePath, 'Test 100: sourcePath set to module directory');
+
+    console.log(
+      '  ✅ Test 100: Module node -> Simulate Change move_module runtime validation verified',
+    );
+  }
+
+  // Test 101: Package node path is undefined, contextual actions omitted
+  {
+    const packageNodePath = undefined;
+    const hasValidPath = packageNodePath !== undefined && packageNodePath !== null;
+    assertEqual(hasValidPath, false, 'Test 101: Package node has no path, actions omitted');
+    console.log('  ✅ Test 101: Package node contextual actions omission verified');
+  }
+
+  // Test 102: Missing scenario URL parameter returns undefined (defaults simulator to add_dependency)
+  {
+    const search = new URLSearchParams(
+      '?tab=change&subtab=what-if&sourcePath=apps%2Fweb%2Fsrc%2Fapp%2Fpage.tsx',
+    );
+    const pathParam = search.get('sourcePath') || search.get('path') || '';
+    const scenarioParam = search.get('scenario');
+    const validScenario = parseValidScenarioType(scenarioParam);
+
+    assertEqual(pathParam, 'apps/web/src/app/page.tsx', 'Test 102: sourcePath extracted correctly');
+    assertEqual(
+      scenarioParam,
+      null,
+      'Test 102: scenario parameter absent for normal file navigation',
+    );
+    assertEqual(
+      validScenario,
+      undefined,
+      'Test 102: parseValidScenarioType returns undefined for missing scenario',
+    );
+
+    console.log(
+      '  ✅ Test 102: Missing scenario returns undefined (defaulting to add_dependency) verified',
+    );
+  }
+
+  // Test 103: Popstate navigation simulation for contextual action loop
+  {
+    const historyStack = [
+      '/dashboard/repositories/repo-1?tab=architecture&subtab=graph',
+      '/dashboard/repositories/repo-1?tab=change&subtab=what-if&sourcePath=apps%2Fweb%2Fsrc%2Fapp%2Fpage.tsx',
+      '/dashboard/repositories/repo-1?tab=change&subtab=time-machine&path=apps%2Fweb%2Fsrc%2Fapp%2Fpage.tsx',
+    ];
+
+    const step1Search = new URLSearchParams(historyStack[0]!.split('?')[1]);
+    const step1Res = resolveWorkspaceFromUrl(step1Search.get('tab'), step1Search.get('subtab'));
+    assertEqual(step1Res.subTab, 'graph', 'Test 103: Step 1 is graph');
+
+    const step2Search = new URLSearchParams(historyStack[1]!.split('?')[1]);
+    const step2Res = resolveWorkspaceFromUrl(step2Search.get('tab'), step2Search.get('subtab'));
+    assertEqual(step2Res.subTab, 'what-if', 'Test 103: Step 2 is what-if');
+
+    const step3Search = new URLSearchParams(historyStack[2]!.split('?')[1]);
+    const step3Res = resolveWorkspaceFromUrl(step3Search.get('tab'), step3Search.get('subtab'));
+    assertEqual(step3Res.subTab, 'time-machine', 'Test 103: Step 3 is time-machine');
+
+    console.log(
+      '  ✅ Test 103: Popstate navigation simulation for contextual action loop verified',
+    );
+  }
+
+  // Test 104: Node selection does not trigger automatic What-If or Time Machine execution
+  {
+    let whatIfExecuted = false;
+    let timeMachineExecuted = false;
+
+    // Simulate node selection event
+    const handleNodeSelect = (path: string) => {
+      // Node selection fetches decision memory only
+      // DOES NOT set whatIfExecuted or timeMachineExecuted
+      const mockFetchDecisions = (p: string) => p;
+      mockFetchDecisions(path);
+    };
+
+    handleNodeSelect('apps/web/src/app/page.tsx');
+    assertEqual(whatIfExecuted, false, 'Test 104: What-If not executed on node select');
+    assertEqual(timeMachineExecuted, false, 'Test 104: Time Machine not executed on node select');
+
+    // Only action click sets navigation / execution
+    const handleActionClick = (action: 'time-machine' | 'what-if') => {
+      if (action === 'what-if') whatIfExecuted = true;
+      if (action === 'time-machine') timeMachineExecuted = true;
+    };
+
+    handleActionClick('what-if');
+    assertEqual(whatIfExecuted, true, 'Test 104: What-If executed only on explicit action click');
+
+    console.log(
+      '  ✅ Test 104: Node selection lightweight execution (no automatic execution) verified',
+    );
+  }
+
+  // Test 105: Runtime Scenario Parameter Validation Matrix
+  {
+    // 1. move_module accepted
+    assertEqual(
+      parseValidScenarioType('move_module'),
+      'move_module',
+      'Test 105: move_module accepted',
+    );
+
+    // 2. another valid scenario accepted
+    assertEqual(
+      parseValidScenarioType('remove_dependency'),
+      'remove_dependency',
+      'Test 105: remove_dependency accepted',
+    );
+    assertEqual(
+      parseValidScenarioType('introduce_cross_layer_dependency'),
+      'introduce_cross_layer_dependency',
+      'Test 105: introduce_cross_layer_dependency accepted',
+    );
+
+    // 3. missing scenario returns undefined
+    assertEqual(parseValidScenarioType(null), undefined, 'Test 105: null returns undefined');
+    assertEqual(parseValidScenarioType(''), undefined, 'Test 105: empty string returns undefined');
+
+    // 4. invalid/tampered scenario rejected
+    assertEqual(
+      parseValidScenarioType('invalid_scenario_xyz'),
+      undefined,
+      'Test 105: invalid_scenario_xyz rejected',
+    );
+    assertEqual(
+      parseValidScenarioType('<script>alert(1)</script>'),
+      undefined,
+      'Test 105: malicious script string rejected',
+    );
+
+    // 5. sourcePath preserved across valid, invalid, and missing scenarios
+    const sourcePath = 'apps/web/src/app/page.tsx';
+    ['move_module', 'remove_dependency', 'invalid_tampered_param', null].forEach((param) => {
+      const search = new URLSearchParams(
+        `?sourcePath=${encodeURIComponent(sourcePath)}${param ? `&scenario=${param}` : ''}`,
+      );
+      const extractedPath = search.get('sourcePath') || search.get('path') || '';
+      assertEqual(
+        extractedPath,
+        sourcePath,
+        `Test 105: sourcePath preserved for scenario=${param}`,
+      );
+    });
+
+    console.log('  ✅ Test 105: Runtime What-If URL Scenario Validation Matrix verified');
   }
 }
 

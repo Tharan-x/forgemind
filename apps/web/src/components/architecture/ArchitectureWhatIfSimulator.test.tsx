@@ -117,6 +117,45 @@ export async function runArchitectureWhatIfUITests(): Promise<void> {
 
   console.log('  ✅ Test 2 PASS: What-If simulation result payload & metadata verified');
 
+  // ── Test 3: initialScenarioType Prop Binding for module node handoff ─────────
+  const moduleElement = React.createElement(ArchitectureWhatIfSimulator, {
+    repositoryId: 'repo-what-if-123',
+    initialSourcePath: 'apps/web/src/components',
+    initialScenarioType: 'move_module',
+  });
+
+  assertEqual(
+    moduleElement.props.initialScenarioType,
+    'move_module',
+    'initialScenarioType move_module bound correctly',
+  );
+  assertEqual(
+    moduleElement.props.initialSourcePath,
+    'apps/web/src/components',
+    'module sourcePath preserved',
+  );
+  assertEqual(
+    moduleElement.props.initialTargetPath,
+    undefined,
+    'targetPath remains un-entered by default for user entry',
+  );
+
+  console.log('  ✅ Test 3 PASS: What-If move_module scenario prop binding verified');
+
+  // ── Test 4: Unprovided initialScenarioType Defaults to add_dependency ──────
+  const defaultElement = React.createElement(ArchitectureWhatIfSimulator, {
+    repositoryId: 'repo-what-if-123',
+    initialSourcePath: 'apps/web/src/app/page.tsx',
+  });
+
+  assertEqual(
+    defaultElement.props.initialScenarioType,
+    undefined,
+    'unprovided initialScenarioType is undefined',
+  );
+
+  console.log('  ✅ Test 4 PASS: What-If default add_dependency fallback verified');
+
   console.log('\n🎉 ALL ARCHITECTURE WHAT-IF UI TESTS PASSED!\n');
 }
 

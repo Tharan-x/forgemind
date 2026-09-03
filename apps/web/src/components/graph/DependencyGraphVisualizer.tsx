@@ -29,6 +29,8 @@ interface DependencyGraphVisualizerProps {
     node: GraphNode,
     blastRadiusInfo: { incoming: GraphNode[]; outgoing: GraphNode[]; reachableCount: number },
   ) => void;
+  onNavigateToTimeMachine?: (path: string) => void;
+  onNavigateToWhatIf?: (path: string, isModule?: boolean) => void;
 }
 
 export function DependencyGraphVisualizer({
@@ -38,6 +40,8 @@ export function DependencyGraphVisualizer({
   onSelectNodeForExplain,
   onSelectNodeForFiles,
   onSelectNodeForAIInvestigation,
+  onNavigateToTimeMachine,
+  onNavigateToWhatIf,
 }: DependencyGraphVisualizerProps) {
   const [data, setData] = useState<RepositoryGraphResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -744,6 +748,26 @@ export function DependencyGraphVisualizer({
 
                 {/* Direct Action Buttons */}
                 <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  {selectedNode.path && onNavigateToTimeMachine && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-center text-xs h-8 border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/40 font-semibold"
+                      onClick={() => onNavigateToTimeMachine(selectedNode.path!)}
+                    >
+                      ⏳ View History
+                    </Button>
+                  )}
+                  {selectedNode.path && onNavigateToWhatIf && (
+                    <Button
+                      variant="outline"
+                      className="w-full justify-center text-xs h-8 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 font-semibold"
+                      onClick={() =>
+                        onNavigateToWhatIf(selectedNode.path!, selectedNode.type === 'module')
+                      }
+                    >
+                      🔮 Simulate Change
+                    </Button>
+                  )}
                   {onSelectNodeForAIInvestigation && (
                     <Button
                       variant="outline"

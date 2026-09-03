@@ -20,6 +20,7 @@ import type {
   RAGSourceCitation,
   RepositoryFile,
   RepositorySymbol,
+  WhatIfScenarioType,
 } from '@forgemind/types';
 import { Button } from '@forgemind/ui';
 
@@ -71,14 +72,18 @@ export type TabType =
   | 'dependencies'
   | 'gatekeeper';
 
-export function resolveWorkspaceFromUrl(tabParam: string | null): {
+export function resolveWorkspaceFromUrl(
+  tabParam: string | null,
+  subTabParam?: string | null,
+): {
   section: WorkspaceSection;
   subTab: TabType;
 } {
-  if (!tabParam) {
+  const paramToResolve = subTabParam || tabParam;
+  if (!paramToResolve) {
     return { section: 'overview', subTab: 'overview' };
   }
-  const lower = tabParam.toLowerCase().trim();
+  const lower = paramToResolve.toLowerCase().trim();
   switch (lower) {
     case 'overview':
       return { section: 'overview', subTab: 'overview' };
@@ -121,6 +126,20 @@ export function resolveWorkspaceFromUrl(tabParam: string | null): {
   }
 }
 
+const VALID_WHAT_IF_SCENARIOS: readonly WhatIfScenarioType[] = [
+  'add_dependency',
+  'remove_dependency',
+  'move_module',
+  'introduce_cross_layer_dependency',
+];
+
+export function parseValidScenarioType(param: string | null): WhatIfScenarioType | undefined {
+  if (!param) return undefined;
+  return VALID_WHAT_IF_SCENARIOS.includes(param as WhatIfScenarioType)
+    ? (param as WhatIfScenarioType)
+    : undefined;
+}
+
 export default function RepositoryDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -128,8 +147,17 @@ export default function RepositoryDetailPage() {
 
   const repositoryId = typeof params?.['id'] === 'string' ? params['id'] : '';
   const tabParam = searchParams ? searchParams.get('tab') : null;
+  const subTabParam = searchParams ? searchParams.get('subtab') : null;
+  const pathParam = searchParams
+    ? searchParams.get('sourcePath') || searchParams.get('path') || ''
+    : '';
+  const scenarioParam = searchParams ? searchParams.get('scenario') : null;
+  const validScenario = parseValidScenarioType(scenarioParam);
 
-  const resolvedWorkspace = useMemo(() => resolveWorkspaceFromUrl(tabParam), [tabParam]);
+  const resolvedWorkspace = useMemo(
+    () => resolveWorkspaceFromUrl(tabParam, subTabParam),
+    [tabParam, subTabParam],
+  );
 
   const [repository, setRepository] = useState<Repository | null>(null);
   const [latestJob, setLatestJob] = useState<AnalysisJob | null>(null);
@@ -146,7 +174,8 @@ export default function RepositoryDetailPage() {
       if (typeof window === 'undefined') return;
       const currentSearchParams = new URLSearchParams(window.location.search);
       const currentTabParam = currentSearchParams.get('tab');
-      const resolved = resolveWorkspaceFromUrl(currentTabParam);
+      const currentSubTabParam = currentSearchParams.get('subtab');
+      const resolved = resolveWorkspaceFromUrl(currentTabParam, currentSubTabParam);
       setActiveTabState(resolved.subTab);
     };
 
@@ -155,13 +184,27 @@ export default function RepositoryDetailPage() {
   }, []);
 
   const navigateToTab = useCallback(
-    (targetTab: TabType, targetSection?: WorkspaceSection, options: { replace?: boolean } = {}) => {
+    (
+      targetTab: TabType,
+      targetSection?: WorkspaceSection,
+      options: { replace?: boolean; queryParams?: Record<string, string> } = {},
+    ) => {
       setActiveTabState(targetTab);
       const sectionToUse = targetSection || resolveWorkspaceFromUrl(targetTab).section;
       const paramToSet = sectionToUse === 'overview' ? 'overview' : sectionToUse;
 
       if (typeof window !== 'undefined' && pathname) {
-        const targetSearch = `?tab=${encodeURIComponent(paramToSet)}`;
+        const search = new URLSearchParams();
+        search.set('tab', paramToSet);
+        if (targetTab !== 'overview' && targetTab !== sectionToUse) {
+          search.set('subtab', targetTab);
+        }
+        if (options.queryParams) {
+          Object.entries(options.queryParams).forEach(([k, v]) => {
+            if (v) search.set(k, v);
+          });
+        }
+        const targetSearch = `?${search.toString()}`;
         const url = `${pathname}${targetSearch}`;
 
         if (window.location.search !== targetSearch) {
@@ -938,7 +981,14 @@ export default function RepositoryDetailPage() {
         )}
 
         {/* TAB: WHAT-IF SIMULATOR */}
-        {activeTab === 'what-if' && <ArchitectureWhatIfSimulator repositoryId={repositoryId} />}
+        {activeTab === 'what-if' && (
+          <ArchitectureWhatIfSimulator
+            key={`${pathParam}-${validScenario || 'default'}`}
+            repositoryId={repositoryId}
+            initialSourcePath={pathParam}
+            initialScenarioType={validScenario}
+          />
+        )}
 
         {/* TAB: ARCHITECTURE TIME MACHINE */}
         {activeTab === 'time-machine' && (
@@ -989,6 +1039,17 @@ export default function RepositoryDetailPage() {
               setChatQuery(prompt);
               setInvestigationContextSource('graph');
               setActiveTab('chat');
+            }}
+            onNavigateToTimeMachine={(path) => {
+              navigateToTab('time-machine', 'change', { queryParams: { path } });
+            }}
+            onNavigateToWhatIf={(path, isModule) => {
+              navigateToTab('what-if', 'change', {
+                queryParams: {
+                  sourcePath: path,
+                  ...(isModule ? { scenario: 'move_module' } : {}),
+                },
+              });
             }}
           />
         )}

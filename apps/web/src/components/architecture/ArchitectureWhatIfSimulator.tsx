@@ -17,14 +17,18 @@ interface ArchitectureWhatIfSimulatorProps {
   repositoryId: string;
   initialSourcePath?: string;
   initialTargetPath?: string;
+  initialScenarioType?: WhatIfScenarioType;
 }
 
 export function ArchitectureWhatIfSimulator({
   repositoryId,
   initialSourcePath = '',
   initialTargetPath = '',
+  initialScenarioType,
 }: ArchitectureWhatIfSimulatorProps) {
-  const [scenarioType, setScenarioType] = useState<WhatIfScenarioType>('add_dependency');
+  const [scenarioType, setScenarioType] = useState<WhatIfScenarioType>(
+    initialScenarioType || 'add_dependency',
+  );
   const [sourcePath, setSourcePath] = useState<string>(initialSourcePath);
   const [targetPath, setTargetPath] = useState<string>(initialTargetPath);
   const [includeAIAdvice, setIncludeAIAdvice] = useState<boolean>(true);
