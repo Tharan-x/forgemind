@@ -7,7 +7,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { OnboardingBlueprint } from '@forgemind/types';
-import { OnboardingBlueprintViewer } from './OnboardingBlueprintViewer';
+import { OnboardingBlueprintViewer, generateBlueprintMarkdown } from './OnboardingBlueprintViewer';
 
 const MOCK_BLUEPRINT: OnboardingBlueprint = {
   repositoryId: '00000000-0000-4000-8000-0000000000c9',
@@ -310,6 +310,75 @@ function runTests() {
     );
     assert(html.includes('Developer Quickstart'), 'Test 16: Quickstart subtab option rendered');
     console.log('  ✅ Test 16: All 4 blueprint sub-tabs navigation options preserved');
+  }
+
+  // Test 17: Task 4 — Export Markdown button exists in rendered markup
+  {
+    const html = renderToStaticMarkup(<OnboardingBlueprintViewer blueprint={MOCK_BLUEPRINT} />);
+    assert(html.includes('📥 Export Markdown'), 'Test 17: Export Markdown action button exists');
+    console.log('  ✅ Test 17: Export Markdown action button rendered cleanly');
+  }
+
+  // Test 18: Task 4 — generateBlueprintMarkdown content verification
+  {
+    const md = generateBlueprintMarkdown(MOCK_BLUEPRINT, new Set([1, 2]));
+    assert(md.includes('# Onboarding Blueprint — forgemind'), 'Test 18: Repository title in MD');
+    assert(
+      md.includes('Welcome to ForgeMind repository onboarding blueprint.'),
+      'Test 18: Summary in MD',
+    );
+    assert(md.includes('Architectural Health Snapshot'), 'Test 18: Health summary in MD');
+    assert(md.includes('Recommended Start-Here Files'), 'Test 18: Start here files in MD');
+    assert(md.includes('repository.routes.ts'), 'Test 18: Start here file path in MD');
+    assert(md.includes('First Exploration Tasks'), 'Test 18: Exploration tasks in MD');
+    assert(md.includes('Key Entry Points'), 'Test 18: Entry points in MD');
+    assert(md.includes('apps/api/src/main.ts'), 'Test 18: Entry point path in MD');
+    assert(md.includes('5-Step Guided Code Tour'), 'Test 18: Guided tour header in MD');
+    assert(md.includes('[COMPLETED ✓]'), 'Test 18: Completed step status in MD');
+    assert(md.includes('[PENDING]'), 'Test 18: Pending step status in MD');
+    assert(
+      md.includes('Developer Quickstart') || md.includes('Quickstart Guide'),
+      'Test 18: Quickstart in MD',
+    );
+    assert(md.includes('pnpm install'), 'Test 18: Setup command in MD');
+    console.log(
+      '  ✅ Test 18: generateBlueprintMarkdown exports all key blueprint sections correctly',
+    );
+  }
+
+  // Test 19: Task 4 — Client-side export handles empty/optional sections gracefully
+  {
+    const minimalBp: OnboardingBlueprint = {
+      repositoryId: 'repo-min-19',
+      repositoryName: 'min-repo',
+      generatedAt: new Date().toISOString(),
+      summary: 'Minimal onboarding blueprint.',
+      providerUsed: 'Gemini 3.6 Flash',
+      entryPoints: [],
+      guidedTour: [],
+      architecturalSections: [],
+      quickstart: {
+        prerequisites: [],
+        setupCommands: [],
+        keyEnvironmentVars: [],
+        devServerCommand: '',
+      },
+    };
+
+    const md = generateBlueprintMarkdown(minimalBp);
+    assert(md.includes('# Onboarding Blueprint — min-repo'), 'Test 19: Title rendered');
+    assert(md.includes('Minimal onboarding blueprint.'), 'Test 19: Summary rendered');
+    assert(
+      !md.includes('Architectural Health Snapshot'),
+      'Test 19: Optional health section omitted',
+    );
+    assert(
+      !md.includes('Recommended Start-Here Files'),
+      'Test 19: Optional start-here section omitted',
+    );
+    console.log(
+      '  ✅ Test 19: Client-side export handles minimal blueprint data safely without crashing',
+    );
   }
 
   console.log('\n🎉 ALL ONBOARDING BLUEPRINT VIEWER UI TESTS PASSED SUCCESSFULLY!\n');

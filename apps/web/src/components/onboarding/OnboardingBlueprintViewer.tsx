@@ -158,7 +158,7 @@ const OnboardingFileDecisionMemorySection: React.FC<{
   );
 };
 
-interface StepQAThreadItem {
+export interface StepQAThreadItem {
   id: string;
   stepNumber: number;
   query: string;
@@ -166,6 +166,98 @@ interface StepQAThreadItem {
   sources: RAGSourceCitation[];
   providerUsed: string;
   timestamp: string;
+}
+
+export function generateBlueprintMarkdown(
+  blueprint: OnboardingBlueprint,
+  completedSteps: Set<number> = new Set(),
+  stepQAThreads: Record<number, StepQAThreadItem[]> = {},
+): string {
+  let healthMd = '';
+  if (blueprint.healthSummary) {
+    healthMd = `\n## 🛡️ Architectural Health Snapshot\n- **Health Score**: ${blueprint.healthSummary.healthScore}/100\n- **Grade**: ${blueprint.healthSummary.grade}\n- **Total Findings**: ${blueprint.healthSummary.totalFindings}\n- **Critical Findings**: ${blueprint.healthSummary.criticalFindingsCount}\n`;
+  }
+
+  let startHereMd = '';
+  if (blueprint.startHereFiles && blueprint.startHereFiles.length > 0) {
+    startHereMd =
+      `\n## 🌟 Recommended Start-Here Files\n` +
+      blueprint.startHereFiles
+        .map((f) => `- \`${f.path}\` (${f.category}): ${f.reason} [Fan-In: ${f.fanInCount}]`)
+        .join('\n') +
+      '\n';
+  }
+
+  let tasksMd = '';
+  if (blueprint.firstExplorationTasks && blueprint.firstExplorationTasks.length > 0) {
+    tasksMd =
+      `\n## 🎯 First Exploration Tasks\n` +
+      blueprint.firstExplorationTasks
+        .map(
+          (t) =>
+            `- **${t.title}** (${t.category}): ${t.description}${t.targetFile ? ` [\`${t.targetFile}\`]` : ''}`,
+        )
+        .join('\n') +
+      '\n';
+  }
+
+  const tourMarkdown = (blueprint.guidedTour || [])
+    .map((s) => {
+      const isDone = completedSteps.has(s.stepNumber);
+      const qaItems = stepQAThreads[s.stepNumber] || [];
+      const qaMd =
+        qaItems.length > 0
+          ? `\n**Step Q&A Notes**:\n` +
+            qaItems
+              .map(
+                (q) =>
+                  `- **Q**: ${q.query}\n  **A**: ${q.answer}\n  *Sources*: ${
+                    (q.sources || [])
+                      .map(
+                        (src: RAGSourceCitation) =>
+                          `\`${src.filePath}:${src.startLine}-${src.endLine}\``,
+                      )
+                      .join(', ') || 'N/A'
+                  }\n`,
+              )
+              .join('\n')
+          : '';
+
+      return `### Step ${s.stepNumber}: ${s.title} ${isDone ? '[COMPLETED ✓]' : '[PENDING]'}\n- **Target File**: \`${s.targetFile}\`\n- **Description**: ${s.description}\n- **Key Takeaway**: ${s.keyTakeaway}${qaMd}\n`;
+    })
+    .join('\n');
+
+  const entryPointsMd = (blueprint.entryPoints || [])
+    .map((e) => `- \`${e.path}\` (${e.name}): ${e.description}`)
+    .join('\n');
+
+  const quickstartPrereqs = (blueprint.quickstart?.prerequisites || [])
+    .map((p) => `- ${p}`)
+    .join('\n');
+
+  const quickstartCmds = (blueprint.quickstart?.setupCommands || []).join('\n');
+
+  return `# Onboarding Blueprint — ${blueprint.repositoryName || 'Repository'}
+*Generated at: ${blueprint.generatedAt ? new Date(blueprint.generatedAt).toLocaleString() : new Date().toLocaleString()}*
+
+## 📌 Executive Summary
+${blueprint.summary || ''}
+${healthMd}${startHereMd}${tasksMd}
+## 🚀 Key Entry Points
+${entryPointsMd}
+
+## 🗺️ 5-Step Guided Code Tour
+${tourMarkdown}
+
+## 🛠️ Quickstart Guide
+**Prerequisites**:
+${quickstartPrereqs}
+
+**Setup Commands**:
+\`\`\`bash
+${quickstartCmds}
+\`\`\`
+`;
 }
 
 export function OnboardingBlueprintViewer({
@@ -355,84 +447,14 @@ export function OnboardingBlueprintViewer({
   };
 
   const handleExportMarkdown = () => {
-    let healthMd = '';
-    if (blueprint.healthSummary) {
-      healthMd = `\n## 🛡️ Architectural Health Snapshot\n- **Health Score**: ${blueprint.healthSummary.healthScore}/100\n- **Grade**: ${blueprint.healthSummary.grade}\n- **Total Findings**: ${blueprint.healthSummary.totalFindings}\n- **Critical Findings**: ${blueprint.healthSummary.criticalFindingsCount}\n`;
-    }
-
-    let startHereMd = '';
-    if (blueprint.startHereFiles && blueprint.startHereFiles.length > 0) {
-      startHereMd =
-        `\n## 🌟 Recommended Start-Here Files\n` +
-        blueprint.startHereFiles
-          .map((f) => `- \`${f.path}\` (${f.category}): ${f.reason} [Fan-In: ${f.fanInCount}]`)
-          .join('\n') +
-        '\n';
-    }
-
-    let tasksMd = '';
-    if (blueprint.firstExplorationTasks && blueprint.firstExplorationTasks.length > 0) {
-      tasksMd =
-        `\n## 🎯 First Exploration Tasks\n` +
-        blueprint.firstExplorationTasks
-          .map(
-            (t) =>
-              `- **${t.title}** (${t.category}): ${t.description}${t.targetFile ? ` [\`${t.targetFile}\`]` : ''}`,
-          )
-          .join('\n') +
-        '\n';
-    }
-
-    const tourMarkdown = blueprint.guidedTour
-      .map((s) => {
-        const isDone = completedSteps.has(s.stepNumber);
-        const qaItems = stepQAThreads[s.stepNumber] || [];
-        const qaMd =
-          qaItems.length > 0
-            ? `\n**Step Q&A Notes**:\n` +
-              qaItems
-                .map(
-                  (q) =>
-                    `- **Q**: ${q.query}\n  **A**: ${q.answer}\n  *Sources*: ${
-                      q.sources
-                        .map((src) => `\`${src.filePath}:${src.startLine}-${src.endLine}\``)
-                        .join(', ') || 'N/A'
-                    }\n`,
-                )
-                .join('\n')
-            : '';
-
-        return `### Step ${s.stepNumber}: ${s.title} ${isDone ? '[COMPLETED ✓]' : '[PENDING]'}\n- **Target File**: \`${s.targetFile}\`\n- **Description**: ${s.description}\n- **Key Takeaway**: ${s.keyTakeaway}${qaMd}\n`;
-      })
-      .join('\n');
-
-    const mdContent = `# Onboarding Blueprint — ${blueprint.repositoryName}
-*Generated at: ${new Date(blueprint.generatedAt).toLocaleString()}*
-
-## 📌 Executive Summary
-${blueprint.summary}
-${healthMd}${startHereMd}${tasksMd}
-## 🚀 Key Entry Points
-${blueprint.entryPoints.map((e) => `- \`${e.path}\` (${e.name}): ${e.description}`).join('\n')}
-
-## 🗺️ 5-Step Guided Code Tour
-${tourMarkdown}
-
-## 🛠️ Quickstart Guide
-**Prerequisites**:
-${blueprint.quickstart.prerequisites.map((p) => `- ${p}`).join('\n')}
-
-**Setup Commands**:
-\`\`\`bash
-${blueprint.quickstart.setupCommands.join('\n')}
-\`\`\`
-`;
+    const mdContent = generateBlueprintMarkdown(blueprint, completedSteps, stepQAThreads);
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
     const blob = new Blob([mdContent], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${blueprint.repositoryName}-onboarding-blueprint.md`;
+    a.download = `${blueprint.repositoryName || 'forgemind'}-onboarding-blueprint.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -939,7 +961,7 @@ ${blueprint.quickstart.setupCommands.join('\n')}
                                 <span className="text-[10px] font-semibold text-slate-400">
                                   Sources:
                                 </span>
-                                {item.sources.map((src, i) => (
+                                {item.sources.map((src: RAGSourceCitation, i: number) => (
                                   <span
                                     key={i}
                                     onClick={() => onFileSelect && onFileSelect(src.filePath)}
