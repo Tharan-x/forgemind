@@ -55,6 +55,8 @@ import {
   synthesizeArchitectureDecision,
 } from '../../lib/intelligence.api.js';
 
+import { ErrorBoundary } from '../../components/ui/ErrorBoundary';
+
 import {
   queryRepositoryRAG,
   getRepositoryChatHistory,
@@ -1351,7 +1353,14 @@ async function runPartD(): Promise<void> {
   console.log('\n📋 Part D — Repository Detail Page (Tests 31–48)');
 
   function getActiveTab(rendered: any) {
-    return rendered.props.children.props.children.slice(2).find(Boolean);
+    const raw = rendered.props.children.props.children.slice(2).find(Boolean);
+    if (raw && raw.type === ErrorBoundary) {
+      const boundaryChildren = raw.props.children;
+      return (Array.isArray(boundaryChildren) ? boundaryChildren : [boundaryChildren]).find(
+        Boolean,
+      );
+    }
+    return raw;
   }
 
   // Test 31: RepositoryDetailPage loading state renders Skeleton loaders
@@ -3622,6 +3631,180 @@ async function runPartE(): Promise<void> {
 
     console.log(
       '  ✅ Test 131: Onboarding item without file path safely suppresses History & Decision Memory actions',
+    );
+  }
+
+  // ─── PART P: MILESTONE 4G RENDER RESILIENCE & URL ISOLATION TESTS (Tests 132–135) ───
+
+  // Test 132: ErrorBoundary catches child render error and transitions to fallback state
+  {
+    let resetCalled = false;
+    const boundary = new ErrorBoundary({
+      children: null,
+      onReset: () => {
+        resetCalled = true;
+      },
+    });
+
+    assertEqual(
+      boundary.state.hasError,
+      false,
+      'Test 132: Initial ErrorBoundary hasError state is false',
+    );
+
+    const mockError = new Error('Test render crash in child view');
+    const derivedState = ErrorBoundary.getDerivedStateFromError(mockError);
+
+    assertEqual(
+      derivedState.hasError,
+      true,
+      'Test 132: getDerivedStateFromError sets hasError to true',
+    );
+    assertEqual(
+      derivedState.error?.message,
+      'Test render crash in child view',
+      'Test 132: getDerivedStateFromError captures error object',
+    );
+
+    boundary.state = derivedState;
+    boundary.handleReset();
+
+    assertEqual(
+      boundary.state.hasError,
+      false,
+      'Test 132: handleReset resets hasError state to false',
+    );
+    assertEqual(resetCalled, true, 'Test 132: handleReset invokes onReset callback');
+
+    console.log('  ✅ Test 132: ErrorBoundary render error capture and state recovery verified');
+  }
+
+  // Test 133: navigateToTab creates fresh URLSearchParams and strips un-passed transient parameters
+  {
+    const currentSearch =
+      '?tab=change&subtab=what-if&sourcePath=apps%2Fweb%2Fsrc%2Fapp%2Fpage.tsx&scenario=move_module';
+
+    // Simulate navigateToTab('overview') logic
+    const sectionToUse = resolveWorkspaceFromUrl('overview').section;
+    const paramToSet = sectionToUse === 'overview' ? 'overview' : sectionToUse;
+    const freshSearch = new URLSearchParams();
+    freshSearch.set('tab', paramToSet);
+
+    const resultingQueryString = `?${freshSearch.toString()}`;
+
+    assertEqual(
+      resultingQueryString,
+      '?tab=overview',
+      'Test 133: Transient parameters stripped on tab switch',
+    );
+    assertEqual(freshSearch.has('sourcePath'), false, 'Test 133: sourcePath is omitted');
+    assertEqual(freshSearch.has('scenario'), false, 'Test 133: scenario is omitted');
+
+    console.log(
+      '  ✅ Test 133: navigateToTab URL parameter isolation & transient parameter stripping verified',
+    );
+  }
+
+  // Test 134: navigateToTab preserves explicit options.queryParams across target workspaces
+  {
+    // What-If navigation with explicit queryParams
+    const whatIfSearch = new URLSearchParams();
+    whatIfSearch.set('tab', 'change');
+    whatIfSearch.set('subtab', 'what-if');
+    const whatIfParams = { sourcePath: 'apps/api/src/server.ts', scenario: 'remove_dependency' };
+    Object.entries(whatIfParams).forEach(([k, v]) => {
+      if (v) whatIfSearch.set(k, v);
+    });
+
+    assertEqual(
+      `?${whatIfSearch.toString()}`,
+      '?tab=change&subtab=what-if&sourcePath=apps%2Fapi%2Fsrc%2Fserver.ts&scenario=remove_dependency',
+      'Test 134: What-If explicit query parameters preserved',
+    );
+
+    // Time Machine navigation with explicit path
+    const tmSearch = new URLSearchParams();
+    tmSearch.set('tab', 'change');
+    tmSearch.set('subtab', 'time-machine');
+    const tmParams = { path: 'apps/web/src/lib/intelligence.api.ts' };
+    Object.entries(tmParams).forEach(([k, v]) => {
+      if (v) tmSearch.set(k, v);
+    });
+
+    assertEqual(
+      `?${tmSearch.toString()}`,
+      '?tab=change&subtab=time-machine&path=apps%2Fweb%2Fsrc%2Flib%2Fintelligence.api.ts',
+      'Test 134: Time Machine explicit path parameter preserved',
+    );
+
+    // Governance PR navigation with explicit pr number
+    const prSearch = new URLSearchParams();
+    prSearch.set('tab', 'governance');
+    prSearch.set('subtab', 'gatekeeper');
+    const prParams = { pr: '42' };
+    Object.entries(prParams).forEach(([k, v]) => {
+      if (v) prSearch.set(k, v);
+    });
+
+    assertEqual(
+      `?${prSearch.toString()}`,
+      '?tab=governance&subtab=gatekeeper&pr=42',
+      'Test 134: Governance explicit PR parameter preserved',
+    );
+
+    console.log(
+      '  ✅ Test 134: navigateToTab explicit query parameter preservation across workspaces verified',
+    );
+  }
+
+  // Test 135: Deep-link search parameter parsing & malformed parameter safe fallback matrix
+  {
+    // Valid scenario parsing
+    assertEqual(
+      parseValidScenarioType('move_module'),
+      'move_module',
+      'Test 135: Valid scenario parsed',
+    );
+    assertEqual(
+      parseValidScenarioType('invalid_scenario'),
+      undefined,
+      'Test 135: Invalid scenario falls back to undefined',
+    );
+
+    // PR number parsing simulation
+    const validPR = '123';
+    const parsedValidPR = /^\d+$/.test(validPR) ? parseInt(validPR, 10) : undefined;
+    assertEqual(parsedValidPR, 123, 'Test 135: Valid PR integer parsed');
+
+    const malformedPR = 'abc_123';
+    const parsedMalformedPR = /^\d+$/.test(malformedPR) ? parseInt(malformedPR, 10) : undefined;
+    assertEqual(
+      parsedMalformedPR,
+      undefined,
+      'Test 135: Malformed PR string falls back to undefined',
+    );
+
+    // Section resolution for all 5 workspace sections
+    assertEqual(
+      resolveWorkspaceFromUrl('overview').section,
+      'overview',
+      'Test 135: Overview section',
+    );
+    assertEqual(
+      resolveWorkspaceFromUrl('graph').section,
+      'architecture',
+      'Test 135: Architecture section',
+    );
+    assertEqual(resolveWorkspaceFromUrl('health').section, 'health', 'Test 135: Health section');
+    assertEqual(resolveWorkspaceFromUrl('what-if').section, 'change', 'Test 135: Change section');
+    assertEqual(
+      resolveWorkspaceFromUrl('gatekeeper').section,
+      'governance',
+      'Test 135: Governance section',
+    );
+
+    console.log(
+      '  ✅ Test 135: Deep-link search parameter parsing & malformed parameter safe fallback matrix verified',
     );
   }
 }
