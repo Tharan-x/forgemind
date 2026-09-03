@@ -977,6 +977,14 @@ export default function RepositoryDetailPage() {
               setFileSearch(path);
               setActiveTab('files');
             }}
+            onSimulateRefactor={(sourcePath, scenario) => {
+              navigateToTab('what-if', 'change', {
+                queryParams: {
+                  sourcePath,
+                  scenario,
+                },
+              });
+            }}
           />
         )}
 
@@ -992,7 +1000,7 @@ export default function RepositoryDetailPage() {
 
         {/* TAB: ARCHITECTURE TIME MACHINE */}
         {activeTab === 'time-machine' && (
-          <ArchitectureTimeMachineViewer repositoryId={repositoryId} />
+          <ArchitectureTimeMachineViewer repositoryId={repositoryId} initialPath={pathParam} />
         )}
 
         {/* TAB: PR GATEKEEPER */}
@@ -2179,12 +2187,37 @@ export default function RepositoryDetailPage() {
                             {impactResult.directDependents.map((dep) => (
                               <div
                                 key={dep.id}
-                                className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono text-emerald-300 flex items-center justify-between"
+                                className="bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono flex items-center justify-between gap-2"
                               >
-                                <span className="truncate max-w-[240px]">{dep.sourcePath}</span>
-                                <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
-                                  imports target
+                                <span className="truncate max-w-[200px] text-emerald-300">
+                                  {dep.sourcePath}
                                 </span>
+                                <div className="flex items-center gap-1 shrink-0 font-sans">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      navigateToTab('time-machine', 'change', {
+                                        queryParams: { path: dep.sourcePath },
+                                      })
+                                    }
+                                    className="px-2 py-0.5 text-[10px] font-semibold text-neutral-300 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded transition-colors"
+                                    title="View History in Time Machine"
+                                  >
+                                    ⏳ History
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      navigateToTab('what-if', 'change', {
+                                        queryParams: { sourcePath: dep.sourcePath },
+                                      })
+                                    }
+                                    className="px-2 py-0.5 text-[10px] font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded transition-colors"
+                                    title="Simulate Change in What-If Simulator"
+                                  >
+                                    🔮 Simulate
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>

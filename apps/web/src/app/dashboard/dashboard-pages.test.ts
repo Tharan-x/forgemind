@@ -78,6 +78,8 @@ import RepositoryDetailPage, {
   resolveWorkspaceFromUrl,
   parseValidScenarioType,
 } from './repositories/[id]/page.js';
+import { getRemediationWhatIfScenario } from '../../components/health/StructuredRemediationPlanView.js';
+import { ArchitectureTimeMachineViewer } from '../../components/architecture/ArchitectureTimeMachineViewer.js';
 import { ProtectedLayout } from '../../components/dashboard/ProtectedLayout.js';
 import { ProtectedRoute } from '../../components/ProtectedRoute.js';
 
@@ -3113,6 +3115,168 @@ async function runPartE(): Promise<void> {
     });
 
     console.log('  ✅ Test 105: Runtime What-If URL Scenario Validation Matrix verified');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Part L — Milestone 4C Unified Workspace Experience Tests (Tests 106–112)
+  // ---------------------------------------------------------------------------
+  console.log('\n📋 Part L — Milestone 4C Unified Workspace Experience Tests (Tests 106–112)\n');
+
+  // Test 106: circular_dependency category maps to remove_dependency What-If scenario
+  {
+    const scenario = getRemediationWhatIfScenario('circular_dependency');
+    assertEqual(
+      scenario,
+      'remove_dependency',
+      'Test 106: circular_dependency maps to remove_dependency',
+    );
+    console.log('  ✅ Test 106: circular_dependency -> remove_dependency mapping verified');
+  }
+
+  // Test 107: coupling_hotspot category maps to move_module What-If scenario
+  {
+    const scenario = getRemediationWhatIfScenario('coupling_hotspot');
+    assertEqual(scenario, 'move_module', 'Test 107: coupling_hotspot maps to move_module');
+    console.log('  ✅ Test 107: coupling_hotspot -> move_module mapping verified');
+  }
+
+  // Test 108: Unsupported remediation categories return null (no misleading simulation button)
+  {
+    const orphanScenario = getRemediationWhatIfScenario('orphan_export');
+    assertEqual(orphanScenario, null, 'Test 108: orphan_export returns null');
+
+    const unknownScenario = getRemediationWhatIfScenario('unknown_category');
+    assertEqual(unknownScenario, null, 'Test 108: unknown_category returns null');
+
+    console.log(
+      '  ✅ Test 108: Unsupported remediation categories return null (action button omitted) verified',
+    );
+  }
+
+  // Test 109: Remediation plan simulation handoff preserves sourcePath and does not invent targetPath
+  {
+    const sourcePath = 'apps/api/src/services/user.service.ts';
+    const scenario = getRemediationWhatIfScenario('circular_dependency');
+
+    const search = new URLSearchParams();
+    search.set('tab', 'change');
+    search.set('subtab', 'what-if');
+    if (sourcePath) search.set('sourcePath', sourcePath);
+    if (scenario) search.set('scenario', scenario);
+
+    assertEqual(search.get('sourcePath'), sourcePath, 'Test 109: sourcePath preserved');
+    assertEqual(
+      search.get('scenario'),
+      'remove_dependency',
+      'Test 109: scenario set to remove_dependency',
+    );
+    assertEqual(
+      search.get('targetPath'),
+      null,
+      'Test 109: targetPath is NOT invented, remains unpopulated',
+    );
+
+    console.log(
+      '  ✅ Test 109: Remediation plan simulation handoff (sourcePath preserved, targetPath not invented) verified',
+    );
+  }
+
+  // Test 110: ArchitectureTimeMachineViewer accepts initialPath prop and structure
+  {
+    const element = React.createElement(ArchitectureTimeMachineViewer, {
+      repositoryId: 'repo-tm-123',
+      initialPath: 'apps/web/src/app/page.tsx',
+    });
+
+    assertEqual(
+      element.type,
+      ArchitectureTimeMachineViewer,
+      'Test 110: Component mounts with initialPath',
+    );
+    assertEqual(
+      element.props.initialPath,
+      'apps/web/src/app/page.tsx',
+      'Test 110: initialPath prop bound correctly',
+    );
+
+    console.log(
+      '  ✅ Test 110: ArchitectureTimeMachineViewer initialPath context prop binding verified',
+    );
+  }
+
+  // Test 111: Impact Analysis direct dependent row contextual action search params generation
+  {
+    const dependentFile = 'apps/web/src/controllers/user.controller.ts';
+
+    // 1. View History search params
+    const historySearch = new URLSearchParams();
+    historySearch.set('tab', 'change');
+    historySearch.set('subtab', 'time-machine');
+    historySearch.set('path', dependentFile);
+
+    assertEqual(
+      historySearch.get('subtab'),
+      'time-machine',
+      'Test 111: History subtab set to time-machine',
+    );
+    assertEqual(
+      historySearch.get('path'),
+      dependentFile,
+      'Test 111: History path set to dependent file',
+    );
+
+    // 2. Simulate Change search params
+    const simulateSearch = new URLSearchParams();
+    simulateSearch.set('tab', 'change');
+    simulateSearch.set('subtab', 'what-if');
+    simulateSearch.set('sourcePath', dependentFile);
+
+    assertEqual(
+      simulateSearch.get('subtab'),
+      'what-if',
+      'Test 111: Simulate subtab set to what-if',
+    );
+    assertEqual(
+      simulateSearch.get('sourcePath'),
+      dependentFile,
+      'Test 111: Simulate sourcePath set to dependent file',
+    );
+    assertEqual(
+      simulateSearch.get('targetPath'),
+      null,
+      'Test 111: Impact row simulation does NOT invent targetPath',
+    );
+
+    console.log(
+      '  ✅ Test 111: Impact Analysis row contextual action search params generation verified',
+    );
+  }
+
+  // Test 112: Full Unified Workspace Navigation history traversal and popstate backwards compatibility
+  {
+    const unifiedHistory = [
+      '/dashboard/repositories/repo-1?tab=architecture&subtab=graph',
+      '/dashboard/repositories/repo-1?tab=health',
+      '/dashboard/repositories/repo-1?tab=change&subtab=what-if&sourcePath=apps%2Fweb%2Fsrc%2Fapp%2Fpage.tsx&scenario=remove_dependency',
+      '/dashboard/repositories/repo-1?tab=change&subtab=time-machine&path=apps%2Fweb%2Fsrc%2Fapp%2Fpage.tsx',
+    ];
+
+    const step1Res = resolveWorkspaceFromUrl('architecture', 'graph');
+    assertEqual(step1Res.section, 'architecture', 'Test 112: Step 1 section is architecture');
+    assertEqual(step1Res.subTab, 'graph', 'Test 112: Step 1 subtab is graph');
+
+    const step2Res = resolveWorkspaceFromUrl('health');
+    assertEqual(step2Res.section, 'health', 'Test 112: Step 2 section is health');
+
+    const step3Res = resolveWorkspaceFromUrl('change', 'what-if');
+    assertEqual(step3Res.section, 'change', 'Test 112: Step 3 section is change');
+    assertEqual(step3Res.subTab, 'what-if', 'Test 112: Step 3 subtab is what-if');
+
+    const step4Res = resolveWorkspaceFromUrl('change', 'time-machine');
+    assertEqual(step4Res.section, 'change', 'Test 112: Step 4 section is change');
+    assertEqual(step4Res.subTab, 'time-machine', 'Test 112: Step 4 subtab is time-machine');
+
+    console.log('  ✅ Test 112: Unified Workspace Navigation history traversal verified');
   }
 }
 

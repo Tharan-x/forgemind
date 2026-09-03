@@ -18,10 +18,12 @@ import {
 
 interface ArchitectureTimeMachineViewerProps {
   repositoryId: string;
+  initialPath?: string;
 }
 
 export function ArchitectureTimeMachineViewer({
   repositoryId,
+  initialPath,
 }: ArchitectureTimeMachineViewerProps) {
   const [timeline, setTimeline] = useState<ArchitectureTimeMachineSnapshotItem[]>([]);
   const [currentHealthScore, setCurrentHealthScore] = useState<number>(100);
@@ -138,6 +140,14 @@ export function ArchitectureTimeMachineViewer({
               Deterministic structural history, snapshot scrubbers, and evidence-grounded
               architectural consequences
             </p>
+            {initialPath && (
+              <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/15 border border-indigo-500/30 rounded-lg text-xs text-indigo-300 font-mono">
+                <span>📍</span>
+                <span>
+                  Viewing timeline in context of: <strong>{initialPath}</strong>
+                </span>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-neutral-800/80 text-[11px] font-mono text-neutral-400">

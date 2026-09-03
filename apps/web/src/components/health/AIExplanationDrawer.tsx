@@ -9,6 +9,7 @@ import type {
   ArchitectureHealthExplanationResponse,
   HealthFinding,
   StructuredRemediationPlan,
+  WhatIfScenarioType,
 } from '@forgemind/types';
 import { Button } from '@forgemind/ui';
 import {
@@ -26,6 +27,7 @@ interface AIExplanationDrawerProps {
   onHighlightOnGraph?: (finding: HealthFinding) => void;
   onInvestigateWithAI?: (finding: HealthFinding) => void;
   onSelectFile?: (filePath: string) => void;
+  onSimulateRefactor?: (sourcePath: string, scenario: WhatIfScenarioType) => void;
   initialTab?: 'summary' | 'remediation';
 }
 
@@ -37,6 +39,7 @@ export function AIExplanationDrawer({
   onHighlightOnGraph,
   onInvestigateWithAI,
   onSelectFile,
+  onSimulateRefactor,
   initialTab = 'summary',
 }: AIExplanationDrawerProps) {
   const [activeTab, setActiveTab] = useState<'summary' | 'remediation'>(initialTab);
@@ -245,6 +248,7 @@ export function AIExplanationDrawer({
                   onSelectFile={onSelectFile}
                   onHighlightOnGraph={onHighlightOnGraph}
                   onInvestigateWithAI={onInvestigateWithAI}
+                  onSimulateRefactor={onSimulateRefactor}
                 />
               )}
             </div>

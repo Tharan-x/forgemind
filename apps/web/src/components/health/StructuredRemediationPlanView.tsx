@@ -5,8 +5,22 @@
 // =============================================================================
 
 import React from 'react';
-import type { HealthFinding, StructuredRemediationPlan } from '@forgemind/types';
+import type {
+  HealthFinding,
+  StructuredRemediationPlan,
+  WhatIfScenarioType,
+} from '@forgemind/types';
 import { Button } from '@forgemind/ui';
+
+export function getRemediationWhatIfScenario(category: string): WhatIfScenarioType | null {
+  if (category === 'circular_dependency') {
+    return 'remove_dependency';
+  }
+  if (category === 'coupling_hotspot') {
+    return 'move_module';
+  }
+  return null;
+}
 
 interface StructuredRemediationPlanViewProps {
   plan: StructuredRemediationPlan;
@@ -14,6 +28,7 @@ interface StructuredRemediationPlanViewProps {
   onSelectFile?: (filePath: string) => void;
   onHighlightOnGraph?: (finding: HealthFinding) => void;
   onInvestigateWithAI?: (finding: HealthFinding) => void;
+  onSimulateRefactor?: (sourcePath: string, scenario: WhatIfScenarioType) => void;
   onClose?: () => void;
 }
 
@@ -23,8 +38,11 @@ export function StructuredRemediationPlanView({
   onSelectFile,
   onHighlightOnGraph,
   onInvestigateWithAI,
+  onSimulateRefactor,
   onClose,
 }: StructuredRemediationPlanViewProps) {
+  const supportedScenario = getRemediationWhatIfScenario(plan.category);
+  const sourcePath = plan.targetFile || finding?.affectedFilePaths[0] || '';
   const getSeverityBadgeClass = (severity: string) => {
     switch (severity.toLowerCase()) {
       case 'critical':
@@ -91,6 +109,16 @@ export function StructuredRemediationPlanView({
               className="border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40 text-xs font-semibold"
             >
               🤖 Ask AI Assistant
+            </Button>
+          )}
+          {supportedScenario && sourcePath && onSimulateRefactor && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSimulateRefactor(sourcePath, supportedScenario)}
+              className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/40 text-xs font-semibold"
+            >
+              🔮 Simulate Proposed Refactor
             </Button>
           )}
         </div>

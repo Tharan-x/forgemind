@@ -10,6 +10,7 @@ import type {
   HealthFinding,
   HealthFindingCategory,
   HealthFindingSeverity,
+  WhatIfScenarioType,
 } from '@forgemind/types';
 import { Button } from '@forgemind/ui';
 import { getArchitectureHealth } from '@/lib/intelligence.api';
@@ -23,6 +24,7 @@ interface ArchitecturalHealthDashboardProps {
   onNavigateToGraph?: (finding: HealthFinding) => void;
   onInvestigateWithAI?: (finding: HealthFinding) => void;
   onSelectFile?: (filePath: string) => void;
+  onSimulateRefactor?: (sourcePath: string, scenario: WhatIfScenarioType) => void;
 }
 
 export function ArchitecturalHealthDashboard({
@@ -30,6 +32,7 @@ export function ArchitecturalHealthDashboard({
   onNavigateToGraph,
   onInvestigateWithAI,
   onSelectFile,
+  onSimulateRefactor,
 }: ArchitecturalHealthDashboardProps) {
   const [report, setReport] = useState<ArchitectureHealthReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -409,6 +412,7 @@ export function ArchitecturalHealthDashboard({
         onHighlightOnGraph={onNavigateToGraph}
         onInvestigateWithAI={onInvestigateWithAI}
         onSelectFile={onSelectFile}
+        onSimulateRefactor={onSimulateRefactor}
         initialTab={drawerInitialTab}
       />
     </div>
