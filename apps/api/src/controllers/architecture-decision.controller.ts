@@ -7,6 +7,7 @@ import type { Response } from 'express';
 import type { AuthenticatedRequest } from '../auth/index.js';
 import {
   confirmArchitectureDecision,
+  createManualArchitectureDecision,
   findArchitectureDecisionById,
   findArchitectureDecisions,
   mineRepositoryHistoricalEvidence,
@@ -233,6 +234,62 @@ export async function synthesizeArchitectureDecisionHandler(
       error: {
         code: 'SYNTHESIS_FAILED',
         message: message || 'Failed to synthesize architecture decision.',
+      },
+    });
+  }
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions
+ * Manually creates an Architectural Decision Record (ADR) for a repository.
+ */
+export async function createManualArchitectureDecisionHandler(
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      sendUnauthorized(res);
+      return;
+    }
+
+    const repositoryId = (req.params['repositoryId'] as string) || '';
+    if (!repositoryId) {
+      sendBadRequest(res, 'Repository ID is required.');
+      return;
+    }
+
+    const { title, description, affectedPaths, prNumber } = req.body || {};
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      sendBadRequest(res, 'Title is required and must be a non-empty string.');
+      return;
+    }
+
+    if (!description || typeof description !== 'string' || !description.trim()) {
+      sendBadRequest(res, 'Description is required and must be a non-empty string.');
+      return;
+    }
+
+    const parsedPRNumber =
+      prNumber !== undefined && prNumber !== null ? parseInt(String(prNumber), 10) : undefined;
+
+    const decision = await createManualArchitectureDecision(repositoryId, user.id, {
+      title,
+      description,
+      affectedPaths: Array.isArray(affectedPaths) ? affectedPaths : undefined,
+      prNumber: Number.isNaN(parsedPRNumber) ? undefined : parsedPRNumber,
+    });
+
+    res.status(201).json({ success: true, decision });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : undefined;
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'CREATE_ADR_FAILED',
+        message: message || 'Failed to create manual architectural decision.',
       },
     });
   }

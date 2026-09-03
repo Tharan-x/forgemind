@@ -13,6 +13,8 @@ import type {
 } from '@forgemind/types';
 import { Button } from '@forgemind/ui';
 import {
+  confirmArchitectureDecision,
+  createManualArchitectureDecision,
   getArchitectureDecisions,
   getRepositoryGraphTopology,
   synthesizeArchitectureDecision,
@@ -65,7 +67,13 @@ export function DependencyGraphVisualizer({
   const [decisionsLoading, setDecisionsLoading] = useState<boolean>(false);
   const [decisionsError, setDecisionsError] = useState<string | null>(null);
   const [synthesizingId, setSynthesizingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [synthesisError, setSynthesisError] = useState<string | null>(null);
+  const [showRecordADRForm, setShowRecordADRForm] = useState<boolean>(false);
+  const [adrTitle, setAdrTitle] = useState<string>('');
+  const [adrDescription, setAdrDescription] = useState<string>('');
+  const [adrSubmitting, setAdrSubmitting] = useState<boolean>(false);
+  const [adrError, setAdrError] = useState<string | null>(null);
   const activeFetchIdRef = useRef<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -145,6 +153,45 @@ export function DependencyGraphVisualizer({
       setSynthesisError(err instanceof Error ? err.message : 'Failed to synthesize AI rationale.');
     } finally {
       setSynthesizingId(null);
+    }
+  };
+
+  const handleConfirmDecision = async (decisionId: string) => {
+    if (confirmingId) return;
+    setConfirmingId(decisionId);
+    setSynthesisError(null);
+
+    try {
+      const updated = await confirmArchitectureDecision(repositoryId, decisionId, true);
+      setDecisions((prev) => prev.map((d) => (d.id === decisionId ? updated : d)));
+    } catch (err) {
+      setSynthesisError(err instanceof Error ? err.message : 'Failed to confirm decision.');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  const handleCreateManualADR = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adrTitle.trim() || !adrDescription.trim()) return;
+
+    setAdrSubmitting(true);
+    setAdrError(null);
+    try {
+      const filePath = selectedNode?.path;
+      const newDecision = await createManualArchitectureDecision(repositoryId, {
+        title: adrTitle.trim(),
+        description: adrDescription.trim(),
+        affectedPaths: filePath ? [filePath] : [],
+      });
+      setDecisions((prev) => [newDecision, ...prev]);
+      setAdrTitle('');
+      setAdrDescription('');
+      setShowRecordADRForm(false);
+    } catch (err) {
+      setAdrError(err instanceof Error ? err.message : 'Failed to record ADR.');
+    } finally {
+      setAdrSubmitting(false);
     }
   };
 
@@ -618,9 +665,77 @@ export function DependencyGraphVisualizer({
 
                 {/* Historical Decision Memory Section */}
                 <div className="space-y-2 border-t border-zinc-800 pt-3">
-                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
-                    📜 Historical Decision Memory
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
+                      📜 Historical Decision Memory
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-[10px] h-5 px-1.5 border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40"
+                      onClick={() => setShowRecordADRForm((prev) => !prev)}
+                    >
+                      {showRecordADRForm ? 'Cancel' : '+ Record ADR'}
+                    </Button>
+                  </div>
+
+                  {showRecordADRForm && (
+                    <form
+                      onSubmit={handleCreateManualADR}
+                      className="rounded-lg border border-cyan-800/40 bg-zinc-950 p-2.5 space-y-2"
+                    >
+                      <p className="text-[11px] font-semibold text-cyan-300">
+                        Record Architectural Decision (ADR)
+                      </p>
+                      {selectedNode.path && (
+                        <p className="text-[10px] text-zinc-400 font-mono break-all">
+                          Path: {selectedNode.path}
+                        </p>
+                      )}
+                      {adrError && (
+                        <p className="text-[10px] text-rose-400 font-mono">{adrError}</p>
+                      )}
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="ADR Title (e.g. Separate Data Access Layer)"
+                          value={adrTitle}
+                          onChange={(e) => setAdrTitle(e.target.value)}
+                          className="w-full text-xs rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-200 focus:outline-none focus:border-cyan-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <textarea
+                          placeholder="Rationale & architectural consequences..."
+                          value={adrDescription}
+                          onChange={(e) => setAdrDescription(e.target.value)}
+                          rows={2}
+                          className="w-full text-xs rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-200 focus:outline-none focus:border-cyan-500"
+                          required
+                        />
+                      </div>
+                      <div className="flex justify-end gap-1.5 pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-[10px] h-6 px-2"
+                          onClick={() => setShowRecordADRForm(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="text-[10px] h-6 px-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold"
+                          disabled={adrSubmitting || !adrTitle.trim() || !adrDescription.trim()}
+                        >
+                          {adrSubmitting ? 'Saving...' : 'Record ADR'}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
 
                   {!selectedNode.path ? (
                     <p className="text-[11px] text-zinc-500 italic">
@@ -654,45 +769,72 @@ export function DependencyGraphVisualizer({
                                 ? new Date(decision.committedAt).toLocaleDateString()
                                 : 'Date N/A'}
                             </span>
-                            {decision.healthScoreDelta !== null && (
-                              <span
-                                className={`font-bold ${
-                                  decision.healthScoreDelta >= 0
-                                    ? 'text-emerald-400'
-                                    : 'text-rose-400'
-                                }`}
-                              >
-                                Health:{' '}
-                                {decision.healthScoreDelta >= 0
-                                  ? `+${decision.healthScoreDelta}`
-                                  : decision.healthScoreDelta}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {decision.isConfirmed ? (
+                                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                  ✓ Confirmed ADR
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-zinc-800 text-zinc-400">
+                                  Mined Evidence
+                                </span>
+                              )}
+                              {decision.healthScoreDelta !== null && (
+                                <span
+                                  className={`font-bold ${
+                                    decision.healthScoreDelta >= 0
+                                      ? 'text-emerald-400'
+                                      : 'text-rose-400'
+                                  }`}
+                                >
+                                  Health:{' '}
+                                  {decision.healthScoreDelta >= 0
+                                    ? `+${decision.healthScoreDelta}`
+                                    : decision.healthScoreDelta}
+                                </span>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-zinc-300">
-                            {decision.commitHash && (
-                              <a
-                                href={decision.commitUrl || '#'}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-cyan-400 hover:underline"
+                          <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] font-mono text-zinc-300">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {decision.commitHash && (
+                                <a
+                                  href={decision.commitUrl || '#'}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-cyan-400 hover:underline"
+                                >
+                                  Commit {decision.commitHash.substring(0, 7)}
+                                </a>
+                              )}
+                              {decision.prNumber && (
+                                <a
+                                  href={decision.prUrl || '#'}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-purple-400 hover:underline"
+                                >
+                                  #{decision.prNumber}
+                                </a>
+                              )}
+                              {decision.author && (
+                                <span className="text-zinc-400">by {decision.author}</span>
+                              )}
+                            </div>
+
+                            {!decision.isConfirmed && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-[10px] h-5 px-1.5 border-emerald-500/40 text-emerald-400 hover:bg-emerald-950/40"
+                                disabled={confirmingId === decision.id}
+                                onClick={() => handleConfirmDecision(decision.id)}
                               >
-                                Commit {decision.commitHash.substring(0, 7)}
-                              </a>
-                            )}
-                            {decision.prNumber && (
-                              <a
-                                href={decision.prUrl || '#'}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-purple-400 hover:underline"
-                              >
-                                #{decision.prNumber}
-                              </a>
-                            )}
-                            {decision.author && (
-                              <span className="text-zinc-400">by {decision.author}</span>
+                                {confirmingId === decision.id
+                                  ? 'Confirming...'
+                                  : '✓ Confirm Decision'}
+                              </Button>
                             )}
                           </div>
 

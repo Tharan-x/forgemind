@@ -11,7 +11,11 @@ import type {
   RemediationExplanationResponse,
 } from '@forgemind/types';
 import { Button } from '@forgemind/ui';
-import { getArchitecturalRiskIntelligence, explainRemediationAction } from '@/lib/intelligence.api';
+import {
+  getArchitecturalRiskIntelligence,
+  explainRemediationAction,
+  createManualArchitectureDecision,
+} from '@/lib/intelligence.api';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 interface ArchitecturalRiskActionLoopProps {
@@ -35,6 +39,39 @@ export function ArchitecturalRiskActionLoop({
   const [drawerLoading, setDrawerLoading] = useState<boolean>(false);
   const [explanation, setExplanation] = useState<RemediationExplanationResponse | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
+
+  // ADR Form State
+  const [adrTargetPlan, setAdrTargetPlan] = useState<RemediationActionPlan | null>(null);
+  const [adrTitle, setAdrTitle] = useState<string>('');
+  const [adrDescription, setAdrDescription] = useState<string>('');
+  const [adrSubmitting, setAdrSubmitting] = useState<boolean>(false);
+  const [adrError, setAdrError] = useState<string | null>(null);
+  const [adrSuccess, setAdrSuccess] = useState<string | null>(null);
+
+  const handleRecordRiskADR = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adrTargetPlan || !adrTitle.trim() || !adrDescription.trim()) return;
+
+    setAdrSubmitting(true);
+    setAdrError(null);
+    setAdrSuccess(null);
+
+    try {
+      await createManualArchitectureDecision(repositoryId, {
+        title: adrTitle.trim(),
+        description: adrDescription.trim(),
+        affectedPaths: adrTargetPlan.targetFile ? [adrTargetPlan.targetFile] : [],
+      });
+      setAdrSuccess(`ADR recorded successfully for ${adrTargetPlan.targetFile}!`);
+      setAdrTitle('');
+      setAdrDescription('');
+      setAdrTargetPlan(null);
+    } catch (err) {
+      setAdrError(err instanceof Error ? err.message : 'Failed to record ADR for risk finding.');
+    } finally {
+      setAdrSubmitting(false);
+    }
+  };
 
   const fetchRiskIntelligence = useCallback(async () => {
     setLoading(true);
@@ -259,14 +296,34 @@ export function ArchitecturalRiskActionLoop({
                       +{plan.estimatedHealthImprovement} pts
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => handleExplainAction(plan)}
-                      >
-                        AI Refactoring
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => handleExplainAction(plan)}
+                        >
+                          AI Refactoring
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/40"
+                          onClick={() => {
+                            setAdrTargetPlan(plan);
+                            setAdrTitle(
+                              `Remediate ${plan.refactoringPattern} in ${plan.targetFile}`,
+                            );
+                            setAdrDescription(
+                              `Architectural decision to remediate ${plan.refactoringPattern} for target file ${plan.targetFile}.`,
+                            );
+                            setAdrError(null);
+                            setAdrSuccess(null);
+                          }}
+                        >
+                          📜 Record ADR
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -274,6 +331,69 @@ export function ArchitecturalRiskActionLoop({
             </tbody>
           </table>
         </div>
+
+        {adrSuccess && (
+          <p className="text-xs text-emerald-400 font-medium bg-emerald-950/40 border border-emerald-800 p-2.5 rounded-lg">
+            {adrSuccess}
+          </p>
+        )}
+
+        {adrTargetPlan !== null && (
+          <div className="rounded-xl border border-cyan-800/60 bg-zinc-950 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-cyan-300">
+                Record Architectural Decision (ADR) — {adrTargetPlan.targetFile}
+              </h4>
+              <button
+                onClick={() => setAdrTargetPlan(null)}
+                className="text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            </div>
+            {adrError && <p className="text-xs text-rose-400 font-mono">{adrError}</p>}
+            <form onSubmit={handleRecordRiskADR} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={adrTitle}
+                  onChange={(e) => setAdrTitle(e.target.value)}
+                  className="w-full text-xs rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-cyan-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Description / Rationale
+                </label>
+                <textarea
+                  value={adrDescription}
+                  onChange={(e) => setAdrDescription(e.target.value)}
+                  rows={3}
+                  className="w-full text-xs rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-cyan-500"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAdrTargetPlan(null)}
+                  className="rounded px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={adrSubmitting || !adrTitle.trim() || !adrDescription.trim()}
+                  className="rounded bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-500 disabled:opacity-50"
+                >
+                  {adrSubmitting ? 'Saving...' : 'Record ADR'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* SECTION 4: AI REMEDIATION EXPLANATION DRAWER */}

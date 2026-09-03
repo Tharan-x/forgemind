@@ -9,6 +9,7 @@ import { PrismaClient } from '@prisma/client';
 import { encryptToken } from '../lib/encryption.js';
 import {
   confirmArchitectureDecision,
+  createManualArchitectureDecision,
   findArchitectureDecisionById,
   findArchitectureDecisions,
   mineRepositoryHistoricalEvidence,
@@ -552,6 +553,107 @@ async function runTests(): Promise<void> {
       'Secret key masked prior to synthesis',
     );
     console.log('  ✅ Test 12 PASS: Credentials & PAT secrets masked prior to synthesis.');
+
+    // -------------------------------------------------------------------------
+    // TEST 13: Milestone 5 — Manual ADR Creation
+    // -------------------------------------------------------------------------
+    console.log('Test 13: Manual ADR creation & server-derived field verification...');
+    const manualADR = await createManualArchitectureDecision(mockRepoId, mockUserId, {
+      title: 'Use PostgreSQL PgVector for Embeddings',
+      description:
+        'Adopted PgVector for 1536-dimensional vector search to maintain ACID transactions.',
+      affectedPaths: ['apps/api/src/services/vector-search.service.ts'],
+      prNumber: 88,
+    });
+
+    assertEqual(manualADR.repositoryId, mockRepoId, 'Repository ID matches target repo');
+    assertEqual(
+      manualADR.isConfirmed,
+      true,
+      'Manual ADR is automatically confirmed (isConfirmed=true)',
+    );
+    assertTrue(manualADR.commitHash.startsWith('adr-'), 'Synthetic commitHash starts with adr-');
+    assertEqual(
+      manualADR.commitMessage,
+      'Use PostgreSQL PgVector for Embeddings',
+      'Commit message matches title',
+    );
+    assertEqual(
+      manualADR.prTitle,
+      'Use PostgreSQL PgVector for Embeddings',
+      'PR title matches title',
+    );
+    assertEqual(
+      manualADR.prBody,
+      'Adopted PgVector for 1536-dimensional vector search to maintain ACID transactions.',
+      'PR body matches description',
+    );
+    assertEqual(manualADR.prNumber, 88, 'PR number matches input prNumber');
+    assertEqual(manualADR.affectedPaths.length, 1, 'Affected paths array length preserved');
+    assertEqual(
+      manualADR.affectedPaths[0],
+      'apps/api/src/services/vector-search.service.ts',
+      'Exact affected path preserved',
+    );
+    assertEqual(
+      manualADR.evidenceMetadata?.['source'],
+      'manual_adr',
+      'Evidence metadata source tagged as manual_adr',
+    );
+    assertEqual(
+      manualADR.synthesis?.architecturalIntent,
+      'Use PostgreSQL PgVector for Embeddings',
+      'Synthesis intent matches title',
+    );
+    assertEqual(
+      manualADR.synthesis?.evidenceConfidence,
+      'HIGH',
+      'Synthesis confidence set to HIGH for manual ADR',
+    );
+    console.log('  ✅ Test 13 PASS: Manual ADR creation & server-derived fields verified.');
+
+    // -------------------------------------------------------------------------
+    // TEST 14: Milestone 5 — Validation Rules for Manual ADR Input
+    // -------------------------------------------------------------------------
+    console.log('Test 14: Validation rules for empty title/description...');
+    let emptyTitleCaught = false;
+    try {
+      await createManualArchitectureDecision(mockRepoId, mockUserId, {
+        title: '   ',
+        description: 'Valid description',
+      });
+    } catch {
+      emptyTitleCaught = true;
+    }
+    assertTrue(emptyTitleCaught, 'Rejects empty or whitespace title');
+
+    let emptyDescCaught = false;
+    try {
+      await createManualArchitectureDecision(mockRepoId, mockUserId, {
+        title: 'Valid title',
+        description: '',
+      });
+    } catch {
+      emptyDescCaught = true;
+    }
+    assertTrue(emptyDescCaught, 'Rejects empty or missing description');
+    console.log('  ✅ Test 14 PASS: Validation rules for manual ADR input verified.');
+
+    // -------------------------------------------------------------------------
+    // TEST 15: Milestone 5 — Unauthorized Repository Access Rejection
+    // -------------------------------------------------------------------------
+    console.log('Test 15: Unauthorized user manual ADR creation rejection...');
+    let unauthorizedCaught = false;
+    try {
+      await createManualArchitectureDecision(mockRepoId, nonOwnerUserId, {
+        title: 'Unauthorized ADR',
+        description: 'Should be rejected',
+      });
+    } catch {
+      unauthorizedCaught = true;
+    }
+    assertTrue(unauthorizedCaught, 'Rejects manual ADR creation for unauthorized non-owner user');
+    console.log('  ✅ Test 15 PASS: Unauthorized repository access rejected cleanly.');
 
     console.log('\n🎉 ALL ARCHITECTURE DECISION SERVICE TESTS PASSED SUCCESSFULLY!\n');
   } finally {

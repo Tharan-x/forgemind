@@ -441,6 +441,87 @@ export async function confirmArchitectureDecision(
   return mapDbDecisionToDomain(updated);
 }
 
+export interface CreateManualADRData {
+  title: string;
+  description: string;
+  affectedPaths?: string[];
+  prNumber?: number;
+}
+
+/**
+ * Creates a manually authored Architectural Decision Record (ADR) for a repository.
+ */
+export async function createManualArchitectureDecision(
+  repositoryId: string,
+  userId: string,
+  data: CreateManualADRData,
+): Promise<ArchitectureDecision> {
+  const { title, description, affectedPaths, prNumber } = data;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    throw new Error('ADR title is required and must be a non-empty string.');
+  }
+
+  if (!description || typeof description !== 'string' || !description.trim()) {
+    throw new Error('ADR description is required and must be a non-empty string.');
+  }
+
+  if (affectedPaths !== undefined && !Array.isArray(affectedPaths)) {
+    throw new Error('affectedPaths, when provided, must be an array of strings.');
+  }
+
+  if (
+    prNumber !== undefined &&
+    (typeof prNumber !== 'number' || !Number.isInteger(prNumber) || prNumber <= 0)
+  ) {
+    throw new Error('prNumber, when provided, must be a positive integer.');
+  }
+
+  await assertRepositoryOwnership(repositoryId, userId);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const authorName = user?.email || user?.name || 'Engineering Lead';
+
+  const cleanTitle = title.trim();
+  const cleanDescription = description.trim();
+  const normalizedPaths = (affectedPaths || [])
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean);
+
+  const syntheticCommitHash = `adr-${crypto.randomUUID()}`;
+
+  const synthesisResult: ArchitectureDecisionSynthesis = {
+    architecturalIntent: cleanTitle,
+    rationale: cleanDescription,
+    architecturalImpact:
+      normalizedPaths.length > 0
+        ? `Affects ${normalizedPaths.length} file path(s).`
+        : 'General repository architectural decision.',
+    evidenceConfidence: 'HIGH',
+    supportedSources: ['Manual Architectural Decision Record (ADR)'],
+    modelUsed: 'Human-Authored ADR',
+    synthesizedAt: new Date().toISOString(),
+  };
+
+  const created = await prisma.architectureDecision.create({
+    data: {
+      repositoryId,
+      commitHash: syntheticCommitHash,
+      commitMessage: cleanTitle,
+      prTitle: cleanTitle,
+      prBody: cleanDescription,
+      author: authorName,
+      prNumber: prNumber || null,
+      affectedPaths: normalizedPaths,
+      isConfirmed: true,
+      evidenceMetadata: { source: 'manual_adr' } as unknown as Prisma.InputJsonValue,
+      synthesis: synthesisResult as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  return mapDbDecisionToDomain(created);
+}
+
 /**
  * Generates or regenerates evidence-grounded AI synthesis for a single decision record.
  */

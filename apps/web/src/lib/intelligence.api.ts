@@ -441,3 +441,48 @@ export async function synthesizeArchitectureDecision(
 
   return res.decision;
 }
+
+/**
+ * PATCH /api/v1/repositories/:repositoryId/decisions/:decisionId/confirm
+ */
+export async function confirmArchitectureDecision(
+  repositoryId: string,
+  decisionId: string,
+  isConfirmed = true,
+): Promise<ArchitectureDecision> {
+  const res = await request<{
+    success: boolean;
+    decision: ArchitectureDecision;
+  }>(
+    `/repositories/${encodeURIComponent(repositoryId)}/decisions/${encodeURIComponent(decisionId)}/confirm`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ isConfirmed }),
+    },
+  );
+
+  return res.decision;
+}
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions
+ */
+export async function createManualArchitectureDecision(
+  repositoryId: string,
+  data: {
+    title: string;
+    description: string;
+    affectedPaths?: string[];
+    prNumber?: number;
+  },
+): Promise<ArchitectureDecision> {
+  const res = await request<{
+    success: boolean;
+    decision: ArchitectureDecision;
+  }>(`/repositories/${encodeURIComponent(repositoryId)}/decisions`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+  return res.decision;
+}

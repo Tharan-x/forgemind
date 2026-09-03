@@ -60,6 +60,7 @@ import {
   getArchitectureDecisionsHandler,
   getArchitectureDecisionByIdHandler,
   confirmArchitectureDecisionHandler,
+  createManualArchitectureDecisionHandler,
   synthesizeArchitectureDecisionHandler,
 } from '../controllers/index.js';
 
@@ -475,6 +476,12 @@ router.post(
  * Retrieves paginated ArchitectureDecision evidence records for a repository.
  */
 router.get('/:repositoryId/decisions', requireAuth, getArchitectureDecisionsHandler);
+
+/**
+ * POST /api/v1/repositories/:repositoryId/decisions
+ * Manually creates an Architectural Decision Record (ADR) for a repository.
+ */
+router.post('/:repositoryId/decisions', requireAuth, createManualArchitectureDecisionHandler);
 
 /**
  * GET /api/v1/repositories/:repositoryId/decisions/:decisionId

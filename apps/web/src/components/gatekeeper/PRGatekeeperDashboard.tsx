@@ -20,6 +20,7 @@ import {
   getPRArchitectureImpact,
   getPRArchitectureDrift,
 } from '../../lib/gatekeeper.api';
+import { createManualArchitectureDecision } from '../../lib/intelligence.api';
 import { AIExplanationDrawer } from '../health/AIExplanationDrawer';
 import { ArchitectureImpactCard } from './ArchitectureImpactCard';
 import { ArchitectureDriftCard } from './ArchitectureDriftCard';
@@ -65,6 +66,39 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({
   const [isLoadingPRs, setIsLoadingPRs] = useState(true);
   const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // ADR Modal State for PR
+  const [adrModalPRNumber, setAdrModalPRNumber] = useState<number | null>(null);
+  const [adrTitle, setAdrTitle] = useState<string>('');
+  const [adrDescription, setAdrDescription] = useState<string>('');
+  const [adrSubmitting, setAdrSubmitting] = useState<boolean>(false);
+  const [adrError, setAdrError] = useState<string | null>(null);
+  const [adrSuccess, setAdrSuccess] = useState<string | null>(null);
+
+  const handleRecordPRADR = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adrModalPRNumber || !adrTitle.trim() || !adrDescription.trim()) return;
+
+    setAdrSubmitting(true);
+    setAdrError(null);
+    setAdrSuccess(null);
+
+    try {
+      await createManualArchitectureDecision(repositoryId, {
+        title: adrTitle.trim(),
+        description: adrDescription.trim(),
+        prNumber: adrModalPRNumber,
+      });
+      setAdrSuccess(`ADR recorded successfully for PR #${adrModalPRNumber}!`);
+      setAdrTitle('');
+      setAdrDescription('');
+      setAdrModalPRNumber(null);
+    } catch (err) {
+      setAdrError(err instanceof Error ? err.message : 'Failed to record ADR for PR.');
+    } finally {
+      setAdrSubmitting(false);
+    }
+  };
 
   // AI Explanation Drawer State Bridge
   const [activeAIExplanationFinding, setActiveAIExplanationFinding] = useState<{
@@ -404,16 +438,31 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({
                           </td>
                           <td className="py-2.5 px-3 text-right font-sans">
                             {pr.prNumber && (
-                              <button
-                                onClick={() => handleSelectPR(pr.prNumber as number)}
-                                className={`rounded px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                                  isSelected
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                                }`}
-                              >
-                                {isSelected ? 'Close Diff' : 'View Comparison'}
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleSelectPR(pr.prNumber as number)}
+                                  className={`rounded px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                    isSelected
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                  }`}
+                                >
+                                  {isSelected ? 'Close Diff' : 'View Comparison'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setAdrModalPRNumber(pr.prNumber as number);
+                                    setAdrTitle(`PR #${pr.prNumber} Architectural Decision`);
+                                    setAdrDescription('');
+                                    setAdrError(null);
+                                    setAdrSuccess(null);
+                                  }}
+                                  className="rounded px-2 py-1 text-[11px] font-semibold text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/30 transition-colors"
+                                  title="Record Architectural Decision for PR"
+                                >
+                                  📜 Record ADR
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -421,6 +470,69 @@ export const PRGatekeeperDashboard: React.FC<PRGatekeeperDashboardProps> = ({
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {adrSuccess && (
+              <p className="text-xs text-emerald-400 font-medium bg-emerald-950/40 border border-emerald-800 p-2.5 rounded-lg">
+                {adrSuccess}
+              </p>
+            )}
+
+            {adrModalPRNumber !== null && (
+              <div className="rounded-xl border border-cyan-800/60 bg-zinc-950 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-cyan-300">
+                    Record Architectural Decision (ADR) for PR #{adrModalPRNumber}
+                  </h4>
+                  <button
+                    onClick={() => setAdrModalPRNumber(null)}
+                    className="text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {adrError && <p className="text-xs text-rose-400 font-mono">{adrError}</p>}
+                <form onSubmit={handleRecordPRADR} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={adrTitle}
+                      onChange={(e) => setAdrTitle(e.target.value)}
+                      className="w-full text-xs rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-cyan-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-300 mb-1">
+                      Description / Rationale
+                    </label>
+                    <textarea
+                      value={adrDescription}
+                      onChange={(e) => setAdrDescription(e.target.value)}
+                      rows={3}
+                      className="w-full text-xs rounded border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-zinc-200 focus:outline-none focus:border-cyan-500"
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setAdrModalPRNumber(null)}
+                      className="rounded px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={adrSubmitting || !adrTitle.trim() || !adrDescription.trim()}
+                      className="rounded bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-500 disabled:opacity-50"
+                    >
+                      {adrSubmitting ? 'Saving...' : 'Record ADR'}
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
 
