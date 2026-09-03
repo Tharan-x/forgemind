@@ -3640,16 +3640,31 @@ async function runPartE(): Promise<void> {
   {
     let resetCalled = false;
     const boundary = new ErrorBoundary({
-      children: null,
+      children: 'Normal child content',
       onReset: () => {
         resetCalled = true;
       },
     });
 
+    // Provide test-instance setState handler for lightweight unmounted component testing
+    boundary.setState = function (stateUpdate: any, callback?: () => void) {
+      if (typeof stateUpdate === 'function') {
+        this.state = { ...this.state, ...stateUpdate(this.state, this.props) };
+      } else if (stateUpdate && typeof stateUpdate === 'object') {
+        this.state = { ...this.state, ...stateUpdate };
+      }
+      if (callback) callback();
+    };
+
     assertEqual(
       boundary.state.hasError,
       false,
       'Test 132: Initial ErrorBoundary hasError state is false',
+    );
+    assertEqual(
+      boundary.render(),
+      'Normal child content',
+      'Test 132: ErrorBoundary renders children when hasError is false',
     );
 
     const mockError = new Error('Test render crash in child view');
@@ -3667,6 +3682,15 @@ async function runPartE(): Promise<void> {
     );
 
     boundary.state = derivedState;
+
+    // Verify error fallback rendering when in error state
+    const fallbackRender = boundary.render();
+    assert(
+      fallbackRender !== null && typeof fallbackRender === 'object',
+      'Test 132: ErrorBoundary renders fallback UI element when hasError is true',
+    );
+
+    // Invoke recovery reset handler
     boundary.handleReset();
 
     assertEqual(
@@ -3675,6 +3699,11 @@ async function runPartE(): Promise<void> {
       'Test 132: handleReset resets hasError state to false',
     );
     assertEqual(resetCalled, true, 'Test 132: handleReset invokes onReset callback');
+    assertEqual(
+      boundary.render(),
+      'Normal child content',
+      'Test 132: ErrorBoundary recovers children rendering post-reset',
+    );
 
     console.log('  ✅ Test 132: ErrorBoundary render error capture and state recovery verified');
   }

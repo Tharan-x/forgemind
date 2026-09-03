@@ -30,11 +30,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   public handleReset = (): void => {
-    try {
-      this.setState({ hasError: false, error: null });
-    } catch {
-      // Safe fallback when unmounted in test harnesses
-    }
+    this.setState({ hasError: false, error: null });
     if (this.props.onReset) {
       this.props.onReset();
     }
