@@ -15,7 +15,7 @@
 
 import crypto from 'node:crypto';
 
-import { verifyWebhookSignature } from './webhook-security.service.js';
+import { isWebhookSecretConfigured, verifyWebhookSignature } from './webhook-security.service.js';
 
 // ─── Test Utilities ───────────────────────────────────────────────────────────
 
@@ -266,6 +266,88 @@ export async function runWebhookSecurityTests(): Promise<void> {
     });
     assertEqual(result, true, 'Test 15: Large payload with valid signature accepted');
     console.log('  ✅ Test 15 PASS: Large PR payload with valid signature accepted');
+  }
+
+  // ── Test 16: Production mode without GITHUB_WEBHOOK_SECRET rejected ─────────
+  {
+    const body = Buffer.from('{"action":"opened"}');
+    const sig = makeSignature(body);
+    let result = true;
+    const origEnv = process.env['NODE_ENV'];
+    const origSecret = process.env['GITHUB_WEBHOOK_SECRET'];
+    try {
+      process.env['NODE_ENV'] = 'production';
+      delete process.env['GITHUB_WEBHOOK_SECRET'];
+      result = verifyWebhookSignature(body, sig);
+    } finally {
+      process.env['NODE_ENV'] = origEnv;
+      if (origSecret === undefined) delete process.env['GITHUB_WEBHOOK_SECRET'];
+      else process.env['GITHUB_WEBHOOK_SECRET'] = origSecret;
+    }
+    assertEqual(result, false, 'Test 16: Production mode missing secret is rejected');
+    console.log('  ✅ Test 16 PASS: Production mode without GITHUB_WEBHOOK_SECRET rejected');
+  }
+
+  // ── Test 17: Production mode with valid GITHUB_WEBHOOK_SECRET accepts valid signature
+  {
+    const body = Buffer.from('{"action":"opened"}');
+    const sig = makeSignature(body, TEST_SECRET);
+    let result = false;
+    const origEnv = process.env['NODE_ENV'];
+    const origSecret = process.env['GITHUB_WEBHOOK_SECRET'];
+    try {
+      process.env['NODE_ENV'] = 'production';
+      process.env['GITHUB_WEBHOOK_SECRET'] = TEST_SECRET;
+      result = verifyWebhookSignature(body, sig);
+    } finally {
+      process.env['NODE_ENV'] = origEnv;
+      if (origSecret === undefined) delete process.env['GITHUB_WEBHOOK_SECRET'];
+      else process.env['GITHUB_WEBHOOK_SECRET'] = origSecret;
+    }
+    assertEqual(result, true, 'Test 17: Production mode with secret accepts valid signature');
+    console.log('  ✅ Test 17 PASS: Production mode with secret accepts valid signature');
+  }
+
+  // ── Test 18: Production mode with valid secret rejects invalid signature ─────
+  {
+    const body = Buffer.from('{"action":"opened"}');
+    let result = true;
+    const origEnv = process.env['NODE_ENV'];
+    const origSecret = process.env['GITHUB_WEBHOOK_SECRET'];
+    try {
+      process.env['NODE_ENV'] = 'production';
+      process.env['GITHUB_WEBHOOK_SECRET'] = TEST_SECRET;
+      result = verifyWebhookSignature(body, 'sha256=invalid_signature_hex_code_123456');
+    } finally {
+      process.env['NODE_ENV'] = origEnv;
+      if (origSecret === undefined) delete process.env['GITHUB_WEBHOOK_SECRET'];
+      else process.env['GITHUB_WEBHOOK_SECRET'] = origSecret;
+    }
+    assertEqual(result, false, 'Test 18: Production mode rejects invalid signature');
+    console.log('  ✅ Test 18 PASS: Production mode rejects invalid signature');
+  }
+
+  // ── Test 19: isWebhookSecretConfigured helper ──────────────────────────────
+  {
+    let configuredWhenSet = false;
+    let configuredWhenUnset = true;
+    withSecret(TEST_SECRET, () => {
+      configuredWhenSet = isWebhookSecretConfigured();
+    });
+    withSecret(undefined, () => {
+      configuredWhenUnset = isWebhookSecretConfigured();
+    });
+    assertEqual(
+      configuredWhenSet,
+      true,
+      'Test 19: isWebhookSecretConfigured returns true when set',
+    );
+    assertEqual(
+      configuredWhenUnset,
+      false,
+      'Test 19: isWebhookSecretConfigured returns false when unset',
+    );
+    console.log('  ✅ Test 19 PASS: isWebhookSecretConfigured helper verified');
   }
 
   console.log('\n🎉 ALL WEBHOOK SECURITY TESTS PASSED SUCCESSFULLY!\n');

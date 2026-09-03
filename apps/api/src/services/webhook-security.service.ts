@@ -27,10 +27,16 @@ export function verifyWebhookSignature(
   signatureHeader: string | undefined,
 ): boolean {
   const secret = process.env['GITHUB_WEBHOOK_SECRET'];
+  const isProduction = process.env['NODE_ENV'] === 'production';
 
   if (!secret) {
-    // In test environments, allow bypassing if secret is empty and no signature provided.
-    // In production, this will correctly reject all requests.
+    if (isProduction) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[Webhook Security] Production error: GITHUB_WEBHOOK_SECRET environment variable is not configured.',
+      );
+    }
+    // In missing secret cases (production or dev), webhook verification fails safely.
     return false;
   }
 
@@ -55,4 +61,12 @@ export function verifyWebhookSignature(
     // No exception is propagated; information about expected vs actual is not exposed.
     return false;
   }
+}
+
+/**
+ * Checks whether GITHUB_WEBHOOK_SECRET is configured.
+ */
+export function isWebhookSecretConfigured(): boolean {
+  const secret = process.env['GITHUB_WEBHOOK_SECRET'];
+  return Boolean(secret && secret.trim().length > 0);
 }
