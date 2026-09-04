@@ -2848,6 +2848,24 @@ async function runPartM() {
     console.log('  ✅ Test 101: GET /decisions returned paginated decision evidence records');
   }
 
+  // Test 101b: GET decisions with path query parameter (Release Blocker regression test)
+  {
+    const res = await apiRequest(
+      'GET',
+      `/api/v1/repositories/${testRepoId}/decisions?path=src/controllers`,
+      {
+        token: TOKEN_USER_1,
+      },
+    );
+    const body = res.body as any;
+    assertEqual(res.status, 200, 'Test 101b: Status 200 (not 500) for decisions path query');
+    assertDefined(body.items, 'Test 101b: Items list returned for path query');
+    assertEqual(body.success, true, 'Test 101b: Response payload success is true');
+    console.log(
+      '  ✅ Test 101b: GET /decisions?path=src/controllers returned HTTP 200 without error',
+    );
+  }
+
   // Test 102: GET single decision by ID
   {
     const res = await apiRequest(

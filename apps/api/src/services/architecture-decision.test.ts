@@ -655,6 +655,104 @@ async function runTests(): Promise<void> {
     assertTrue(unauthorizedCaught, 'Rejects manual ADR creation for unauthorized non-owner user');
     console.log('  ✅ Test 15 PASS: Unauthorized repository access rejected cleanly.');
 
+    // -------------------------------------------------------------------------
+    // TEST 16: Release Blocker — Provider-Agnostic Path Filtering & Post-Filter Pagination
+    // -------------------------------------------------------------------------
+    console.log('Test 16: Provider-agnostic path filtering & post-filter pagination...');
+
+    // Seed test decisions with various affectedPaths
+    await createManualArchitectureDecision(mockRepoId, mockUserId, {
+      title: 'Controller Layer Refactoring',
+      description: 'Refactored controller handlers for repository API.',
+      affectedPaths: ['src/controllers/repository.controller.ts'],
+    });
+
+    await createManualArchitectureDecision(mockRepoId, mockUserId, {
+      title: 'Controller Authentication Middleware',
+      description: 'Added authentication check in controller tier.',
+      affectedPaths: ['src/controllers/auth.controller.ts'],
+    });
+
+    await createManualArchitectureDecision(mockRepoId, mockUserId, {
+      title: 'Database Service Index Optimization',
+      description: 'Optimized service query indexes.',
+      affectedPaths: ['src/services/db.service.ts'],
+    });
+
+    await createManualArchitectureDecision(mockRepoId, mockUserId, {
+      title: 'Empty Affected Paths Decision',
+      description: 'General decision without affected paths.',
+      affectedPaths: [],
+    });
+
+    // 1. Directory containment matching
+    const controllerDecisions = await findArchitectureDecisions(mockRepoId, mockUserId, {
+      path: 'src/controllers',
+    });
+    assertTrue(
+      controllerDecisions.items.length >= 2,
+      'Matches files under src/controllers directory',
+    );
+    assertTrue(
+      controllerDecisions.items.every((d) =>
+        d.affectedPaths.some((p) => p.startsWith('src/controllers')),
+      ),
+      'All matched items belong to src/controllers',
+    );
+
+    // 2. Non-matching path exclusion & empty affectedPaths exclusion
+    const serviceDecisions = await findArchitectureDecisions(mockRepoId, mockUserId, {
+      path: 'src/services',
+    });
+    assertTrue(
+      serviceDecisions.items.some((d) => d.affectedPaths.includes('src/services/db.service.ts')),
+      'Matches src/services decision',
+    );
+    assertTrue(
+      !serviceDecisions.items.some((d) =>
+        d.affectedPaths.some((p) => p.startsWith('src/controllers')),
+      ),
+      'Excludes src/controllers decisions when searching src/services',
+    );
+    assertTrue(
+      !serviceDecisions.items.some((d) => d.affectedPaths.length === 0),
+      'Excludes empty affectedPaths decision when path filter is provided',
+    );
+
+    // 3. Post-filter pagination
+    const paginatedControllers = await findArchitectureDecisions(mockRepoId, mockUserId, {
+      path: 'src/controllers',
+      limit: 1,
+      page: 1,
+    });
+    assertEqual(paginatedControllers.limit, 1, 'Limit is preserved');
+    assertEqual(paginatedControllers.items.length, 1, 'Returns 1 item per page after filtering');
+    assertTrue(
+      paginatedControllers.total >= 2,
+      'Total represents full filtered count before slicing',
+    );
+    assertEqual(
+      paginatedControllers.totalPages,
+      Math.ceil(paginatedControllers.total / 1),
+      'Total pages calculated correctly based on filtered total',
+    );
+
+    // 4. Omitting path option preserves full listing behavior
+    const allDecisions = await findArchitectureDecisions(mockRepoId, mockUserId);
+    assertTrue(allDecisions.total >= 6, 'Omitting path filter returns all repository decisions');
+
+    // 5. Combining prNumber and path filter
+    const prAndPathDecisions = await findArchitectureDecisions(mockRepoId, mockUserId, {
+      path: 'src/controllers',
+      prNumber: 88,
+    });
+    assertTrue(
+      prAndPathDecisions.items.every((d) => d.prNumber === 88),
+      'Preserves prNumber filter alongside path filter',
+    );
+
+    console.log('  ✅ Test 16 PASS: Provider-agnostic path filtering & pagination verified.');
+
     console.log('\n🎉 ALL ARCHITECTURE DECISION SERVICE TESTS PASSED SUCCESSFULLY!\n');
   } finally {
     global.fetch = origFetch;

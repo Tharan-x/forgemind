@@ -334,6 +334,16 @@ export async function mineRepositoryHistoricalEvidence(
   };
 }
 
+function matchesPath(affectedPath: string, targetPath: string): boolean {
+  const normP = affectedPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normTarget = targetPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!normTarget || !normP) return false;
+
+  return (
+    normP === normTarget || normP.startsWith(normTarget + '/') || normTarget.startsWith(normP + '/')
+  );
+}
+
 /**
  * Retrieves paginated ArchitectureDecision records for a repository.
  */
@@ -356,30 +366,48 @@ export async function findArchitectureDecisions(
 
   const whereClause: Prisma.ArchitectureDecisionWhereInput = { repositoryId };
 
-  if (options.path) {
-    whereClause.affectedPaths = { has: options.path };
-  }
-
   if (options.prNumber) {
     whereClause.prNumber = options.prNumber;
   }
 
-  const [records, total] = await Promise.all([
-    prisma.architectureDecision.findMany({
+  const targetPath = options.path?.trim();
+
+  let records: ArchitectureDecision[];
+  let total: number;
+
+  if (targetPath) {
+    const rawRecords = await prisma.architectureDecision.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.architectureDecision.count({ where: whereClause }),
-  ]);
+    });
 
-  const items: ArchitectureDecision[] = records.map(mapDbDecisionToDomain);
+    const domainDecisions = rawRecords.map(mapDbDecisionToDomain);
+    const filteredDecisions = domainDecisions.filter((d) => {
+      const paths = Array.isArray(d.affectedPaths) ? d.affectedPaths : [];
+      return paths.some((p) => matchesPath(p, targetPath));
+    });
+
+    total = filteredDecisions.length;
+    records = filteredDecisions.slice(skip, skip + limit);
+  } else {
+    const [dbRecords, dbTotal] = await Promise.all([
+      prisma.architectureDecision.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.architectureDecision.count({ where: whereClause }),
+    ]);
+
+    records = dbRecords.map(mapDbDecisionToDomain);
+    total = dbTotal;
+  }
 
   const totalPages = Math.ceil(total / limit) || 1;
 
   return {
-    items,
+    items: records,
     total,
     page,
     limit,
