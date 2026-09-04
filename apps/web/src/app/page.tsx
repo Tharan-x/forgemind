@@ -39,22 +39,14 @@ export default function Home() {
       {/* Auth Actions CTA */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl">
         <h2 className="text-xl font-bold text-white">
-          {isLoading
-            ? 'Verifying Session...'
-            : user
-              ? isDeviceTrusted
-                ? 'Welcome Back!'
-                : 'Session Verification Required'
-              : 'Get Started'}
+          {isLoading ? 'Verifying Session...' : user ? 'Welcome Back!' : 'Get Started'}
         </h2>
 
         <p className="text-xs text-zinc-400 leading-relaxed">
           {isLoading
             ? 'Checking authentication and device trust state...'
             : user
-              ? isDeviceTrusted
-                ? 'Access your authenticated dashboard, repository management, and account settings.'
-                : 'Verify your identity to continue. This device is not currently registered as trusted.'
+              ? 'Access your authenticated dashboard, repository management, and account settings.'
               : 'Sign in or create an account to access protected workspace intelligence and project management.'}
         </p>
 
@@ -73,23 +65,13 @@ export default function Home() {
               )}
             </div>
 
-            {isDeviceTrusted ? (
-              <Button
-                variant="default"
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold h-11 text-sm transition-colors"
-                asChild
-              >
-                <Link href="/dashboard">Go to Dashboard →</Link>
-              </Button>
-            ) : (
-              <Button
-                variant="default"
-                className="w-full bg-amber-500 hover:bg-amber-600 text-zinc-950 font-semibold h-11 text-sm transition-colors"
-                asChild
-              >
-                <Link href="/login">Verify your identity to continue →</Link>
-              </Button>
-            )}
+            <Button
+              variant="default"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-semibold h-11 text-sm transition-colors"
+              asChild
+            >
+              <Link href="/dashboard">Go to Dashboard →</Link>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">

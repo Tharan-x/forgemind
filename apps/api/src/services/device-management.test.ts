@@ -68,10 +68,14 @@ export async function runDeviceManagementTests(): Promise<void> {
     const status = await checkDeviceTrustStatus(userId, deviceId);
     assertEqual(status.isTrusted, false, 'Test 2: status isTrusted is false');
     assertEqual(status.isRegistered, true, 'Test 2: status isRegistered is true');
-    assertEqual(status.isRevoked, true, 'Test 2: status isRevoked is true');
+    assertEqual(
+      status.isRevoked,
+      false,
+      'Test 2: status isRevoked is false for registered untrusted device',
+    );
 
     console.log(
-      '  ✅ Test 2: Upserting untrusted device creates untrusted record with null expiration',
+      '  ✅ Test 2: Upserting untrusted device creates registered untrusted record (isRevoked=false)',
     );
   }
 

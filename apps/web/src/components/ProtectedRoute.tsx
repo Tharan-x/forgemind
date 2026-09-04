@@ -15,7 +15,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteProps) {
-  const { user, loading, isDeviceTrusted, deviceLoading } = useAuth();
+  const { user, loading, deviceLoading } = useAuth();
   const router = useRouter();
 
   const isLoading = loading || (Boolean(user) && deviceLoading);
@@ -25,35 +25,30 @@ export function ProtectedRoute({ children, requireAuth = true }: ProtectedRouteP
       if (requireAuth) {
         if (!user) {
           router.push('/login');
-        } else if (!isDeviceTrusted) {
-          // Authenticated but device untrusted: require re-authentication on login page
-          router.push('/login');
         }
-      } else if (!requireAuth && user && isDeviceTrusted) {
-        // Authenticated AND trusted: redirect away from auth pages to dashboard
+      } else if (!requireAuth && user) {
+        // Authenticated user accessing auth page (/login) -> redirect to /dashboard
         router.push('/dashboard');
       }
     }
-  }, [isLoading, user, isDeviceTrusted, requireAuth, router]);
+  }, [isLoading, user, requireAuth, router]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 text-white">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
-          <p className="text-zinc-400 text-sm animate-pulse">
-            Verifying security session &amp; device trust...
-          </p>
+          <p className="text-zinc-400 text-sm animate-pulse">Verifying security session...</p>
         </div>
       </div>
     );
   }
 
-  if (requireAuth && (!user || !isDeviceTrusted)) {
+  if (requireAuth && !user) {
     return null;
   }
 
-  if (!requireAuth && user && isDeviceTrusted) {
+  if (!requireAuth && user) {
     return null;
   }
 

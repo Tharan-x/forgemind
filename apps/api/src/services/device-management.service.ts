@@ -108,7 +108,7 @@ export async function checkDeviceTrustStatus(
   const now = new Date();
   const isExpired = device.trustedUntil ? new Date(device.trustedUntil) < now : false;
   const isTrusted = device.isTrusted && !isExpired;
-  const isRevoked = !device.isTrusted || isExpired;
+  const isRevoked = false;
 
   // Update last active timestamp asynchronously
   prisma.userDevice

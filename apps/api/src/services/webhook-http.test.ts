@@ -300,6 +300,39 @@ export async function runWebhookHttpIntegrationTests(): Promise<void> {
       console.log('  ✅ Test 8 PASS: Non-webhook standard API endpoints continue working normally');
     }
 
+    // ── Test 9: CORS Development Origins (localhost:3000 & localhost:3001) ─────
+    {
+      const res3001 = await fetch(`${baseUrl}/api/v1/health`, {
+        headers: { Origin: 'http://localhost:3001' },
+      });
+      assertEqual(
+        res3001.headers.get('access-control-allow-origin'),
+        'http://localhost:3001',
+        'Test 9a: localhost:3001 allowed in dev CORS',
+      );
+
+      const res3000 = await fetch(`${baseUrl}/api/v1/health`, {
+        headers: { Origin: 'http://localhost:3000' },
+      });
+      assertEqual(
+        res3000.headers.get('access-control-allow-origin'),
+        'http://localhost:3000',
+        'Test 9b: localhost:3000 allowed in dev CORS',
+      );
+
+      const resDisallowed = await fetch(`${baseUrl}/api/v1/health`, {
+        headers: { Origin: 'http://unauthorized-origin.com' },
+      });
+      assertEqual(
+        resDisallowed.headers.get('access-control-allow-origin'),
+        null,
+        'Test 9c: Unauthorized origin rejected in dev CORS',
+      );
+      console.log(
+        '  ✅ Test 9 PASS: Dev CORS permits localhost:3000 & 3001 while rejecting unauthorized origins',
+      );
+    }
+
     console.log('\n🎉 ALL REAL HTTP WEBHOOK MIDDLEWARE INTEGRATION TESTS PASSED SUCCESSFULLY!\n');
   } finally {
     const activeServer = server;

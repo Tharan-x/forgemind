@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [deviceLoading, setDeviceLoading] = useState<boolean>(true);
   const [lastReauthenticatedAt, setLastReauthenticatedAt] = useState<number | null>(null);
 
-  const verifyDeviceTrust = useCallback(async (activeUser: User | null) => {
+  const verifyDeviceTrust = useCallback(async (activeUser: User | null, token?: string) => {
     if (!activeUser) {
       setIsDeviceTrusted(false);
       setDeviceLoading(false);
@@ -65,9 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      setDeviceLoading(true);
       const deviceId = getDeviceId();
-      const status = await checkDeviceTrustApi(deviceId);
+      const status = await checkDeviceTrustApi(deviceId, token);
       setIsDeviceTrusted(status.isTrusted);
 
       if (status.isTrusted && typeof window !== 'undefined') {
@@ -88,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        verifyDeviceTrust(session?.user ?? null);
+        verifyDeviceTrust(session?.user ?? null, session?.access_token);
       })
       .catch(() => {
         setLoading(false);
@@ -102,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-      verifyDeviceTrust(session?.user ?? null);
+      verifyDeviceTrust(session?.user ?? null, session?.access_token);
     });
 
     return () => {
@@ -125,14 +124,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (res.user) {
       const meta = getDeviceMetadata();
-      await setDeviceTrustApi({
-        deviceId: getDeviceId(),
-        deviceName: meta.deviceName,
-        browser: meta.browser,
-        os: meta.os,
-        trust: trustDeviceChoice,
-        password: trustDeviceChoice ? password : undefined,
-      });
+      await setDeviceTrustApi(
+        {
+          deviceId: getDeviceId(),
+          deviceName: meta.deviceName,
+          browser: meta.browser,
+          os: meta.os,
+          trust: trustDeviceChoice,
+          password: trustDeviceChoice ? password : undefined,
+        },
+        res.session?.access_token,
+      );
       setIsDeviceTrusted(trustDeviceChoice);
     }
   };
@@ -157,14 +159,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLastReauthenticatedAt(Date.now());
 
       const meta = getDeviceMetadata();
-      await setDeviceTrustApi({
-        deviceId: getDeviceId(),
-        deviceName: meta.deviceName,
-        browser: meta.browser,
-        os: meta.os,
-        trust: trustDeviceChoice,
-        password: trustDeviceChoice ? password : undefined,
-      });
+      await setDeviceTrustApi(
+        {
+          deviceId: getDeviceId(),
+          deviceName: meta.deviceName,
+          browser: meta.browser,
+          os: meta.os,
+          trust: trustDeviceChoice,
+          password: trustDeviceChoice ? password : undefined,
+        },
+        res.session?.access_token,
+      );
       setIsDeviceTrusted(trustDeviceChoice);
     }
   };

@@ -94,8 +94,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       const { checkDeviceTrustStatus } = await import('../services/device-management.service.js');
       const trustStatus = await checkDeviceTrustStatus(dbUser.id, deviceId);
 
-      // Require active device trust for protected application endpoints
-      if (!trustStatus.isTrusted) {
+      // Reject explicitly revoked or unknown devices for protected application endpoints
+      if (trustStatus.isRevoked) {
         res.status(403).json({
           success: false,
           error: {

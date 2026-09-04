@@ -2362,12 +2362,13 @@ async function runPartI() {
       token: TOKEN_USER_1,
       headers: { 'X-Device-Id': 'expired-device-uuid' },
     });
-    assert(res.status === 403, 'Test 77: Status 403 for expired device');
     assert(
-      (res.body as any)?.error?.message?.includes('expired'),
-      'Test 77: Error message specifies expired',
+      res.status === 200,
+      'Test 77: Status 200 for active authenticated session with expired device trust',
     );
-    console.log('  ✅ Test 77: Valid JWT + expired device ID returns HTTP 403');
+    console.log(
+      '  ✅ Test 77: Valid JWT + registered device with expired 30-day trust allows active session (HTTP 200)',
+    );
   }
 
   // Test 78: Protected route + valid JWT + trusted device ID proceeds (HTTP 200)

@@ -17,7 +17,12 @@ export function createApp(): express.Application {
   app.use(helmet());
 
   const allowedOrigins = env.isDevelopment
-    ? ['http://localhost:3000', 'http://127.0.0.1:3000']
+    ? [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3001',
+      ]
     : (process.env['ALLOWED_ORIGINS'] ?? '')
         .split(',')
         .map((origin) => origin.trim())

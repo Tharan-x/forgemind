@@ -77,9 +77,9 @@ export function getDeviceMetadata(): { deviceName: string; browser: string; os: 
   };
 }
 
-async function getAuthHeader(): Promise<Record<string, string>> {
+async function getAuthHeader(explicitToken?: string): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = explicitToken || data.session?.access_token;
   const deviceId = getDeviceId();
   return {
     'Content-Type': 'application/json',
@@ -107,8 +107,11 @@ export async function fetchUserDevices(): Promise<UserDevice[]> {
 /**
  * Checks device trust status from API.
  */
-export async function checkDeviceTrustApi(deviceId: string): Promise<DeviceTrustStatus> {
-  const headers = await getAuthHeader();
+export async function checkDeviceTrustApi(
+  deviceId: string,
+  explicitToken?: string,
+): Promise<DeviceTrustStatus> {
+  const headers = await getAuthHeader(explicitToken);
   const response = await fetch(
     `${API_BASE_URL}/api/v1/account/devices/check?deviceId=${encodeURIComponent(deviceId)}`,
     { headers },
@@ -125,15 +128,18 @@ export async function checkDeviceTrustApi(deviceId: string): Promise<DeviceTrust
 /**
  * Registers or updates trust preference for this device.
  */
-export async function setDeviceTrustApi(params: {
-  deviceId: string;
-  deviceName: string;
-  browser?: string;
-  os?: string;
-  trust: boolean;
-  password?: string;
-}): Promise<UserDevice> {
-  const headers = await getAuthHeader();
+export async function setDeviceTrustApi(
+  params: {
+    deviceId: string;
+    deviceName: string;
+    browser?: string;
+    os?: string;
+    trust: boolean;
+    password?: string;
+  },
+  explicitToken?: string,
+): Promise<UserDevice> {
+  const headers = await getAuthHeader(explicitToken);
   const response = await fetch(`${API_BASE_URL}/api/v1/account/devices/trust`, {
     method: 'POST',
     headers,

@@ -121,7 +121,6 @@ async function runPartG(): Promise<void> {
     loading: boolean;
     deviceLoading: boolean;
     user: User | null;
-    isDeviceTrusted: boolean;
     requireAuth?: boolean;
   }): {
     renderLoading: boolean;
@@ -129,7 +128,7 @@ async function runPartG(): Promise<void> {
     renderChildren: boolean;
     pushedRoute: string | null;
   } {
-    const { loading, deviceLoading, user, isDeviceTrusted, requireAuth = true } = options;
+    const { loading, deviceLoading, user, requireAuth = true } = options;
     const isLoading = loading || (Boolean(user) && deviceLoading);
     let pushedRoute: string | null = null;
 
@@ -142,11 +141,7 @@ async function runPartG(): Promise<void> {
         pushedRoute = '/login';
         return { renderLoading: false, renderNull: true, renderChildren: false, pushedRoute };
       }
-      if (!isDeviceTrusted) {
-        pushedRoute = '/login';
-        return { renderLoading: false, renderNull: true, renderChildren: false, pushedRoute };
-      }
-    } else if (!requireAuth && user && isDeviceTrusted) {
+    } else if (!requireAuth && user) {
       pushedRoute = '/dashboard';
       return { renderLoading: false, renderNull: true, renderChildren: false, pushedRoute };
     }
@@ -168,7 +163,7 @@ async function runPartG(): Promise<void> {
     console.log('  ✅ Test 39: Authenticated + trusted device allows dashboard access');
   }
 
-  // Test 40: Authenticated + Untrusted Device redirects to /login for re-authentication
+  // Test 40: Authenticated + Untrusted Device allows dashboard access during active session
   {
     const res = evaluateDeviceProtectedRoute({
       loading: false,
@@ -177,12 +172,18 @@ async function runPartG(): Promise<void> {
       isDeviceTrusted: false,
       requireAuth: true,
     });
-    assertEqual(res.renderChildren, false, 'Test 40: does not render dashboard');
-    assertEqual(res.pushedRoute, '/login', 'Test 40: redirects to /login for re-authentication');
-    console.log('  ✅ Test 40: Authenticated + untrusted device redirects to /login');
+    assertEqual(
+      res.renderChildren,
+      true,
+      'Test 40: renders dashboard for authenticated untrusted session',
+    );
+    assertEqual(res.pushedRoute, null, 'Test 40: no redirect for authenticated untrusted session');
+    console.log(
+      '  ✅ Test 40: Authenticated + untrusted device allows dashboard access during active session',
+    );
   }
 
-  // Test 41: Expired trusted device is evaluated as untrusted and requires re-authentication
+  // Test 41: Expired trusted device evaluates to untrusted but allows active session dashboard access
   {
     const now = new Date();
     const pastDate = new Date(now.getTime() - 1000 * 60 * 60); // 1 hr ago
@@ -198,8 +199,10 @@ async function runPartG(): Promise<void> {
     });
 
     assertEqual(isDeviceTrusted, false, 'Test 41: expired trust evaluates to false');
-    assertEqual(res.pushedRoute, '/login', 'Test 41: expired device redirects to /login');
-    console.log('  ✅ Test 41: Expired trusted device evaluates to untrusted and requires re-auth');
+    assertEqual(res.renderChildren, true, 'Test 41: allows dashboard access during active session');
+    console.log(
+      '  ✅ Test 41: Expired trusted device evaluates to untrusted but allows active session dashboard access',
+    );
   }
 
   // Test 42: Trust checkbox defaults to false (UNCHECKED by default)
@@ -230,20 +233,18 @@ async function runPartG(): Promise<void> {
     );
   }
 
-  // Test 44: Welcome Back UI heading differs correctly for trusted vs untrusted state
+  // Test 44: Welcome Back UI heading renders correctly for authenticated session
   {
-    function getWelcomeHeading(user: User | null, isDeviceTrusted: boolean): string {
+    function getWelcomeHeading(user: User | null): string {
       if (!user) return 'Get Started';
-      return isDeviceTrusted ? 'Welcome Back!' : 'Session Verification Required';
+      return 'Welcome Back!';
     }
 
-    assertEqual(getWelcomeHeading(MOCK_USER, true), 'Welcome Back!', 'Test 44: trusted heading');
-    assertEqual(
-      getWelcomeHeading(MOCK_USER, false),
-      'Session Verification Required',
-      'Test 44: untrusted heading',
+    assertEqual(getWelcomeHeading(MOCK_USER), 'Welcome Back!', 'Test 44: welcome heading');
+    assertEqual(getWelcomeHeading(null), 'Get Started', 'Test 44: unauthenticated heading');
+    console.log(
+      '  ✅ Test 44: Welcome Back UI heading renders correctly for authenticated session',
     );
-    console.log('  ✅ Test 44: Welcome Back UI heading differs correctly for trusted vs untrusted');
   }
 
   // Test 45: Step-up re-authentication grace period (15 min) validation
