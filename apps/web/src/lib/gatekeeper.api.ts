@@ -15,6 +15,7 @@ import type {
   ArchitectureDrift,
 } from '@forgemind/types';
 
+import { getDeviceId } from './device.api';
 import { supabase } from './supabase';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? '';
@@ -30,12 +31,14 @@ async function getAccessToken(): Promise<string> {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getAccessToken();
+  const deviceId = getDeviceId();
 
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'X-Device-Id': deviceId,
       ...(options.headers as Record<string, string>),
     },
   });

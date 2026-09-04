@@ -25,7 +25,7 @@ export interface DeviceTrustStatus {
   deviceName?: string;
 }
 
-const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:3001/api/v1';
+const API_BASE_URL = process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:3001';
 
 /**
  * Retrieves persistent unique device ID for this browser instance.
@@ -93,7 +93,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
  */
 export async function fetchUserDevices(): Promise<UserDevice[]> {
   const headers = await getAuthHeader();
-  const response = await fetch(`${API_BASE_URL}/account/devices`, { headers });
+  const response = await fetch(`${API_BASE_URL}/api/v1/account/devices`, { headers });
 
   if (!response.ok) {
     const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -110,7 +110,7 @@ export async function fetchUserDevices(): Promise<UserDevice[]> {
 export async function checkDeviceTrustApi(deviceId: string): Promise<DeviceTrustStatus> {
   const headers = await getAuthHeader();
   const response = await fetch(
-    `${API_BASE_URL}/account/devices/check?deviceId=${encodeURIComponent(deviceId)}`,
+    `${API_BASE_URL}/api/v1/account/devices/check?deviceId=${encodeURIComponent(deviceId)}`,
     { headers },
   );
 
@@ -134,7 +134,7 @@ export async function setDeviceTrustApi(params: {
   password?: string;
 }): Promise<UserDevice> {
   const headers = await getAuthHeader();
-  const response = await fetch(`${API_BASE_URL}/account/devices/trust`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1/account/devices/trust`, {
     method: 'POST',
     headers,
     body: JSON.stringify(params),
@@ -155,10 +155,13 @@ export async function setDeviceTrustApi(params: {
  */
 export async function revokeUserDeviceApi(targetId: string): Promise<void> {
   const headers = await getAuthHeader();
-  const response = await fetch(`${API_BASE_URL}/account/devices/${encodeURIComponent(targetId)}`, {
-    method: 'DELETE',
-    headers,
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/account/devices/${encodeURIComponent(targetId)}`,
+    {
+      method: 'DELETE',
+      headers,
+    },
+  );
 
   if (!response.ok) {
     const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };

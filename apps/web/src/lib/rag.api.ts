@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { ChatMessage, ChatSession, RAGQueryResponse } from '@forgemind/types';
+import { getDeviceId } from './device.api';
 import { supabase } from './supabase';
 
 const API_BASE = process.env['NEXT_PUBLIC_API_URL'] ?? '';
@@ -37,6 +38,7 @@ export async function queryRepositoryRAG(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'X-Device-Id': getDeviceId(),
       },
       body: JSON.stringify({ query, topK }),
     },
@@ -82,7 +84,10 @@ export async function getRepositoryChatHistory(repositoryId: string): Promise<Ch
     `${API_BASE}/api/v1/repositories/${encodeURIComponent(repositoryId)}/chat/history`,
     {
       method: 'GET',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Device-Id': getDeviceId(),
+      },
     },
   );
 
@@ -119,7 +124,10 @@ export async function clearRepositoryChatHistory(
     `${API_BASE}/api/v1/repositories/${encodeURIComponent(repositoryId)}/chat/history`,
     {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Device-Id': getDeviceId(),
+      },
     },
   );
 

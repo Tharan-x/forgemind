@@ -77,9 +77,20 @@ import {
   explainArchitectureFinding,
   getArchitectureHealthHistory,
   compareArchitectureHealth,
+  getRepositoryGraphTopology,
 } from './intelligence.api.js';
 
+import { getGatekeeperOverview } from './gatekeeper.api.js';
+
 import { getGitHubConnection, connectGitHub, disconnectGitHub } from './github-credential.api.js';
+
+import {
+  fetchUserDevices,
+  checkDeviceTrustApi,
+  setDeviceTrustApi,
+  revokeUserDeviceApi,
+  getDeviceId,
+} from './device.api.js';
 
 import { getSession, getUser, signOut } from './auth.js';
 
@@ -1939,6 +1950,226 @@ async function runPartI(): Promise<void> {
     console.log(
       '  ✅ Test 85: compareArchitectureHealth serializes baselineId and currentId in query string',
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Part J — Device API Endpoints (/api/v1/account/devices/*)
+  // ---------------------------------------------------------------------------
+  console.log('\n📋 Part J — Device API Endpoints (/api/v1/account/devices/*)');
+
+  // Test 86: fetchUserDevices requests GET /api/v1/account/devices
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: { devices: [] },
+    });
+
+    await fetchUserDevices();
+
+    assertDefined(lastRequest, 'Test 86: lastRequest captured');
+    assertEqual(
+      lastRequest.url,
+      'http://api.test/api/v1/account/devices',
+      'Test 86: Correct URL path with /api/v1',
+    );
+    assertEqual(lastRequest.method, 'GET', 'Test 86: GET method');
+    console.log(
+      '  ✅ Test 86: fetchUserDevices requests GET http://api.test/api/v1/account/devices',
+    );
+  }
+
+  // Test 87: checkDeviceTrustApi requests GET /api/v1/account/devices/check
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: { isTrusted: true, isExpired: false, trustedUntil: null },
+    });
+
+    await checkDeviceTrustApi('device-uuid-87');
+
+    assertDefined(lastRequest, 'Test 87: lastRequest captured');
+    assert(
+      lastRequest.url.startsWith('http://api.test/api/v1/account/devices/check'),
+      'Test 87: Correct URL path with /api/v1',
+    );
+    assert(
+      lastRequest.url.includes('deviceId=device-uuid-87'),
+      'Test 87: deviceId query param serialized',
+    );
+    assertEqual(lastRequest.method, 'GET', 'Test 87: GET method');
+    console.log(
+      '  ✅ Test 87: checkDeviceTrustApi requests GET http://api.test/api/v1/account/devices/check',
+    );
+  }
+
+  // Test 88: setDeviceTrustApi requests POST /api/v1/account/devices/trust
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: {
+        device: {
+          id: 'dev-1',
+          userId: 'u-1',
+          deviceId: 'device-uuid-88',
+          deviceName: 'Chrome on macOS',
+          browser: 'Chrome',
+          os: 'macOS',
+          isTrusted: true,
+          trustedUntil: null,
+          lastActiveAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          isCurrentDevice: true,
+        },
+      },
+    });
+
+    await setDeviceTrustApi({
+      deviceId: 'device-uuid-88',
+      deviceName: 'Chrome on macOS',
+      trust: true,
+    });
+
+    assertDefined(lastRequest, 'Test 88: lastRequest captured');
+    assertEqual(
+      lastRequest.url,
+      'http://api.test/api/v1/account/devices/trust',
+      'Test 88: Correct URL path with /api/v1',
+    );
+    assertEqual(lastRequest.method, 'POST', 'Test 88: POST method');
+    console.log(
+      '  ✅ Test 88: setDeviceTrustApi requests POST http://api.test/api/v1/account/devices/trust',
+    );
+  }
+
+  // Test 89: revokeUserDeviceApi requests DELETE /api/v1/account/devices/:id
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { success: true });
+
+    await revokeUserDeviceApi('device-uuid-89');
+
+    assertDefined(lastRequest, 'Test 89: lastRequest captured');
+    assertEqual(
+      lastRequest.url,
+      'http://api.test/api/v1/account/devices/device-uuid-89',
+      'Test 89: Correct URL path with /api/v1',
+    );
+    assertEqual(lastRequest.method, 'DELETE', 'Test 89: DELETE method');
+    console.log(
+      '  ✅ Test 89: revokeUserDeviceApi requests DELETE http://api.test/api/v1/account/devices/:id',
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Part K — Device Identification Header Alignment (X-Device-Id)
+  // ---------------------------------------------------------------------------
+  console.log('\n📋 Part K — Device Identification Header Alignment (X-Device-Id)');
+
+  // Test 90: getRepositoryGraphTopology sends X-Device-Id header
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { success: true, nodes: [], edges: [] });
+
+    await getRepositoryGraphTopology('repo-90');
+
+    assertDefined(lastRequest, 'Test 90: lastRequest captured');
+    assertEqual(
+      lastRequest.headers['X-Device-Id'],
+      getDeviceId(),
+      'Test 90: getRepositoryGraphTopology sends X-Device-Id',
+    );
+    console.log('  ✅ Test 90: getRepositoryGraphTopology sends X-Device-Id header');
+  }
+
+  // Test 91: getArchitectureOverview sends X-Device-Id header
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { success: true, overview: {} });
+
+    await getArchitectureOverview('repo-91');
+
+    assertDefined(lastRequest, 'Test 91: lastRequest captured');
+    assertEqual(
+      lastRequest.headers['X-Device-Id'],
+      getDeviceId(),
+      'Test 91: getArchitectureOverview sends X-Device-Id',
+    );
+    console.log('  ✅ Test 91: getArchitectureOverview sends X-Device-Id header');
+  }
+
+  // Test 92: getGatekeeperOverview sends X-Device-Id header
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      success: true,
+      data: { overview: {} as Record<string, unknown> },
+    });
+
+    await getGatekeeperOverview('repo-92');
+
+    assertDefined(lastRequest, 'Test 92: lastRequest captured');
+    assertEqual(
+      lastRequest.headers['X-Device-Id'],
+      getDeviceId(),
+      'Test 92: getGatekeeperOverview sends X-Device-Id',
+    );
+    console.log('  ✅ Test 92: getGatekeeperOverview sends X-Device-Id header');
+  }
+
+  // Test 93: queryRepositoryRAG sends X-Device-Id header
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { answer: 'OK', sources: [] });
+
+    await queryRepositoryRAG('repo-93', 'What is architecture?');
+
+    assertDefined(lastRequest, 'Test 93: lastRequest captured');
+    assertEqual(
+      lastRequest.headers['X-Device-Id'],
+      getDeviceId(),
+      'Test 93: queryRepositoryRAG sends X-Device-Id',
+    );
+    console.log('  ✅ Test 93: queryRepositoryRAG sends X-Device-Id header');
+  }
+
+  // Test 94: getGitHubConnection sends X-Device-Id header
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, {
+      connected: false,
+      githubUsername: null,
+      githubAvatarUrl: null,
+      updatedAt: null,
+    });
+
+    await getGitHubConnection();
+
+    assertDefined(lastRequest, 'Test 94: lastRequest captured');
+    assertEqual(
+      lastRequest.headers['X-Device-Id'],
+      getDeviceId(),
+      'Test 94: getGitHubConnection sends X-Device-Id',
+    );
+    console.log('  ✅ Test 94: getGitHubConnection sends X-Device-Id header');
+  }
+
+  // Test 95: getVectorPipelineStatus sends X-Device-Id header
+  {
+    mockAuthenticatedSession();
+    installFetchInterceptor(200, { status: 'idle', totalChunks: 0, processedChunks: 0 });
+
+    await getVectorPipelineStatus('repo-95');
+
+    assertDefined(lastRequest, 'Test 95: lastRequest captured');
+    assertEqual(
+      lastRequest.headers['X-Device-Id'],
+      getDeviceId(),
+      'Test 95: getVectorPipelineStatus sends X-Device-Id',
+    );
+    console.log('  ✅ Test 95: getVectorPipelineStatus sends X-Device-Id header');
   }
 }
 
