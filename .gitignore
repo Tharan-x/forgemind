@@ -62,6 +62,7 @@ cypress/videos/
 cypress/screenshots/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Docker & Containers
 .docker/

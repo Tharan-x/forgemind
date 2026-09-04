@@ -155,7 +155,6 @@ async function runPartG(): Promise<void> {
       loading: false,
       deviceLoading: false,
       user: MOCK_USER,
-      isDeviceTrusted: true,
       requireAuth: true,
     });
     assertEqual(res.renderChildren, true, 'Test 39: renders dashboard children');
@@ -169,7 +168,6 @@ async function runPartG(): Promise<void> {
       loading: false,
       deviceLoading: false,
       user: MOCK_USER,
-      isDeviceTrusted: false,
       requireAuth: true,
     });
     assertEqual(
@@ -194,7 +192,6 @@ async function runPartG(): Promise<void> {
       loading: false,
       deviceLoading: false,
       user: MOCK_USER,
-      isDeviceTrusted,
       requireAuth: true,
     });
 
@@ -218,7 +215,6 @@ async function runPartG(): Promise<void> {
       loading: false,
       deviceLoading: true,
       user: MOCK_USER,
-      isDeviceTrusted: false,
       requireAuth: true,
     });
     assertEqual(
