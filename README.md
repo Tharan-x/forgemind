@@ -216,7 +216,7 @@ forgemind/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/forgemind.git
+git clone https://github.com/Tharan-x/forgemind.git
 cd forgemind
 
 # 2. Run developer bootstrap script

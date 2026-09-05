@@ -97,8 +97,8 @@ export function Sidebar() {
       {/* Sidebar Footer */}
       <div className="p-4 border-t border-zinc-800">
         <div className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-3.5 text-center">
-          <p className="text-xs font-semibold text-zinc-300">Sprint 2 Phase 2B</p>
-          <p className="text-[11px] text-zinc-500 mt-0.5">Account &amp; UX Experience</p>
+          <p className="text-xs font-semibold text-zinc-300">ForgeMind V1</p>
+          <p className="text-[11px] text-zinc-500 mt-0.5">Architecture Intelligence Platform</p>
         </div>
       </div>
     </aside>

@@ -6,7 +6,7 @@ Thank you for your interest in contributing to **ForgeMind**! We welcome contrib
 
 ## 📜 Code of Conduct
 
-All contributors are expected to uphold our [Code of Conduct](file:///d:/forgemind/CODE_OF_CONDUCT.md). Please read it to understand our community standards.
+All contributors are expected to uphold our [Code of Conduct](./CODE_OF_CONDUCT.md). Please read it to understand our community standards.
 
 ---
 
@@ -29,7 +29,7 @@ All contributors are expected to uphold our [Code of Conduct](file:///d:/forgemi
    git checkout -b feature/your-feature-name
    ```
 3. **Coding Standards**:
-   - Follow project formatting and linting guidelines (`.prettierrc`, `.eslintrc`).
+   - Follow project formatting and linting guidelines (`.prettierrc`, `eslint.config.mjs`).
    - Write clear, self-documenting code with inline comments where appropriate.
 4. **Commit Messages**: Follow [Conventional Commits](https://www.conventionalcommits.org/):
    - `feat: add symbol graph visualization component`
@@ -45,7 +45,7 @@ All contributors are expected to uphold our [Code of Conduct](file:///d:/forgemi
 
 Before marking your PR as ready for review:
 
-- [ ] Code adheres to `.editorconfig`, `.prettierrc`, and `.eslintrc` standards.
+- [ ] Code adheres to `.editorconfig`, `.prettierrc`, and `eslint.config.mjs` standards.
 - [ ] Documentation has been updated to reflect architectural or behavioral changes.
 - [ ] Commit history is clean and uses Conventional Commits format.
 - [ ] All CI pipeline checks pass.

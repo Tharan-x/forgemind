@@ -40,8 +40,8 @@ function section(msg) {
 section('Checking Node.js');
 const nodeVersion = process.versions.node;
 const [major] = nodeVersion.split('.').map(Number);
-if (major < 20) {
-  error(`Node.js 20+ required. Found: v${nodeVersion}`);
+if (major < 24) {
+  error(`Node.js 24+ required. Found: v${nodeVersion}`);
   process.exit(1);
 }
 success(`Node.js v${nodeVersion}`);

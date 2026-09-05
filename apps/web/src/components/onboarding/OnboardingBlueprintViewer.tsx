@@ -469,7 +469,7 @@ export function OnboardingBlueprintViewer({
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-semibold text-indigo-400 ring-1 ring-indigo-500/30">
-                Sprint 7 AI Engine
+                ForgeMind AI Engine
               </span>
               <span className="text-xs text-slate-400">Powered by {blueprint.providerUsed}</span>
             </div>

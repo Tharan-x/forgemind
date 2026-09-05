@@ -1,6 +1,6 @@
 # =============================================================================
 # ForgeMind GitHub Actions — CI Pipeline
-# Sprint 4: Lint, type-check, build, and 318-scenario integration test suite
+# ForgeMind V1: Lint, type-check, integration test, and monorepo build pipeline
 # =============================================================================
 
 name: CI

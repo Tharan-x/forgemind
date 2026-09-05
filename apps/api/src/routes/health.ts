@@ -4,6 +4,7 @@ import type { HealthStatus } from '@forgemind/types';
 import { successResponse } from '@forgemind/shared';
 
 import { env } from '../config/env.js';
+import { prisma } from '../lib/prisma.js';
 
 const START_TIME = Date.now();
 
@@ -14,8 +15,23 @@ const START_TIME = Date.now();
 export async function healthHandler(req: Request, res: Response): Promise<void> {
   const uptime = Math.floor((Date.now() - START_TIME) / 1000);
 
+  let dbStatus: 'ok' | 'degraded' = 'degraded';
+  let dbMessage: string | undefined = undefined;
+
+  if (!env.DATABASE_URL) {
+    dbMessage = 'DATABASE_URL not configured';
+  } else {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'ok';
+    } catch (err) {
+      dbStatus = 'degraded';
+      dbMessage = err instanceof Error ? err.message : 'Database query failed';
+    }
+  }
+
   const health: HealthStatus = {
-    status: 'ok',
+    status: dbStatus === 'ok' ? 'ok' : 'degraded',
     version: '0.1.0',
     uptime,
     timestamp: new Date().toISOString(),
@@ -25,10 +41,9 @@ export async function healthHandler(req: Request, res: Response): Promise<void> 
         status: 'ok',
       },
       {
-        // Database connectivity will be checked in a future sprint
         name: 'database',
-        status: env.DATABASE_URL ? 'ok' : 'degraded',
-        message: env.DATABASE_URL ? undefined : 'DATABASE_URL not configured',
+        status: dbStatus,
+        message: dbMessage,
       },
     ],
   };

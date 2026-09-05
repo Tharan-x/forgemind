@@ -4,7 +4,7 @@
 # =============================================================================
 
 # ── Stage 1: Base with pnpm ───────────────────────────────────────────────────
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
@@ -34,10 +34,11 @@ COPY apps/api ./apps/api
 COPY turbo.json ./
 
 WORKDIR /app/apps/api
+RUN pnpm run db:generate
 RUN pnpm run build
 
 # ── Stage 4: Production runner ────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 

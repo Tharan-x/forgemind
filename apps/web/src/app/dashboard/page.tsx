@@ -1,7 +1,7 @@
 'use client';
 
 // =============================================================================
-// ForgeMind Web — Dashboard Page (Sprint 2 Phase 2B)
+// ForgeMind Web — Dashboard Page
 // =============================================================================
 
 import Link from 'next/link';
@@ -44,7 +44,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-2xl font-bold text-white">Welcome back, {name}!</h1>
                 <span className="text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-0.5 rounded-full font-medium">
-                  Sprint 2 Phase 2B Active
+                  ForgeMind V1 Active
                 </span>
               </div>
               <p className="text-zinc-400 text-sm">{user?.email}</p>

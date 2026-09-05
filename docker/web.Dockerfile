@@ -4,7 +4,7 @@
 # =============================================================================
 
 # ── Stage 1: Base ─────────────────────────────────────────────────────────────
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
@@ -25,6 +25,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 FROM base AS builder
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_STANDALONE=true
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
@@ -43,7 +44,7 @@ WORKDIR /app/apps/web
 RUN pnpm run build
 
 # ── Stage 4: Runner ───────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
